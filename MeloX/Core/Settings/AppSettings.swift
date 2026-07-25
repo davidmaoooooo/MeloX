@@ -37,6 +37,21 @@ final class AppSettings {
     static let defaultSystemNowPlayingLyricsTitleFormat = "{歌词}"
     static let defaultSystemNowPlayingLyricsSubtitleFormat =
         "{歌名} · {作者}"
+    static let defaultLyricsLiveActivityEnabled = false
+    static let defaultLyricsLiveActivityTitleFormat = "{歌词}"
+    static let defaultLyricsLiveActivitySubtitleFormat =
+        "{歌名} · {作者}"
+    static let defaultLyricsLiveActivityCompactFormat = "{歌词}"
+    static let defaultLyricsLiveActivityShowsArtwork = true
+    static let defaultLyricsLiveActivityShowsNextLyric = true
+    static let defaultLyricsLiveActivityShowsProgress = true
+    static let defaultLyricsLiveActivityScrollsCompactText = true
+    static let defaultLyricsLiveActivityCompactTextSize:
+        LyricsLiveActivityCompactTextSize = .standard
+    static let defaultLyricsLiveActivityScrollSpeed = 52.0
+    static let lyricsLiveActivityScrollSpeedRange = 8.0...80.0
+    static let defaultLyricsLiveActivityScrollPause = 1.0
+    static let lyricsLiveActivityScrollPauseRange = 0.0...3.0
     static let automaticCachePlaybackThresholdOptions = [3, 5, 10, 20]
     static let defaultLyricsFontSize = 28.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
@@ -101,6 +116,28 @@ final class AppSettings {
             "systemNowPlayingLyricsTitleFormat"
         static let systemNowPlayingLyricsSubtitleFormat =
             "systemNowPlayingLyricsSubtitleFormat"
+        static let lyricsLiveActivityEnabled =
+            "lyricsLiveActivityEnabled"
+        static let lyricsLiveActivityTitleFormat =
+            "lyricsLiveActivityTitleFormat"
+        static let lyricsLiveActivitySubtitleFormat =
+            "lyricsLiveActivitySubtitleFormat"
+        static let lyricsLiveActivityCompactFormat =
+            "lyricsLiveActivityCompactFormat"
+        static let lyricsLiveActivityShowsArtwork =
+            "lyricsLiveActivityShowsArtwork"
+        static let lyricsLiveActivityShowsNextLyric =
+            "lyricsLiveActivityShowsNextLyric"
+        static let lyricsLiveActivityShowsProgress =
+            "lyricsLiveActivityShowsProgress"
+        static let lyricsLiveActivityScrollsCompactText =
+            "lyricsLiveActivityScrollsCompactText"
+        static let lyricsLiveActivityCompactTextSize =
+            "lyricsLiveActivityCompactTextSize"
+        static let lyricsLiveActivityScrollSpeed =
+            "lyricsLiveActivityScrollSpeed"
+        static let lyricsLiveActivityScrollPause =
+            "lyricsLiveActivityScrollPause"
         static let defaultLaunchTab = "defaultLaunchTab"
         static let restoresLastSelectedTab = "restoresLastSelectedTab"
         static let lastSelectedTab = "lastSelectedTab"
@@ -230,6 +267,106 @@ final class AppSettings {
             defaults.set(
                 systemNowPlayingLyricsSubtitleFormat,
                 forKey: Key.systemNowPlayingLyricsSubtitleFormat
+            )
+        }
+    }
+
+    var lyricsLiveActivityEnabled: Bool {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityEnabled,
+                forKey: Key.lyricsLiveActivityEnabled
+            )
+        }
+    }
+
+    var lyricsLiveActivityTitleFormat: String {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityTitleFormat,
+                forKey: Key.lyricsLiveActivityTitleFormat
+            )
+        }
+    }
+
+    var lyricsLiveActivitySubtitleFormat: String {
+        didSet {
+            defaults.set(
+                lyricsLiveActivitySubtitleFormat,
+                forKey: Key.lyricsLiveActivitySubtitleFormat
+            )
+        }
+    }
+
+    var lyricsLiveActivityCompactFormat: String {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityCompactFormat,
+                forKey: Key.lyricsLiveActivityCompactFormat
+            )
+        }
+    }
+
+    var lyricsLiveActivityShowsArtwork: Bool {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityShowsArtwork,
+                forKey: Key.lyricsLiveActivityShowsArtwork
+            )
+        }
+    }
+
+    var lyricsLiveActivityShowsNextLyric: Bool {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityShowsNextLyric,
+                forKey: Key.lyricsLiveActivityShowsNextLyric
+            )
+        }
+    }
+
+    var lyricsLiveActivityShowsProgress: Bool {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityShowsProgress,
+                forKey: Key.lyricsLiveActivityShowsProgress
+            )
+        }
+    }
+
+    var lyricsLiveActivityScrollsCompactText: Bool {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityScrollsCompactText,
+                forKey: Key.lyricsLiveActivityScrollsCompactText
+            )
+        }
+    }
+
+    var lyricsLiveActivityCompactTextSize:
+        LyricsLiveActivityCompactTextSize {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityCompactTextSize.rawValue,
+                forKey: Key.lyricsLiveActivityCompactTextSize
+            )
+        }
+    }
+
+    var lyricsLiveActivityScrollSpeed: Double {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityScrollSpeed,
+                forKey: Key.lyricsLiveActivityScrollSpeed
+            )
+        }
+    }
+
+    var lyricsLiveActivityScrollPause: Double {
+        didSet {
+            defaults.set(
+                lyricsLiveActivityScrollPause,
+                forKey: Key.lyricsLiveActivityScrollPause
             )
         }
     }
@@ -705,6 +842,42 @@ final class AppSettings {
         )
             ?? defaults.string(forKey: "dynamicIslandLyricsSubtitleFormat")
             ?? Self.defaultSystemNowPlayingLyricsSubtitleFormat
+        lyricsLiveActivityEnabled = defaults.object(
+            forKey: Key.lyricsLiveActivityEnabled
+        ) as? Bool ?? Self.defaultLyricsLiveActivityEnabled
+        lyricsLiveActivityTitleFormat = defaults.string(
+            forKey: Key.lyricsLiveActivityTitleFormat
+        ) ?? Self.defaultLyricsLiveActivityTitleFormat
+        lyricsLiveActivitySubtitleFormat = defaults.string(
+            forKey: Key.lyricsLiveActivitySubtitleFormat
+        ) ?? Self.defaultLyricsLiveActivitySubtitleFormat
+        lyricsLiveActivityCompactFormat = defaults.string(
+            forKey: Key.lyricsLiveActivityCompactFormat
+        ) ?? Self.defaultLyricsLiveActivityCompactFormat
+        lyricsLiveActivityShowsArtwork = defaults.object(
+            forKey: Key.lyricsLiveActivityShowsArtwork
+        ) as? Bool ?? Self.defaultLyricsLiveActivityShowsArtwork
+        lyricsLiveActivityShowsNextLyric = defaults.object(
+            forKey: Key.lyricsLiveActivityShowsNextLyric
+        ) as? Bool ?? Self.defaultLyricsLiveActivityShowsNextLyric
+        lyricsLiveActivityShowsProgress = defaults.object(
+            forKey: Key.lyricsLiveActivityShowsProgress
+        ) as? Bool ?? Self.defaultLyricsLiveActivityShowsProgress
+        lyricsLiveActivityScrollsCompactText = defaults.object(
+            forKey: Key.lyricsLiveActivityScrollsCompactText
+        ) as? Bool ?? Self.defaultLyricsLiveActivityScrollsCompactText
+        lyricsLiveActivityCompactTextSize =
+            LyricsLiveActivityCompactTextSize(
+                rawValue: defaults.string(
+                    forKey: Key.lyricsLiveActivityCompactTextSize
+                ) ?? ""
+            ) ?? Self.defaultLyricsLiveActivityCompactTextSize
+        lyricsLiveActivityScrollSpeed = defaults.object(
+            forKey: Key.lyricsLiveActivityScrollSpeed
+        ) as? Double ?? Self.defaultLyricsLiveActivityScrollSpeed
+        lyricsLiveActivityScrollPause = defaults.object(
+            forKey: Key.lyricsLiveActivityScrollPause
+        ) as? Double ?? Self.defaultLyricsLiveActivityScrollPause
         defaultLaunchTab = AppTab(
             rawValue: defaults.string(forKey: Key.defaultLaunchTab) ?? ""
         ) ?? .home
@@ -1040,6 +1213,28 @@ final class AppSettings {
             Self.defaultSystemNowPlayingLyricsTitleFormat
         systemNowPlayingLyricsSubtitleFormat =
             Self.defaultSystemNowPlayingLyricsSubtitleFormat
+        lyricsLiveActivityEnabled =
+            Self.defaultLyricsLiveActivityEnabled
+        lyricsLiveActivityTitleFormat =
+            Self.defaultLyricsLiveActivityTitleFormat
+        lyricsLiveActivitySubtitleFormat =
+            Self.defaultLyricsLiveActivitySubtitleFormat
+        lyricsLiveActivityCompactFormat =
+            Self.defaultLyricsLiveActivityCompactFormat
+        lyricsLiveActivityShowsArtwork =
+            Self.defaultLyricsLiveActivityShowsArtwork
+        lyricsLiveActivityShowsNextLyric =
+            Self.defaultLyricsLiveActivityShowsNextLyric
+        lyricsLiveActivityShowsProgress =
+            Self.defaultLyricsLiveActivityShowsProgress
+        lyricsLiveActivityScrollsCompactText =
+            Self.defaultLyricsLiveActivityScrollsCompactText
+        lyricsLiveActivityCompactTextSize =
+            Self.defaultLyricsLiveActivityCompactTextSize
+        lyricsLiveActivityScrollSpeed =
+            Self.defaultLyricsLiveActivityScrollSpeed
+        lyricsLiveActivityScrollPause =
+            Self.defaultLyricsLiveActivityScrollPause
         equalizer.reset()
         playerBackgroundBlur = 90
         playerBackgroundSaturation = 0.82

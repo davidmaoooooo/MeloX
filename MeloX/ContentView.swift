@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(LibraryStore.self) private var library
@@ -108,6 +109,10 @@ struct ContentView: View {
             }
             .onChange(of: selectedTab) { _, tab in
                 settings.lastSelectedTab = tab
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                player.refreshLyricsLiveActivity()
             }
             .onChange(of: floatingLyrics.restorationRequestID) {
                 guard floatingLyrics.restorationRequestID > 0,

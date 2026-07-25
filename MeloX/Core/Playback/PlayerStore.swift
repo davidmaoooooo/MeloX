@@ -1,6 +1,25 @@
 import Foundation
 import Observation
 
+private enum LyricsLiveActivityPublication: Equatable {
+    case inactive
+    case content(LyricsLiveActivityPublicationSignature)
+}
+
+private struct LyricsLiveActivityPublicationSignature: Equatable {
+    let songID: Int
+    let currentLyricID: LyricLine.ID?
+    let nextLyricID: LyricLine.ID?
+    let isPlaying: Bool
+    let title: String
+    let subtitle: String
+    let compactText: String
+    let compactScrollDistancePoints: Int
+    let artworkURL: URL?
+    let preferences: LyricsLiveActivityPreferences
+    let durationMilliseconds: Int
+}
+
 @MainActor
 @Observable
 final class PlayerStore {
@@ -37,6 +56,10 @@ final class PlayerStore {
 
     @ObservationIgnored
     private let nowPlayingSession: NowPlayingSession
+
+    @ObservationIgnored
+    private let lyricsLiveActivityController:
+        LyricsLiveActivityController
 
     @ObservationIgnored
     private let persistence: PlaybackPersistence
@@ -83,6 +106,10 @@ final class PlayerStore {
     @ObservationIgnored
     private var publishedNowPlayingLyricID: LyricLine.ID?
 
+    @ObservationIgnored
+    private var publishedLyricsLiveActivity:
+        LyricsLiveActivityPublication?
+
     init(
         api: NeteaseAPI,
         settings: AppSettings,
@@ -103,6 +130,7 @@ final class PlayerStore {
             equalizerConfiguration: settings.equalizer.configuration
         )
         nowPlayingSession = NowPlayingSession(player: engine.nowPlayingPlayer)
+        lyricsLiveActivityController = LyricsLiveActivityController()
         bindEngine()
         bindRemoteCommands()
         applyVolumeControlMode()
@@ -111,7 +139,10 @@ final class PlayerStore {
     func restore() async {
         guard !hasRestoredPlayback else { return }
         hasRestoredPlayback = true
-        guard let snapshot = persistence.load(), !snapshot.queue.isEmpty else { return }
+        guard let snapshot = persistence.load(), !snapshot.queue.isEmpty else {
+            lyricsLiveActivityController.synchronize(with: nil)
+            return
+        }
 
         playbackQueue.restore(
             songs: snapshot.queue,
@@ -247,7 +278,10 @@ final class PlayerStore {
         progress = clamped
         seekRevision += 1
         lastProgressUpdateDate = Date()
-        updateNowPlayingState()
+        updateNowPlayingState(
+            forceNowPlayingLyrics: true,
+            forceLyricsLiveActivity: true
+        )
         persistSnapshot()
     }
 
@@ -256,10 +290,19 @@ final class PlayerStore {
         nowPlayingLyricsSongID = songID
         nowPlayingLyrics = lyrics
         updateNowPlayingLyricMetadata()
+        updateLyricsLiveActivity()
     }
 
     func applySystemNowPlayingLyricsPreference() {
         updateNowPlayingLyricMetadata(force: true)
+    }
+
+    func applyLyricsLiveActivityPreference() {
+        updateLyricsLiveActivity(force: true)
+    }
+
+    func refreshLyricsLiveActivity() {
+        updateLyricsLiveActivity(force: true)
     }
 
     func estimatedProgress(at date: Date = Date()) -> TimeInterval {
@@ -428,10 +471,16 @@ final class PlayerStore {
                 self.isLoading = true
             case .paused:
                 self.isPlaying = false
-                self.isLoading = false
+                if self.engine.expectsPlaybackToContinue {
+                    self.isLoading = true
+                    self.currentLoadShouldAutoplay = true
+                } else {
+                    self.isLoading = false
+                }
             case .playing:
                 self.isPlaying = true
                 self.isLoading = false
+                self.currentLoadShouldAutoplay = true
                 self.playbackIssue = nil
                 self.recordCurrentPlaybackStartIfNeeded()
             }
@@ -443,6 +492,7 @@ final class PlayerStore {
             self.progress = value
             self.lastProgressUpdateDate = Date()
             self.updateNowPlayingLyricMetadata()
+            self.updateLyricsLiveActivity()
             let second = Int(value)
             if second != self.lastPersistedSecond {
                 self.lastPersistedSecond = second
@@ -504,8 +554,14 @@ final class PlayerStore {
         }
     }
 
-    private func updateNowPlayingState() {
-        updateNowPlayingLyricMetadata()
+    private func updateNowPlayingState(
+        forceNowPlayingLyrics: Bool = false,
+        forceLyricsLiveActivity: Bool = false
+    ) {
+        updateNowPlayingLyricMetadata(
+            force: forceNowPlayingLyrics
+        )
+        updateLyricsLiveActivity(force: forceLyricsLiveActivity)
         nowPlayingSession.updatePlayback(
             position: progress,
             duration: duration,
@@ -513,7 +569,9 @@ final class PlayerStore {
         )
     }
 
-    private func updateNowPlayingLyricMetadata(force: Bool = false) {
+    private func updateNowPlayingLyricMetadata(
+        force: Bool = false
+    ) {
         guard let song = currentSong else { return }
         let lyrics = nowPlayingLyricsSongID == song.id
             ? nowPlayingLyrics
@@ -539,6 +597,202 @@ final class PlayerStore {
             for: song,
             lyricsDisplaySettings: nowPlayingLyricsDisplaySettings
         )
+    }
+
+    private func updateLyricsLiveActivity(force: Bool = false) {
+        guard let song = currentSong,
+              shouldPresentLyricsLiveActivity else {
+            publishLyricsLiveActivity(
+                .inactive,
+                snapshot: nil,
+                force: force
+            )
+            return
+        }
+        guard settings.lyricsLiveActivityEnabled else {
+            publishLyricsLiveActivity(
+                .inactive,
+                snapshot: nil,
+                force: force
+            )
+            return
+        }
+
+        let lyrics = nowPlayingLyricsSongID == song.id
+            ? nowPlayingLyrics
+            : []
+        let adjustedProgress =
+            estimatedProgress() + settings.lyricsAdvanceTime
+        let position = LyricPlaybackTimeline.position(
+            at: adjustedProgress,
+            in: lyrics
+        )
+        let currentLyricIndex = position.highlightedLyricID.flatMap {
+            lyricID in
+            lyrics.firstIndex(where: { $0.id == lyricID })
+        }
+        let currentLyric = currentLyricIndex.map { lyrics[$0] }
+        let nextLyric: LyricLine? = if let currentLyricIndex {
+            lyrics.indices.contains(currentLyricIndex + 1)
+                ? lyrics[currentLyricIndex + 1]
+                : nil
+        } else {
+            lyrics.first
+        }
+        let preferences = LyricsLiveActivityPreferences(
+            settings: settings
+        )
+        let displayText = LyricsLiveActivityFormatter.text(
+            songTitle: song.name,
+            songArtist: song.artistText,
+            currentLyric: currentLyric?.text,
+            preferences: preferences
+        )
+        let artworkURL = preferences.showsArtwork
+            ? song.album?.artworkURL
+            : nil
+        let compactScrollDistance =
+            lyricsLiveActivityCompactScrollDistance(
+                text: displayText.compact,
+                currentLyric: currentLyric,
+                nextTransitionTime: position.nextTransitionTime,
+                adjustedProgress: adjustedProgress,
+                preferences: preferences
+            )
+        let signature = LyricsLiveActivityPublicationSignature(
+            songID: song.id,
+            currentLyricID: currentLyric?.id,
+            nextLyricID: preferences.showsNextLyric
+                ? nextLyric?.id
+                : nil,
+            isPlaying: isPlaying,
+            title: displayText.title,
+            subtitle: displayText.subtitle,
+            compactText: displayText.compact,
+            compactScrollDistancePoints:
+                Int(compactScrollDistance.rounded()),
+            artworkURL: artworkURL,
+            preferences: preferences,
+            durationMilliseconds: Int((duration * 1_000).rounded())
+        )
+        let snapshot = LyricsLiveActivitySnapshot(
+            songID: song.id,
+            title: displayText.title,
+            subtitle: displayText.subtitle,
+            compactText: displayText.compact,
+            compactScrollDistance: compactScrollDistance,
+            nextLyric: preferences.showsNextLyric
+                ? nextLyric?.text
+                : nil,
+            artworkURL: artworkURL,
+            presentation: preferences.presentation,
+            isPlaying: isPlaying,
+            playbackPosition: estimatedProgress(),
+            duration: duration,
+            staleDate: nil
+        )
+        publishLyricsLiveActivity(
+            .content(signature),
+            snapshot: snapshot,
+            force: force
+        )
+    }
+
+    private var shouldPresentLyricsLiveActivity: Bool {
+        isPlaying || (isLoading && currentLoadShouldAutoplay)
+    }
+
+    private func publishLyricsLiveActivity(
+        _ publication: LyricsLiveActivityPublication,
+        snapshot: LyricsLiveActivitySnapshot?,
+        force: Bool
+    ) {
+        guard force || publication != publishedLyricsLiveActivity else {
+            return
+        }
+        publishedLyricsLiveActivity = publication
+        lyricsLiveActivityController.synchronize(with: snapshot)
+    }
+
+    private func lyricsLiveActivityCompactScrollDistance(
+        text: String,
+        currentLyric: LyricLine?,
+        nextTransitionTime: TimeInterval?,
+        adjustedProgress: TimeInterval,
+        preferences: LyricsLiveActivityPreferences
+    ) -> Double {
+        let pointSize = preferences.compactTextSize.pointSize
+        guard preferences.scrollsCompactText,
+              LyricsLiveActivityCompactLayout.requiresScrolling(
+                text: text,
+                pointSize: pointSize
+              )
+        else {
+            return 0
+        }
+
+        guard let currentLyric else { return 0 }
+        let startTime = currentLyric.time
+        let elapsed = max(adjustedProgress - startTime, 0)
+        let scrollDistance =
+            LyricsLiveActivityCompactLayout
+                .scrollDistanceToRevealEnd(
+                    text: text,
+                    pointSize: pointSize
+                )
+        guard scrollDistance > 0 else { return 0 }
+
+        let configuredPause = max(
+            preferences.scrollPause,
+            0
+        )
+        let lineEndTime = nextTransitionTime
+            ?? currentLyric.duration.map {
+                currentLyric.time + $0
+            }
+        let timing: (pause: TimeInterval, speed: Double) = {
+            guard let lineEndTime else {
+                return (
+                    configuredPause,
+                    max(preferences.scrollSpeed, 1)
+                )
+            }
+
+            let lineDuration = max(
+                lineEndTime - currentLyric.time,
+                0.25
+            )
+            let pause = min(
+                configuredPause,
+                lineDuration * 0.2
+            )
+            // ActivityKit updates are delivered asynchronously. Keep the
+            // completed tail visible long enough for the last page to arrive
+            // before the lyric transition.
+            let endingHold = min(
+                1.25,
+                lineDuration * 0.25
+            )
+            let availableTravelTime = max(
+                lineDuration - pause - endingHold,
+                0.25
+            )
+            let requiredSpeed =
+                scrollDistance / availableTravelTime
+            return (
+                pause,
+                max(
+                    max(preferences.scrollSpeed, requiredSpeed),
+                    1
+                )
+            )
+        }()
+
+        let travelDistance = min(
+            max(elapsed - timing.pause, 0) * timing.speed,
+            scrollDistance
+        )
+        return travelDistance.rounded()
     }
 
     private var nowPlayingLyricsDisplaySettings:

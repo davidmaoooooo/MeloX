@@ -56,6 +56,10 @@ final class AudioPlaybackEngine {
         player.currentItem != nil
     }
 
+    var expectsPlaybackToContinue: Bool {
+        wantsPlayback
+    }
+
     var nowPlayingPlayer: AVPlayer {
         player
     }

@@ -134,6 +134,23 @@ struct PlayerSettingsView: View {
             }
 
             Section {
+                Toggle(
+                    "实时活动歌词",
+                    isOn: $settings.lyricsLiveActivityEnabled
+                )
+
+                if settings.lyricsLiveActivityEnabled {
+                    NavigationLink("显示设置") {
+                        LyricsLiveActivitySettingsView()
+                    }
+                }
+            } header: {
+                Text("实时活动")
+            } footer: {
+                Text("播放时在锁定屏幕和灵动岛显示歌词。此功能默认关闭，且不会改变系统播放信息。")
+            }
+
+            Section {
                 NavigationLink {
                     SkylineLyricsSettingsView()
                 } label: {
@@ -653,6 +670,9 @@ struct PlayerSettingsView: View {
         }
         .onChange(of: settings.systemNowPlayingLyricsSubtitleFormat) {
             player.applySystemNowPlayingLyricsPreference()
+        }
+        .onChange(of: settings.lyricsLiveActivityEnabled) {
+            player.applyLyricsLiveActivityPreference()
         }
         .confirmationDialog("恢复播放器默认设置？", isPresented: $showsResetConfirmation) {
             Button("恢复默认设置", role: .destructive) {

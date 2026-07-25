@@ -18,5 +18,6 @@ enum PlayerSettingsResetter {
         player.applyVolumeControlMode()
         player.applyEqualizerSettings()
         player.applySystemNowPlayingLyricsPreference()
+        player.applyLyricsLiveActivityPreference()
     }
 }
