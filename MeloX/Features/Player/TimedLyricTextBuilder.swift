@@ -2,12 +2,41 @@ import CoreText
 import SwiftUI
 import UIKit
 
+@MainActor
 enum TimedLyricTextBuilder {
+    private static let cache = TimedLyricTextCache()
+
     static func text(
         from syllables: [LyricSyllable],
         constrainedWidth: CGFloat?,
         fontSize: CGFloat,
         fontWeight: LyricsFontWeight = .bold
+    ) -> Text {
+        let key = TimedLyricTextCache.Key(
+            syllables: syllables,
+            constrainedWidth: constrainedWidth,
+            fontSize: fontSize,
+            fontWeight: fontWeight.rawValue
+        )
+        if let cachedText = cache.text(for: key) {
+            return cachedText
+        }
+
+        let text = makeText(
+            from: syllables,
+            constrainedWidth: constrainedWidth,
+            fontSize: fontSize,
+            fontWeight: fontWeight
+        )
+        cache.insert(text, for: key)
+        return text
+    }
+
+    private static func makeText(
+        from syllables: [LyricSyllable],
+        constrainedWidth: CGFloat?,
+        fontSize: CGFloat,
+        fontWeight: LyricsFontWeight
     ) -> Text {
         let characters = timedCharacters(from: syllables)
         let source = characters.map(\.text).joined()
@@ -266,6 +295,37 @@ enum TimedLyricTextBuilder {
             return nil
         }
         return source.distance(from: source.startIndex, to: stringIndex)
+    }
+}
+
+@MainActor
+private final class TimedLyricTextCache {
+    struct Key: Hashable {
+        let syllables: [LyricSyllable]
+        let constrainedWidth: CGFloat?
+        let fontSize: CGFloat
+        let fontWeight: String
+    }
+
+    private static let maximumEntryCount = 256
+    private var storage: [Key: Text] = [:]
+    private var insertionOrder: [Key] = []
+
+    func text(for key: Key) -> Text? {
+        storage[key]
+    }
+
+    func insert(_ text: Text, for key: Key) {
+        guard storage[key] == nil else { return }
+        storage[key] = text
+        insertionOrder.append(key)
+
+        let overflow = insertionOrder.count - Self.maximumEntryCount
+        guard overflow > 0 else { return }
+        for expiredKey in insertionOrder.prefix(overflow) {
+            storage.removeValue(forKey: expiredKey)
+        }
+        insertionOrder.removeFirst(overflow)
     }
 }
 
