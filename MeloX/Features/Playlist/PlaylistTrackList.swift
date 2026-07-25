@@ -24,7 +24,7 @@ struct PlaylistTrackList: View {
                     if song.id != tracks.last?.id {
                         Divider()
                             .overlay(Color.primary.opacity(0.12))
-                            .padding(.leading, showsArtwork ? 80 : 58)
+                            .padding(.leading, showsArtwork ? 80 : 66)
                             .padding(.trailing, 20)
                     }
                 }
@@ -188,12 +188,15 @@ private struct PlaylistTrackRow: View {
                 }
             }
             .frame(width: 32, height: 32)
+            .frame(width: 40)
         } else {
             Text("\(index + 1)")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-                .frame(width: 32, alignment: .center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 40, alignment: .center)
         }
     }
 
