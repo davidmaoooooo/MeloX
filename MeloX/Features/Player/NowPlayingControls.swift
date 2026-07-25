@@ -3,7 +3,6 @@ import SwiftUI
 
 struct NowPlayingProgressControl: View {
     @Environment(PlayerStore.self) private var player
-    @Environment(AppSettings.self) private var settings
 
     let song: Song
 
@@ -29,7 +28,7 @@ struct NowPlayingProgressControl: View {
                 Text("−\(formatTime(max(player.duration - player.progress, 0)))")
             }
             .overlay {
-                qualityMenu
+                NowPlayingQualityMenu()
             }
             .font(.caption2.monospacedDigit())
             .foregroundStyle(.white.opacity(0.5))
@@ -41,7 +40,18 @@ struct NowPlayingProgressControl: View {
         max(player.duration, TimeInterval(song.durationMS) / 1_000, 1)
     }
 
-    private var qualityMenu: some View {
+    private func formatTime(_ value: TimeInterval) -> String {
+        guard value.isFinite else { return "0:00" }
+        let seconds = max(0, Int(value))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct NowPlayingQualityMenu: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(AppSettings.self) private var settings
+
+    var body: some View {
         Menu {
             Picker("音质", selection: qualityBinding) {
                 ForEach(MusicQuality.allCases) { quality in
@@ -72,12 +82,6 @@ struct NowPlayingProgressControl: View {
                 }
             }
         )
-    }
-
-    private func formatTime(_ value: TimeInterval) -> String {
-        guard value.isFinite else { return "0:00" }
-        let seconds = max(0, Int(value))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 

@@ -287,7 +287,7 @@ struct NowPlayingView: View {
     private var lyricSynchronizationTrigger: LyricSynchronizationTrigger {
         LyricSynchronizationTrigger(
             songID: player.currentSong?.id,
-            progress: player.progress,
+            seekRevision: player.seekRevision,
             isPlaying: player.isPlaying,
             advanceTime: settings.lyricsAdvanceTime,
             lyricCount: lyrics.count,
@@ -334,7 +334,7 @@ struct NowPlayingView: View {
 
 private struct LyricSynchronizationTrigger: Hashable {
     let songID: Int?
-    let progress: TimeInterval
+    let seekRevision: Int
     let isPlaying: Bool
     let advanceTime: TimeInterval
     let lyricCount: Int
