@@ -149,7 +149,7 @@ struct AppleMusicLyricsView: View {
                 let maskLocations = lyricsMaskLocations(
                     for: proxy.size.height
                 )
-                let lyricLayoutWidth = max(proxy.size.width / currentLineScale, 1)
+                let lyricLayoutWidth = max(proxy.size.width, 1)
                 let bottomContentPadding = max(
                     proxy.size.height * (1 - focusPosition),
                     40
@@ -209,6 +209,7 @@ struct AppleMusicLyricsView: View {
                                             ? currentLineScale
                                             : 1,
                                     visualScaleAnimation: focusScaleAnimation,
+                                    promotedLayoutScale: currentLineScale,
                                     layoutWidth: lyricLayoutWidth
                                 )
                                 .opacity(
@@ -491,6 +492,7 @@ struct AppleMusicLyricsView: View {
                             visualScale:
                                 isCascadeFocusLine ? currentLineScale : 1,
                             visualScaleAnimation: focusScaleAnimation,
+                            promotedLayoutScale: currentLineScale,
                             layoutWidth: lyricLayoutWidth
                         )
                         .opacity(
