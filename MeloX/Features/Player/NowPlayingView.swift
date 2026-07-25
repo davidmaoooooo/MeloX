@@ -84,11 +84,14 @@ struct NowPlayingView: View {
                 }
             }
         }
+        .background {
+            NowPlayingLyricSynchronizer(
+                lyrics: lyrics,
+                highlightedLyricID: $highlightedLyricID
+            )
+        }
         .keepsScreenAwake(keepsPlayerScreenAwake)
         .preferredColorScheme(.dark)
-        .task(id: lyricSynchronizationTrigger) {
-            await synchronizeHighlightedLyric()
-        }
         .task(id: usesFullScreenTextPV) {
             guard usesFullScreenTextPV else {
                 showsTextPVLandscapeSuggestion = false
@@ -283,61 +286,4 @@ struct NowPlayingView: View {
             showsLyricsControls.toggle()
         }
     }
-
-    private var lyricSynchronizationTrigger: LyricSynchronizationTrigger {
-        LyricSynchronizationTrigger(
-            songID: player.currentSong?.id,
-            seekRevision: player.seekRevision,
-            isPlaying: player.isPlaying,
-            advanceTime: settings.lyricsAdvanceTime,
-            lyricCount: lyrics.count,
-            firstLyricID: lyrics.first?.id,
-            lastLyricID: lyrics.last?.id
-        )
-    }
-
-    private func synchronizeHighlightedLyric() async {
-        let synchronizedLyrics = lyrics
-        let advanceTime = settings.lyricsAdvanceTime
-
-        while !Task.isCancelled {
-            let adjustedProgress = player.estimatedProgress() + advanceTime
-            let position = LyricPlaybackTimeline.position(
-                at: adjustedProgress,
-                in: synchronizedLyrics
-            )
-            if highlightedLyricID != position.highlightedLyricID {
-                highlightedLyricID = position.highlightedLyricID
-            }
-
-            guard player.isPlaying,
-                  let nextTransitionTime = position.nextTransitionTime else {
-                return
-            }
-
-            let remainingTime = nextTransitionTime
-                - (player.estimatedProgress() + advanceTime)
-            guard remainingTime > 0 else {
-                await Task.yield()
-                continue
-            }
-
-            do {
-                try await Task.sleep(for: .seconds(remainingTime))
-            } catch {
-                return
-            }
-        }
-    }
-
-}
-
-private struct LyricSynchronizationTrigger: Hashable {
-    let songID: Int?
-    let seekRevision: Int
-    let isPlaying: Bool
-    let advanceTime: TimeInterval
-    let lyricCount: Int
-    let firstLyricID: LyricLine.ID?
-    let lastLyricID: LyricLine.ID?
 }

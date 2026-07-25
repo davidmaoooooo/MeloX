@@ -394,7 +394,7 @@ struct AppleMusicLyricsView: View {
                     requestPlaybackFocus()
                 }
                 .onAppear {
-                    synchronizeFocusIfNeeded()
+                    synchronizeFocusWithPlayback()
                 }
                 .task(id: focusMovementTrigger) {
                     await cascadeMoveFocus(
@@ -674,11 +674,22 @@ struct AppleMusicLyricsView: View {
         for id: LyricLine.ID
     ) {
         guard Self.isValidLyricFrame(frame) else {
-            lyricFrameByID.removeValue(forKey: id)
+            if lyricFrameByID[id] != nil {
+                lyricFrameByID.removeValue(forKey: id)
+            }
             return
         }
 
-        let previousHeight = lyricFrameByID[id]?.height
+        let previousFrame = lyricFrameByID[id]
+        guard previousFrame == nil
+                || !Self.isApproximatelyEqual(
+                    previousFrame ?? .zero,
+                    frame
+                ) else {
+            return
+        }
+
+        let previousHeight = previousFrame?.height
         lyricFrameByID[id] = frame
         guard id == visualCascadeFocusLyricID,
               lyricMovementTransition == nil,
@@ -687,6 +698,17 @@ struct AppleMusicLyricsView: View {
             return
         }
         synchronizeStationaryFollowingOffsets()
+    }
+
+    private static func isApproximatelyEqual(
+        _ lhs: CGRect,
+        _ rhs: CGRect
+    ) -> Bool {
+        let tolerance: CGFloat = 0.5
+        return abs(lhs.minX - rhs.minX) <= tolerance
+            && abs(lhs.minY - rhs.minY) <= tolerance
+            && abs(lhs.width - rhs.width) <= tolerance
+            && abs(lhs.height - rhs.height) <= tolerance
     }
 
     private func synchronizeStationaryFollowingOffsets() {
@@ -1573,14 +1595,31 @@ struct AppleMusicLyricsView: View {
         playbackFocusRequestGeneration += 1
     }
 
-    private func synchronizeFocusIfNeeded() {
-        let existingFocusIsValid = scrollPositionID.map { focusedID in
-            lyrics.contains { $0.id == focusedID }
-        } ?? false
-        guard !existingFocusIsValid else { return }
+    private func synchronizeFocusWithPlayback() {
+        guard let focusID = highlightedLyricID ?? lyrics.first?.id else {
+            return
+        }
+        guard scrollPositionID != focusID
+                || visualHighlightedLyricID != highlightedLyricID
+                || visualCascadeFocusLyricID != highlightedLyricID
+                || isBrowsingLyrics else {
+            return
+        }
 
-        guard let initialID = highlightedLyricID ?? lyrics.first?.id else { return }
-        moveFocus(to: initialID, animated: false)
+        browsingGeneration += 1
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isBrowsingLyrics = false
+            scrollPositionID = focusID
+            visualHighlightedLyricID = highlightedLyricID
+            visualCascadeFocusLyricID = highlightedLyricID
+            lyricMovementOffsetByID = focusedLineFollowingOffsets(
+                for: highlightedLyricID
+            )
+            lyricMovementTransition = nil
+            retainedTopCascadeLyrics.removeAll()
+        }
     }
 
     private func seek(to line: LyricLine) {
