@@ -15,6 +15,7 @@ struct NowPlayingLandscapeView: View {
     let artworkNamespace: Namespace.ID
     let onDismiss: () -> Void
     let onInterfaceInteraction: () -> Void
+    let onInterfaceVisibilityChange: (Bool) -> Void
 
     @State private var showsSkylineLyrics = false
 
@@ -201,6 +202,8 @@ struct NowPlayingLandscapeView: View {
                     isInterfaceHidden: hidesLyricsControls,
                     artworkNamespace: artworkNamespace,
                     onInterfaceInteraction: onInterfaceInteraction,
+                    onInterfaceVisibilityChange:
+                        onInterfaceVisibilityChange,
                     onShowDetails: { page = .details }
                 )
                 .accessibilityAction(

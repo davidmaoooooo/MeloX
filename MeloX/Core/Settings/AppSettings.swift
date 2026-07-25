@@ -56,11 +56,14 @@ final class AppSettings {
     static let defaultLyricsInterludeCountdownEnabled = true
     static let defaultAppleMusicLyricsInterfaceAutoHideDelay = 5.0
     static let appleMusicLyricsInterfaceAutoHideDelayRange = 3.0...15.0
+    static let defaultAppleMusicLyricsScrollHideThreshold = 100.0
+    static let appleMusicLyricsScrollHideThresholdRange = 40.0...240.0
     static let defaultLyricsFontSize = 28.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
     static let defaultLyricsCurrentLineScale = 1.18
     static let defaultLyricsLineSpacing = 28.0
     static let defaultLyricsBlurIntensity = 0.8
+    static let defaultLyricsUsesUniformDimmingWhileBrowsing = true
     static let defaultLyricsDimAmount = 1.0
     static let defaultLyricsFocusPosition = 0.25
     static let lyricsFocusPositionRange = 0.05...0.8
@@ -157,11 +160,15 @@ final class AppSettings {
             "lyricsInterludeCountdownEnabled"
         static let appleMusicLyricsInterfaceAutoHideDelay =
             "appleMusicLyricsInterfaceAutoHideDelay"
+        static let appleMusicLyricsScrollHideThreshold =
+            "appleMusicLyricsScrollHideThreshold"
         static let lyricsFontSize = "lyricsFontSize"
         static let lyricsFontWeight = "lyricsFontWeight"
         static let lyricsCurrentLineScale = "lyricsCurrentLineScale"
         static let lyricsLineSpacing = "lyricsLineSpacing"
         static let lyricsBlurIntensity = "lyricsBlurIntensity"
+        static let lyricsUsesUniformDimmingWhileBrowsing =
+            "lyricsUsesUniformDimmingWhileBrowsing"
         static let lyricsDistanceBlurScale = "lyricsDistanceBlurScale"
         static let lyricsHiddenInterfaceBlurScale = "lyricsHiddenInterfaceBlurScale"
         static let lyricsDimAmount = "lyricsDimAmount"
@@ -473,6 +480,15 @@ final class AppSettings {
         }
     }
 
+    var appleMusicLyricsScrollHideThreshold: Double {
+        didSet {
+            defaults.set(
+                appleMusicLyricsScrollHideThreshold,
+                forKey: Key.appleMusicLyricsScrollHideThreshold
+            )
+        }
+    }
+
     var lyricsFontSize: Double {
         didSet { defaults.set(lyricsFontSize, forKey: Key.lyricsFontSize) }
     }
@@ -496,6 +512,15 @@ final class AppSettings {
 
     var lyricsBlurIntensity: Double {
         didSet { defaults.set(lyricsBlurIntensity, forKey: Key.lyricsBlurIntensity) }
+    }
+
+    var lyricsUsesUniformDimmingWhileBrowsing: Bool {
+        didSet {
+            defaults.set(
+                lyricsUsesUniformDimmingWhileBrowsing,
+                forKey: Key.lyricsUsesUniformDimmingWhileBrowsing
+            )
+        }
     }
 
     var lyricsDistanceBlurScale: Double {
@@ -946,6 +971,16 @@ final class AppSettings {
             ),
             Self.appleMusicLyricsInterfaceAutoHideDelayRange.upperBound
         )
+        let storedAppleMusicScrollHideThreshold = defaults.object(
+            forKey: Key.appleMusicLyricsScrollHideThreshold
+        ) as? Double ?? Self.defaultAppleMusicLyricsScrollHideThreshold
+        appleMusicLyricsScrollHideThreshold = min(
+            max(
+                storedAppleMusicScrollHideThreshold,
+                Self.appleMusicLyricsScrollHideThresholdRange.lowerBound
+            ),
+            Self.appleMusicLyricsScrollHideThresholdRange.upperBound
+        )
         lyricsFontSize = defaults.object(
             forKey: Key.lyricsFontSize
         ) as? Double ?? Self.defaultLyricsFontSize
@@ -967,6 +1002,9 @@ final class AppSettings {
         ) as? Double ?? Self.defaultLyricsLineSpacing
         lyricsBlurIntensity = defaults.object(forKey: Key.lyricsBlurIntensity) as? Double
             ?? Self.defaultLyricsBlurIntensity
+        lyricsUsesUniformDimmingWhileBrowsing = defaults.object(
+            forKey: Key.lyricsUsesUniformDimmingWhileBrowsing
+        ) as? Bool ?? Self.defaultLyricsUsesUniformDimmingWhileBrowsing
         let storedLyricsDistanceBlurScale = defaults.object(
             forKey: Key.lyricsDistanceBlurScale
         ) as? Double ?? Self.defaultLyricsDistanceBlurScale
@@ -1282,11 +1320,15 @@ final class AppSettings {
             Self.defaultLyricsInterludeCountdownEnabled
         appleMusicLyricsInterfaceAutoHideDelay =
             Self.defaultAppleMusicLyricsInterfaceAutoHideDelay
+        appleMusicLyricsScrollHideThreshold =
+            Self.defaultAppleMusicLyricsScrollHideThreshold
         lyricsFontSize = Self.defaultLyricsFontSize
         lyricsFontWeight = Self.defaultLyricsFontWeight
         lyricsCurrentLineScale = Self.defaultLyricsCurrentLineScale
         lyricsLineSpacing = Self.defaultLyricsLineSpacing
         lyricsBlurIntensity = Self.defaultLyricsBlurIntensity
+        lyricsUsesUniformDimmingWhileBrowsing =
+            Self.defaultLyricsUsesUniformDimmingWhileBrowsing
         lyricsDistanceBlurScale = Self.defaultLyricsDistanceBlurScale
         lyricsHiddenInterfaceBlurScale = Self.defaultLyricsHiddenInterfaceBlurScale
         lyricsDimAmount = Self.defaultLyricsDimAmount

@@ -65,7 +65,9 @@ struct NowPlayingView: View {
                             artworkNamespace: pageArtworkNamespace,
                             onDismiss: { dismiss() },
                             onInterfaceInteraction:
-                                handleLyricsInterfaceInteraction
+                                handleLyricsInterfaceInteraction,
+                            onInterfaceVisibilityChange:
+                                setAppleMusicLyricsControlsVisible
                         )
                     } else {
                         portraitContent(for: song)
@@ -99,7 +101,7 @@ struct NowPlayingView: View {
         }
         .simultaneousGesture(
             playerActivityGesture,
-            including: usesAutoHidingAppleMusicInterface ? .all : .none
+            including: acceptsPlayerActivityGesture ? .all : .none
         )
         .onChange(of: isInteractingWithPlayer) { _, isInteracting in
             guard isInteracting else { return }
@@ -321,6 +323,8 @@ struct NowPlayingView: View {
                     artworkNamespace: pageArtworkNamespace,
                     onInterfaceInteraction:
                         handleLyricsInterfaceInteraction,
+                    onInterfaceVisibilityChange:
+                        setAppleMusicLyricsControlsVisible,
                     onShowDetails: showDetails
                 )
                 .accessibilityAction(
@@ -398,6 +402,27 @@ struct NowPlayingView: View {
         }
     }
 
+    private func setAppleMusicLyricsControlsVisible(_ isVisible: Bool) {
+        guard usesAutoHidingAppleMusicInterface else { return }
+        if isVisible {
+            registerAppleMusicControlsActivity()
+            return
+        }
+
+        guard showsLyricsControls,
+              !accessibilityVoiceOverEnabled else {
+            return
+        }
+        cancelAppleMusicControlsAutoHide()
+        withAnimation(
+            accessibilityReduceMotion
+                ? nil
+                : .easeOut(duration: 0.25)
+        ) {
+            showsLyricsControls = false
+        }
+    }
+
     private func toggleLyricsControls() {
         withAnimation(
             accessibilityReduceMotion
@@ -410,5 +435,9 @@ struct NowPlayingView: View {
 
     private func cancelAppleMusicControlsAutoHide() {
         appleMusicControlsActivityGeneration &+= 1
+    }
+
+    private var acceptsPlayerActivityGesture: Bool {
+        usesAutoHidingAppleMusicInterface && showsLyricsControls
     }
 }

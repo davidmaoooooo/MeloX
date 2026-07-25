@@ -240,6 +240,12 @@ struct PlayerSettingsView: View {
                         )
                     )
 
+                    Toggle(
+                        "手动浏览时统一变暗",
+                        isOn: $settings
+                            .lyricsUsesUniformDimmingWhileBrowsing
+                    )
+
                     valueSlider(
                         title: "默认逐句模糊加强",
                         value: $settings.lyricsDistanceBlurScale,
@@ -287,8 +293,8 @@ struct PlayerSettingsView: View {
                             "首句歌词前，以及精确歌词中较长的演奏空档，会显示 Apple Music 风格的三点倒计时。"
                         )
                         footerDescription(
-                            "模糊与焦点",
-                            "基础模糊控制整体强度，两项逐句加强分别用于显示和隐藏控制栏时；焦点位置数值越大，当前行越靠下。"
+                            "手动浏览效果",
+                            "开启后，手动浏览期间保留当前播放句为唯一焦点，其余歌词统一变暗且不模糊；恢复跟随后重新应用逐句渐暗和模糊。"
                         )
                     }
                 }
@@ -638,6 +644,19 @@ struct PlayerSettingsView: View {
                         valueText:
                             "\(Int(settings.appleMusicLyricsInterfaceAutoHideDelay)) 秒"
                     )
+
+                    valueSlider(
+                        title: "滚动隐藏 UI 阈值",
+                        value:
+                            $settings
+                                .appleMusicLyricsScrollHideThreshold,
+                        range:
+                            AppSettings
+                                .appleMusicLyricsScrollHideThresholdRange,
+                        step: 10,
+                        valueText:
+                            "\(Int(settings.appleMusicLyricsScrollHideThreshold)) 点"
+                    )
                 }
 
                 valueSlider(
@@ -675,6 +694,10 @@ struct PlayerSettingsView: View {
                         footerDescription(
                             "控制栏自动隐藏",
                             "Apple Music 歌词停止操作达到设定时间后自动隐藏控制栏；再次操作只会显示控制栏并重新计时。"
+                        )
+                        footerDescription(
+                            "滚动隐藏 UI",
+                            "向后浏览歌词达到设定距离后隐藏控制栏；往回滚动时立即重新显示。"
                         )
                     }
                 }

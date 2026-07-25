@@ -16,6 +16,7 @@ struct AppleMusicLyricsView: View {
     let isInterfaceHidden: Bool
     let bottomOverlayHeight: CGFloat
     let onInterfaceInteraction: (() -> Void)?
+    let onInterfaceVisibilityChange: ((Bool) -> Void)?
     private let lyricIndexByID: [LyricLine.ID: Int]
     private let hasSyllableSyncedLyrics: Bool
     private let hasTranslations: Bool
@@ -35,6 +36,9 @@ struct AppleMusicLyricsView: View {
     @State private var retainedTopCascadeLyrics: [RetainedCascadeLyric] = []
     @State private var translationHeightByID: [LyricLine.ID: CGFloat] = [:]
     @State private var activeInterludeID: LyricInterlude.ID?
+    @State private var isManuallyScrolling = false
+    @State private var interfaceVisibilityTracker =
+        LyricsScrollInterfaceVisibilityTracker()
 
     init(
         lyrics: [LyricLine],
@@ -42,7 +46,8 @@ struct AppleMusicLyricsView: View {
         highlightedLyricID: LyricLine.ID?,
         isInterfaceHidden: Bool = false,
         bottomOverlayHeight: CGFloat = 0,
-        onInterfaceInteraction: (() -> Void)? = nil
+        onInterfaceInteraction: (() -> Void)? = nil,
+        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil
     ) {
         self.lyrics = lyrics
         self.errorMessage = errorMessage
@@ -50,6 +55,7 @@ struct AppleMusicLyricsView: View {
         self.isInterfaceHidden = isInterfaceHidden
         self.bottomOverlayHeight = bottomOverlayHeight
         self.onInterfaceInteraction = onInterfaceInteraction
+        self.onInterfaceVisibilityChange = onInterfaceVisibilityChange
         lyricIndexByID = Dictionary(
             uniqueKeysWithValues: lyrics.enumerated().map { index, line in
                 (line.id, index)
@@ -105,9 +111,9 @@ struct AppleMusicLyricsView: View {
                     }
             }
         } else {
-            let blurFocusLyricID = isBrowsingLyrics
-                ? scrollPositionID
-                : visualCascadeFocusLyricID ?? scrollPositionID ?? highlightedLyricID
+            let blurFocusLyricID =
+                visualCascadeFocusLyricID
+                ?? highlightedLyricID
             let focusNeighborIDs = lyricNeighborIDs(around: blurFocusLyricID)
             let focusEffectAnimation = lyricFocusEffectAnimation(
                 for: visualHighlightedLyricID
@@ -137,11 +143,21 @@ struct AppleMusicLyricsView: View {
                 1
             )
             let blurIntensity = CGFloat(settings.lyricsBlurIntensity)
+            let usesUniformBrowsingDimming =
+                isBrowsingLyrics
+                    && settings
+                        .lyricsUsesUniformDimmingWhileBrowsing
+            let activeBlurIntensity = usesUniformBrowsingDimming
+                ? 0
+                : blurIntensity
             let distanceBlurScale = CGFloat(settings.lyricsDistanceBlurScale)
             let hiddenInterfaceBlurScale = CGFloat(
                 settings.lyricsHiddenInterfaceBlurScale
             )
             let dimAmount = settings.lyricsDimAmount
+            let distanceDimAmount = usesUniformBrowsingDimming
+                ? 0
+                : dimAmount
             let currentLineScale = lyricsCurrentLineScale
             let glowOverflow = Self.lyricGlowOverflow(
                 isEnabled: settings.lyricsGlowEnabled
@@ -195,14 +211,13 @@ struct AppleMusicLyricsView: View {
                             let isActualPlaybackLine = line.id == highlightedLyricID
                             let isPrecedingFocusLine = line.id == focusNeighborIDs.preceding
                             let isFollowingFocusLine = line.id == focusNeighborIDs.following
-                            let isBrowsingFocus = isBrowsingLyrics && line.id == scrollPositionID
                             let isRetainedTopCascadeLine =
                                 retainedTopCascadeLyricIDs.contains(line.id)
                             let movementPhase = lyricMovementPhase(
                                 for: line.id
                             )
                             let focusBlurRadius = Self.lyricFocusBlurRadius(
-                                intensity: blurIntensity,
+                                intensity: activeBlurIntensity,
                                 isPrecedingFocusLine: isPrecedingFocusLine,
                                 isFollowingFocusLine: isFollowingFocusLine
                             )
@@ -249,7 +264,7 @@ struct AppleMusicLyricsView: View {
                                         ? 0
                                         : Self.lyricEmphasis(
                                             isPlaybackLine: isPlaybackLine,
-                                            isBrowsingFocus: isBrowsingFocus,
+                                            isBrowsingFocus: false,
                                             dimAmount: dimAmount
                                         )
                                 )
@@ -279,7 +294,7 @@ struct AppleMusicLyricsView: View {
                                             radius: Self.lyricDistanceBlurRadius(
                                                 forPixelDistance: distance,
                                                 lyricStride: lyricStride,
-                                                intensity: blurIntensity
+                                                intensity: activeBlurIntensity
                                                     * activeDistanceBlurScale
                                             )
                                         )
@@ -287,7 +302,7 @@ struct AppleMusicLyricsView: View {
                                             Self.lyricOpacity(
                                                 forPixelDistance: distance,
                                                 lyricStride: lyricStride,
-                                                dimAmount: dimAmount
+                                                dimAmount: distanceDimAmount
                                             ) * bottomRevealOpacity
                                         )
                                         .offset(y: movementOffset)
@@ -318,7 +333,7 @@ struct AppleMusicLyricsView: View {
                                 .accessibilityValue(
                                     lyricAccessibilityValue(
                                         isPlaybackLine: isActualPlaybackLine,
-                                        isBrowsingFocus: isBrowsingFocus
+                                        isBrowsingFocus: false
                                     )
                                 )
                                 .accessibilityHint(settings.lyricsTapToSeek ? "双击跳转到这行歌词" : "歌词跳转已在设置中关闭")
@@ -359,10 +374,11 @@ struct AppleMusicLyricsView: View {
                         lyricLayoutWidth: lyricLayoutWidth,
                         focusPosition: focusPosition,
                         lyricStride: lyricStride,
-                        blurIntensity: blurIntensity,
+                        blurIntensity: activeBlurIntensity,
                         distanceBlurScale: distanceBlurScale,
                         hiddenInterfaceBlurScale: hiddenInterfaceBlurScale,
                         dimAmount: dimAmount,
+                        distanceDimAmount: distanceDimAmount,
                         currentLineScale: currentLineScale,
                         usesPseudoTiming: usesPseudoTiming,
                         focusEffectAnimation: focusEffectAnimation
@@ -381,14 +397,45 @@ struct AppleMusicLyricsView: View {
                     )
                     .frame(width: proxy.size.width + glowOverflow * 2)
                 }
+                .onScrollGeometryChange(
+                    for: CGFloat.self,
+                    of: { geometry in
+                        let normalizedOffset =
+                            geometry.contentOffset.y
+                            + geometry.contentInsets.top
+                        let maximumOffset = max(
+                            geometry.contentSize.height
+                                + geometry.contentInsets.top
+                                + geometry.contentInsets.bottom
+                                - geometry.containerSize.height,
+                            0
+                        )
+                        return min(
+                            max(normalizedOffset, 0),
+                            maximumOffset
+                        )
+                    }
+                ) { oldOffset, newOffset in
+                    handleManualScrollOffsetChange(
+                        from: oldOffset,
+                        to: newOffset
+                    )
+                }
                 .onScrollPhaseChange { _, newPhase in
                     switch newPhase {
                     case .tracking, .interacting:
-                        onInterfaceInteraction?()
+                        if !isManuallyScrolling {
+                            isManuallyScrolling = true
+                            interfaceVisibilityTracker.begin(
+                                isInterfaceVisible: !isInterfaceHidden
+                            )
+                        }
                         browsingGeneration += 1
                         resetMovementOffsets()
                         isBrowsingLyrics = true
                     case .idle:
+                        isManuallyScrolling = false
+                        interfaceVisibilityTracker.end()
                         schedulePlaybackFollowing()
                     case .decelerating, .animating:
                         break
@@ -441,6 +488,8 @@ struct AppleMusicLyricsView: View {
                 }
                 .onDisappear {
                     browsingGeneration += 1
+                    isManuallyScrolling = false
+                    interfaceVisibilityTracker.end()
                     lyricFrameByID.removeAll()
                     lyricMovementOffsetByID.removeAll()
                     lyricMovementTransition = nil
@@ -460,6 +509,7 @@ struct AppleMusicLyricsView: View {
         distanceBlurScale: CGFloat,
         hiddenInterfaceBlurScale: CGFloat,
         dimAmount: Double,
+        distanceDimAmount: Double,
         currentLineScale: CGFloat,
         usesPseudoTiming: Bool,
         focusEffectAnimation: Animation?
@@ -471,10 +521,9 @@ struct AppleMusicLyricsView: View {
                     let line = lyrics[lineIndex]
                     let isPlaybackLine = line.id == visualHighlightedLyricID
                     let isCascadeFocusLine = line.id == visualCascadeFocusLyricID
-                    let isBrowsingFocus = isBrowsingLyrics && line.id == scrollPositionID
-                    let blurFocusLyricID = isBrowsingLyrics
-                        ? scrollPositionID
-                        : visualCascadeFocusLyricID ?? scrollPositionID ?? highlightedLyricID
+                    let blurFocusLyricID =
+                        visualCascadeFocusLyricID
+                        ?? highlightedLyricID
                     let focusNeighborIDs = lyricNeighborIDs(around: blurFocusLyricID)
                     let movementPhase = lyricMovementPhase(for: line.id)
                     let focusBlurRadius = Self.lyricFocusBlurRadius(
@@ -531,7 +580,7 @@ struct AppleMusicLyricsView: View {
                         .opacity(
                             Self.lyricEmphasis(
                                 isPlaybackLine: isPlaybackLine,
-                                isBrowsingFocus: isBrowsingFocus,
+                                isBrowsingFocus: false,
                                 dimAmount: dimAmount
                             )
                         )
@@ -551,7 +600,7 @@ struct AppleMusicLyricsView: View {
                             Self.lyricOpacity(
                                 forPixelDistance: distance,
                                 lyricStride: lyricStride,
-                                dimAmount: dimAmount
+                                dimAmount: distanceDimAmount
                             )
                         )
                         .blur(radius: focusBlurRadius)
@@ -1681,6 +1730,23 @@ struct AppleMusicLyricsView: View {
             guard generation == browsingGeneration else { return }
             isBrowsingLyrics = false
         }
+    }
+
+    private func handleManualScrollOffsetChange(
+        from oldOffset: CGFloat,
+        to newOffset: CGFloat
+    ) {
+        guard isManuallyScrolling,
+              let showsInterface = interfaceVisibilityTracker.update(
+                offsetDelta: newOffset - oldOffset,
+                hideThreshold: CGFloat(
+                    settings.appleMusicLyricsScrollHideThreshold
+                )
+              ) else {
+            return
+        }
+
+        onInterfaceVisibilityChange?(showsInterface)
     }
 
     private func requestPlaybackFocus() {

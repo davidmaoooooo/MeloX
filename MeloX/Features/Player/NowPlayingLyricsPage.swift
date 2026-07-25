@@ -17,6 +17,7 @@ struct NowPlayingLyricsPage: View {
     let isInterfaceHidden: Bool
     let artworkNamespace: Namespace.ID
     let onInterfaceInteraction: (() -> Void)?
+    let onInterfaceVisibilityChange: ((Bool) -> Void)?
     let onShowDetails: (() -> Void)?
 
     init(
@@ -28,6 +29,7 @@ struct NowPlayingLyricsPage: View {
         isInterfaceHidden: Bool = false,
         artworkNamespace: Namespace.ID,
         onInterfaceInteraction: (() -> Void)? = nil,
+        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil,
         onShowDetails: (() -> Void)? = nil
     ) {
         self.song = song
@@ -38,6 +40,7 @@ struct NowPlayingLyricsPage: View {
         self.isInterfaceHidden = isInterfaceHidden
         self.artworkNamespace = artworkNamespace
         self.onInterfaceInteraction = onInterfaceInteraction
+        self.onInterfaceVisibilityChange = onInterfaceVisibilityChange
         self.onShowDetails = onShowDetails
     }
 
@@ -98,7 +101,9 @@ struct NowPlayingLyricsPage: View {
                 highlightedLyricID: highlightedLyricID,
                 isInterfaceHidden: isInterfaceHidden,
                 bottomOverlayHeight: appleMusicBottomOverlayHeight,
-                onInterfaceInteraction: onInterfaceInteraction
+                onInterfaceInteraction: onInterfaceInteraction,
+                onInterfaceVisibilityChange:
+                    onInterfaceVisibilityChange
             )
         case .eva:
             EVALyricsView(
