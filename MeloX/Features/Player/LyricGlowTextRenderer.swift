@@ -9,16 +9,18 @@ struct LyricTimingTextAttribute: TextAttribute, Hashable, Sendable {
     let characterCount: Int
     let wordStartTime: TimeInterval
     let wordEndTime: TimeInterval
-    let wordIndex: Int
+    let wordCharacterIndex: Int
+    let wordCharacterCount: Int
+    let usesWordTimingForLongTone: Bool
     let isWhitespace: Bool
 }
 
 /// Renders timed lyric runs in the coordinates supplied by SwiftUI.
 /// Each glyph keeps its unplayed style while the played style is revealed
-/// horizontally across it. Word lift moves both layers as one block, while
-/// character lift preserves the original played-only movement. Word-based long
-/// tones also scale every glyph around one shared word center. Glow and text
-/// stay composited through all transforms.
+/// horizontally across it. Long tones use a staggered per-character emphasis
+/// envelope: every glyph expands around its own center, blooms, then settles
+/// while the following glyphs enter the same animation. Glow and text stay
+/// composited through all transforms.
 struct LyricGlowTextRenderer: TextRenderer {
     struct Style: Equatable, Sendable {
         let glowRadius: CGFloat
@@ -32,6 +34,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         let playedRise: CGFloat
         let maximumLongSyllableScale: CGFloat
         let longSyllableExpansionPadding: CGFloat
+        let highlightGradientWidth: CGFloat
         let liftMode: LyricsLiftMode
 
         fileprivate var drawsGlow: Bool {
@@ -74,23 +77,91 @@ struct LyricGlowTextRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             var lineContext = context
+            let revealMask = lineRevealMask(for: line)
             if let transform = lineDrawingTransform(for: line) {
                 lineContext.addFilter(
                     .projectionTransform(ProjectionTransform(transform))
                 )
             }
 
-            let expansionBoundsByWordIndex =
-                wordExpansionBounds(in: line)
             for run in line {
                 draw(
                     run,
-                    expansionBoundsByWordIndex:
-                        expansionBoundsByWordIndex,
+                    revealMask: revealMask,
                     in: &lineContext
                 )
             }
         }
+    }
+
+    private func lineRevealMask(
+        for line: Text.Layout.Line
+    ) -> LineRevealMask? {
+        let timedRuns = line.compactMap { run -> TimedRun? in
+            guard let timing = run[LyricTimingTextAttribute.self],
+                  !timing.isWhitespace else {
+                return nil
+            }
+            let bounds = run.typographicBounds.rect
+            guard bounds.width.isFinite,
+                  bounds.width > 0 else {
+                return nil
+            }
+            return TimedRun(
+                timing: timing,
+                bounds: bounds,
+                layoutDirection: run.layoutDirection
+            )
+        }
+        guard let firstRun = timedRuns.min(
+            by: { $0.timing.startTime < $1.timing.startTime }
+        ),
+        playbackTime >= firstRun.timing.startTime else {
+            return nil
+        }
+
+        let activeRun = timedRuns.first {
+            playbackTime >= $0.timing.startTime
+                && playbackTime < $0.timing.endTime
+        }
+        let completedRun = timedRuns
+            .filter { playbackTime >= $0.timing.endTime }
+            .max { $0.timing.endTime < $1.timing.endTime }
+        let referenceRun = activeRun ?? completedRun ?? firstRun
+        let direction = referenceRun.layoutDirection
+        let frontX: CGFloat
+
+        if let activeRun {
+            let progress = smootherStep(
+                playedProgress(for: activeRun.timing)
+            )
+            if direction == .rightToLeft {
+                frontX = activeRun.bounds.maxX
+                    - activeRun.bounds.width * CGFloat(progress)
+            } else {
+                frontX = activeRun.bounds.minX
+                    + activeRun.bounds.width * CGFloat(progress)
+            }
+        } else if direction == .rightToLeft {
+            frontX = referenceRun.bounds.minX
+        } else {
+            frontX = referenceRun.bounds.maxX
+        }
+
+        let averageGlyphWidth = timedRuns.reduce(CGFloat.zero) {
+            $0 + $1.bounds.width
+        } / CGFloat(max(timedRuns.count, 1))
+        let gradientWidth = style.highlightGradientWidth.isFinite
+            ? max(style.highlightGradientWidth, 0.1)
+            : Metrics.defaultHighlightGradientWidth
+        return LineRevealMask(
+            frontX: frontX,
+            featherWidth: max(
+                averageGlyphWidth * gradientWidth,
+                Metrics.minimumRevealFeatherWidth
+            ),
+            layoutDirection: direction
+        )
     }
 
     private func lineDrawingTransform(
@@ -138,7 +209,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func draw(
         _ run: Text.Layout.Run,
-        expansionBoundsByWordIndex: [Int: CGRect],
+        revealMask: LineRevealMask?,
         in context: inout GraphicsContext
     ) {
         guard let timing = run[LyricTimingTextAttribute.self] else {
@@ -147,23 +218,23 @@ struct LyricGlowTextRenderer: TextRenderer {
         }
 
         let state = visualState(for: timing)
-        let wordExpansionAnchor =
-            expansionBoundsByWordIndex[timing.wordIndex].map {
-                CGPoint(x: $0.midX, y: $0.midY)
-            }
+        let bounds = run.typographicBounds.rect
         var runContext = context
-        let liftsWholeWord = style.liftMode == .word
-        if liftsWholeWord {
-            applyLift(
-                to: &runContext,
-                progress: state.liftProgress
-            )
-        }
-        if let wordExpansionAnchor {
+        applyLift(
+            to: &runContext,
+            progress: state.liftProgress
+        )
+        if state.expansionScale != 1
+            || state.emphasis.envelope > 0 {
             applyExpansion(
                 to: &runContext,
                 scale: state.expansionScale,
-                anchor: wordExpansionAnchor
+                anchor: CGPoint(x: bounds.midX, y: bounds.midY),
+                offset: expansionOffset(
+                    layoutDirection: run.layoutDirection,
+                    bounds: bounds,
+                    emphasis: state.emphasis
+                )
             )
         }
 
@@ -172,17 +243,11 @@ struct LyricGlowTextRenderer: TextRenderer {
             blurRadius: state.unplayedBlurRadius,
             in: &runContext
         )
-        guard state.revealProgress > 0 else { return }
+        guard let revealMask else { return }
 
         drawPlayed(
             run,
-            revealProgress: state.revealProgress,
-            liftProgress: liftsWholeWord ? 0 : state.liftProgress,
-            expansionScale:
-                wordExpansionAnchor == nil
-                    ? state.expansionScale
-                    : 1,
-            rawProgress: state.rawProgress,
+            revealMask: revealMask,
             glowStrength: state.glowStrength,
             in: &runContext
         )
@@ -192,17 +257,35 @@ struct LyricGlowTextRenderer: TextRenderer {
         for timing: LyricTimingTextAttribute
     ) -> RunVisualState {
         let rawProgress = playedProgress(for: timing)
-        let glowStrength = style.drawsGlow
-            && (!style.glowsLongSyllablesOnly || isLongSyllable(timing))
-            && rawProgress > 0
-            ? glowStrength(for: timing, rawProgress: rawProgress)
-            : 0
+        let emphasis = LyricLongToneEmphasis.state(
+            playbackTime: playbackTime,
+            timing: timing,
+            detectionMode: style.longSyllableDetectionMode,
+            durationThreshold: style.longSyllableDurationThreshold
+        )
+        let glowStrength: Double
+        if style.drawsGlow, emphasis.isLongTone {
+            glowStrength = emphasis.envelope * emphasis.glowAmount
+        } else if style.drawsGlow,
+                  !style.glowsLongSyllablesOnly,
+                  rawProgress > 0 {
+            glowStrength = ordinaryGlowStrength(
+                for: timing,
+                rawProgress: rawProgress
+            )
+        } else {
+            glowStrength = 0
+        }
 
         return RunVisualState(
-            rawProgress: rawProgress,
-            revealProgress: smootherStep(rawProgress),
             liftProgress: liftProgress(for: timing),
-            expansionScale: expansionScale(for: timing),
+            expansionScale: 1
+                + (max(style.maximumLongSyllableScale, 1) - 1)
+                    * CGFloat(
+                        emphasis.envelope
+                            * emphasis.expansionAmount
+                    ),
+            emphasis: emphasis,
             unplayedBlurRadius: unplayedBlurRadius(for: timing),
             glowStrength: glowStrength
         )
@@ -228,132 +311,15 @@ struct LyricGlowTextRenderer: TextRenderer {
         )
     }
 
-    private func expansionScale(
-        for timing: LyricTimingTextAttribute
-    ) -> CGFloat {
-        let maximumScale = max(style.maximumLongSyllableScale, 1)
-        guard maximumScale > 1,
-              isLongSyllable(timing) else {
-            return 1
-        }
-
-        if style.longSyllableDetectionMode == .word {
-            return wordExpansionScale(
-                from: timing.wordStartTime,
-                to: timing.wordEndTime,
-                maximumScale: maximumScale
-            )
-        }
-
-        guard timing.characterCount > 0 else { return 1 }
-        let characterDuration = max(
-            timing.endTime - timing.startTime,
-            0
+    private func expansionOffset(
+        layoutDirection: LayoutDirection,
+        bounds: CGRect,
+        emphasis: LyricLongToneEmphasis.State
+    ) -> CGSize {
+        emphasis.expansionOffset(
+            layoutDirection: layoutDirection,
+            glyphBounds: bounds
         )
-        let overlapDuration = min(
-            characterDuration * Metrics.expansionOverlapFraction,
-            Metrics.maximumExpansionOverlapDuration
-        )
-        let windowStart = timing.startTime
-            - (timing.characterIndex > 0 ? overlapDuration : 0)
-        let windowEnd = timing.endTime
-            + (timing.characterIndex < timing.characterCount - 1
-                ? overlapDuration
-                : 0)
-        return pulsingExpansionScale(
-            from: windowStart,
-            to: windowEnd,
-            maximumScale: maximumScale
-        )
-    }
-
-    private func wordExpansionScale(
-        from startTime: TimeInterval,
-        to endTime: TimeInterval,
-        maximumScale: CGFloat
-    ) -> CGFloat {
-        let duration = endTime - startTime
-        guard duration > 0,
-              playbackTime > startTime else {
-            return 1
-        }
-
-        let peakProgress = Metrics.wordExpansionPeakProgress
-        let peakTime = startTime + duration * peakProgress
-        let envelope: Double
-        if playbackTime <= peakTime {
-            envelope = cosineEaseInOut(
-                (playbackTime - startTime)
-                    / max(peakTime - startTime, 0.001)
-            )
-        } else {
-            let releaseEndTime = endTime
-                + Metrics.wordExpansionReleaseTailDuration
-            guard playbackTime < releaseEndTime else { return 1 }
-            envelope = 1 - cosineEaseInOut(
-                (playbackTime - peakTime)
-                    / max(releaseEndTime - peakTime, 0.001)
-            )
-        }
-        return 1 + (maximumScale - 1)
-            * CGFloat(envelope)
-    }
-
-    private func pulsingExpansionScale(
-        from startTime: TimeInterval,
-        to endTime: TimeInterval,
-        maximumScale: CGFloat
-    ) -> CGFloat {
-        let duration = endTime - startTime
-        guard duration > 0,
-              playbackTime > startTime,
-              playbackTime < endTime else {
-            return 1
-        }
-
-        let rawProgress = unitProgress(
-            (playbackTime - startTime) / duration
-        )
-        let envelope = sin(.pi * smootherStep(rawProgress))
-        return 1 + (maximumScale - 1) * CGFloat(envelope)
-    }
-
-    private func wordExpansionBounds(
-        in line: Text.Layout.Line
-    ) -> [Int: CGRect] {
-        guard style.longSyllableDetectionMode == .word else {
-            return [:]
-        }
-
-        return line.reduce(into: [:]) { boundsByWordIndex, run in
-            guard let timing = run[LyricTimingTextAttribute.self],
-                  !timing.isWhitespace else {
-                return
-            }
-            let bounds = run.typographicBounds.rect
-            guard !bounds.isNull,
-                  !bounds.isInfinite,
-                  bounds.width.isFinite,
-                  bounds.height.isFinite else {
-                return
-            }
-            boundsByWordIndex[timing.wordIndex] =
-                boundsByWordIndex[timing.wordIndex]?.union(bounds)
-                    ?? bounds
-        }
-    }
-
-    private func isLongSyllable(
-        _ timing: LyricTimingTextAttribute
-    ) -> Bool {
-        let duration = switch style.longSyllableDetectionMode {
-        case .word:
-            timing.wordEndTime - timing.wordStartTime
-        case .character:
-            timing.endTime - timing.startTime
-        }
-        return duration
-            >= max(style.longSyllableDurationThreshold, 0)
     }
 
     private func drawUnplayed(
@@ -371,37 +337,15 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawPlayed(
         _ run: Text.Layout.Run,
-        revealProgress: Double,
-        liftProgress: Double,
-        expansionScale: CGFloat,
-        rawProgress: Double,
+        revealMask: LineRevealMask,
         glowStrength: Double,
         in context: inout GraphicsContext
     ) {
-        let verticalOffset = liftOffset(at: liftProgress)
-        let scale = max(expansionScale, 1)
-        let bounds = run.typographicBounds.rect
-        var playedContext = context
-        if verticalOffset != 0 || scale != 1 {
-            let transform = CGAffineTransform(
-                a: scale,
-                b: 0,
-                c: 0,
-                d: scale,
-                tx: bounds.midX * (1 - scale),
-                ty: bounds.midY * (1 - scale) + verticalOffset
-            )
-            playedContext.addFilter(
-                .projectionTransform(ProjectionTransform(transform))
-            )
-        }
-
-        playedContext.drawLayer { layer in
+        context.drawLayer { layer in
             if glowStrength > 0 {
                 drawGlow(
                     for: run,
-                    revealProgress: revealProgress,
-                    rawProgress: rawProgress,
+                    revealMask: revealMask,
                     strength: glowStrength,
                     in: &layer
                 )
@@ -410,7 +354,7 @@ struct LyricGlowTextRenderer: TextRenderer {
             var textContext = layer
             drawRevealed(
                 run,
-                progress: revealProgress,
+                revealMask: revealMask,
                 in: &textContext
             )
         }
@@ -437,10 +381,11 @@ struct LyricGlowTextRenderer: TextRenderer {
     private func applyExpansion(
         to context: inout GraphicsContext,
         scale: CGFloat,
-        anchor: CGPoint
+        anchor: CGPoint,
+        offset: CGSize
     ) {
         let scale = max(scale, 1)
-        guard scale != 1 else { return }
+        guard scale != 1 || offset != .zero else { return }
         context.addFilter(
             .projectionTransform(
                 ProjectionTransform(
@@ -449,8 +394,8 @@ struct LyricGlowTextRenderer: TextRenderer {
                         b: 0,
                         c: 0,
                         d: scale,
-                        tx: anchor.x * (1 - scale),
-                        ty: anchor.y * (1 - scale)
+                        tx: anchor.x * (1 - scale) + offset.width,
+                        ty: anchor.y * (1 - scale) + offset.height
                     )
                 )
             )
@@ -466,29 +411,25 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawGlow(
         for run: Text.Layout.Run,
-        revealProgress: Double,
-        rawProgress: Double,
+        revealMask: LineRevealMask,
         strength: Double,
         in context: inout GraphicsContext
     ) {
-        let pulse = 1 + Metrics.glowPulseAmount * sin(.pi * rawProgress)
         let baseOpacity = style.glowOpacity * strength
 
         drawGlowLayer(
             for: run,
-            revealProgress: revealProgress,
+            revealMask: revealMask,
             radius: style.glowRadius
-                * Metrics.outerGlowRadiusMultiplier
-                * CGFloat(pulse),
+                * Metrics.outerGlowRadiusMultiplier,
             opacity: min(baseOpacity * Metrics.outerGlowOpacityMultiplier, 1),
             in: &context
         )
         drawGlowLayer(
             for: run,
-            revealProgress: revealProgress,
+            revealMask: revealMask,
             radius: style.glowRadius
-                * Metrics.innerGlowRadiusMultiplier
-                * CGFloat(pulse),
+                * Metrics.innerGlowRadiusMultiplier,
             opacity: min(baseOpacity, 1),
             in: &context
         )
@@ -496,7 +437,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawGlowLayer(
         for run: Text.Layout.Run,
-        revealProgress: Double,
+        revealMask: LineRevealMask,
         radius: CGFloat,
         opacity: Double,
         in context: inout GraphicsContext
@@ -510,7 +451,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         glowContext.drawLayer { layer in
             drawRevealed(
                 run,
-                progress: revealProgress,
+                revealMask: revealMask,
                 in: &layer
             )
         }
@@ -518,46 +459,36 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawRevealed(
         _ run: Text.Layout.Run,
-        progress: Double,
+        revealMask: LineRevealMask,
         in context: inout GraphicsContext
     ) {
-        let progress = unitProgress(progress)
-        guard progress > 0 else { return }
-        guard progress < 1 else {
-            context.draw(run)
-            return
-        }
-
         let bounds = run.typographicBounds.rect
         guard bounds.width > 0, bounds.height > 0 else { return }
 
-        let featherWidth = max(
-            bounds.width * Metrics.revealFeatherWidthRatio,
-            Metrics.minimumRevealFeatherWidth
-        )
-        let travelDistance = bounds.width + featherWidth
         let gradient: Gradient
         let startPoint: CGPoint
         let endPoint: CGPoint
 
-        if run.layoutDirection == .rightToLeft {
-            let boundaryX = bounds.maxX
-                - CGFloat(progress) * travelDistance
+        if revealMask.layoutDirection == .rightToLeft {
             gradient = Gradient(colors: [.clear, .white])
-            startPoint = CGPoint(x: boundaryX, y: bounds.midY)
+            startPoint = CGPoint(
+                x: revealMask.frontX - revealMask.featherWidth,
+                y: bounds.midY
+            )
             endPoint = CGPoint(
-                x: boundaryX + featherWidth,
+                x: revealMask.frontX,
                 y: bounds.midY
             )
         } else {
-            let boundaryX = bounds.minX
-                + CGFloat(progress) * travelDistance
             gradient = Gradient(colors: [.white, .clear])
             startPoint = CGPoint(
-                x: boundaryX - featherWidth,
+                x: revealMask.frontX,
                 y: bounds.midY
             )
-            endPoint = CGPoint(x: boundaryX, y: bounds.midY)
+            endPoint = CGPoint(
+                x: revealMask.frontX + revealMask.featherWidth,
+                y: bounds.midY
+            )
         }
 
         context.clipToLayer { maskContext in
@@ -601,7 +532,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         return unitProgress((playbackTime - timing.startTime) / duration)
     }
 
-    private func glowStrength(
+    private func ordinaryGlowStrength(
         for timing: LyricTimingTextAttribute,
         rawProgress: Double
     ) -> Double {
@@ -612,13 +543,17 @@ struct LyricGlowTextRenderer: TextRenderer {
             let breath = Metrics.minimumGlowStrength
                 + (1 - Metrics.minimumGlowStrength)
                     * sin(.pi * rawProgress)
-            return attack * breath
+            return attack
+                * breath
+                * Metrics.ordinaryGlowStrengthMultiplier
         }
 
         let tailProgress = (playbackTime - timing.endTime)
             / Self.glowTailDuration
         guard tailProgress < 1 else { return 0 }
-        return (1 - smootherStep(tailProgress)) * Metrics.minimumGlowStrength
+        return (1 - smootherStep(tailProgress))
+            * Metrics.minimumGlowStrength
+            * Metrics.ordinaryGlowStrengthMultiplier
     }
 
     private func smootherStep(_ value: Double) -> Double {
@@ -627,22 +562,28 @@ struct LyricGlowTextRenderer: TextRenderer {
             * (progress * (progress * 6 - 15) + 10)
     }
 
-    private func cosineEaseInOut(_ value: Double) -> Double {
-        let progress = unitProgress(value)
-        return (1 - cos(.pi * progress)) * 0.5
-    }
-
     private func unitProgress(_ value: Double) -> Double {
         min(max(value, 0), 1)
     }
 }
 
 private extension LyricGlowTextRenderer {
+    struct TimedRun {
+        let timing: LyricTimingTextAttribute
+        let bounds: CGRect
+        let layoutDirection: LayoutDirection
+    }
+
+    struct LineRevealMask {
+        let frontX: CGFloat
+        let featherWidth: CGFloat
+        let layoutDirection: LayoutDirection
+    }
+
     struct RunVisualState {
-        let rawProgress: Double
-        let revealProgress: Double
         let liftProgress: Double
         let expansionScale: CGFloat
+        let emphasis: LyricLongToneEmphasis.State
         let unplayedBlurRadius: CGFloat
         let glowStrength: Double
     }
@@ -654,16 +595,12 @@ private extension LyricGlowTextRenderer {
         static let minimumUnplayedBlurFraction = 0.12
         static let glowAttackProgress = 0.24
         static let minimumGlowStrength = 0.82
-        static let glowPulseAmount = 0.2
+        static let ordinaryGlowStrengthMultiplier = 0.55
         static let liftContinuationDuration: TimeInterval = 0.32
-        static let expansionOverlapFraction = 0.32
-        static let maximumExpansionOverlapDuration: TimeInterval = 0.14
-        static let wordExpansionPeakProgress = 0.62
-        static let wordExpansionReleaseTailDuration: TimeInterval = 0.24
-        static let outerGlowRadiusMultiplier: CGFloat = 1.75
-        static let outerGlowOpacityMultiplier = 0.72
-        static let innerGlowRadiusMultiplier: CGFloat = 0.62
-        static let revealFeatherWidthRatio: CGFloat = 0.85
+        static let outerGlowRadiusMultiplier: CGFloat = 1
+        static let outerGlowOpacityMultiplier = 0.55
+        static let innerGlowRadiusMultiplier: CGFloat = 0.35
+        static let defaultHighlightGradientWidth: CGFloat = 1.2
         static let minimumRevealFeatherWidth: CGFloat = 2
     }
 }

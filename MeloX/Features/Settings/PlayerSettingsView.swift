@@ -371,6 +371,16 @@ struct PlayerSettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    valueSlider(
+                        title: "高光渐变宽度",
+                        value: $settings.lyricsHighlightGradientWidth,
+                        range:
+                            AppSettings
+                                .lyricsHighlightGradientWidthRange,
+                        step: 0.1,
+                        valueText: "\(settings.lyricsHighlightGradientWidth.formatted(.number.precision(.fractionLength(1)))) 个字宽"
+                    )
+
                     Toggle("逐字歌词光效", isOn: $settings.lyricsGlowEnabled)
 
                     Picker(
@@ -396,6 +406,22 @@ struct PlayerSettingsView: View {
                         valueText: "\(settings.lyricsLongSyllableDurationThreshold.formatted(.number.precision(.fractionLength(2)))) 秒"
                     )
 
+                    valueSlider(
+                        title: "长音膨胀大小",
+                        value: $settings.lyricsLongToneExpansionAmount,
+                        range:
+                            AppSettings
+                                .lyricsLongToneExpansionAmountRange,
+                        step: 0.01,
+                        valueText: settings
+                            .lyricsLongToneExpansionAmount
+                            .formatted(
+                                .percent.precision(
+                                    .fractionLength(0)
+                                )
+                            )
+                    )
+
                     if settings.lyricsGlowEnabled {
                         Toggle(
                             "仅长音显示辉光",
@@ -416,7 +442,7 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("歌词内容与光效")
             } footer: {
-                Text("中英翻译直接使用网易云提供的 ytlrc 或 tlyric。Apple Music 样式默认只展开当前播放行的翻译，换句时旧翻译收起、新翻译淡入并参与整页位移；也可以改为全部显示。逐字歌词开关仅控制歌曲自带的 YRC 时间轴；默认按字抬升，也可以改为按词抬升，不影响逐字高亮。长音默认按字识别，也可以改为按词识别；判定阈值默认 0.95 秒，并同时控制膨胀和“仅长音显示辉光”的触发。关闭该选项后，普通音节也会显示辉光，但膨胀仍只用于长音。")
+                Text("中英翻译直接使用网易云提供的 ytlrc 或 tlyric。Apple Music 样式默认只展开当前播放行的翻译，换句时旧翻译收起、新翻译淡入并参与整页位移；也可以改为全部显示。逐字歌词开关仅控制歌曲自带的 YRC 时间轴；默认按字抬升，也可以改为按词抬升，不影响逐字高亮。高光渐变默认覆盖 1.2 个字宽。长音默认按字识别，也可以改为按词识别；命中长音后，字形会依次膨胀、发光并回落，默认最大膨胀 5%。判定阈值默认 0.95 秒，并同时控制膨胀和“仅长音显示辉光”的触发。关闭该选项后，普通音节也会显示辉光，但膨胀仍只用于长音。")
             }
 
             Section {

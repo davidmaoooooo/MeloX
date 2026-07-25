@@ -80,6 +80,10 @@ final class AppSettings {
     static let defaultLyricsGlowLongSyllablesOnly = true
     static let defaultLyricsLongSyllableDurationThreshold = 0.95
     static let lyricsLongSyllableDurationThresholdRange = 0.3...1.5
+    static let defaultLyricsLongToneExpansionAmount = 0.05
+    static let lyricsLongToneExpansionAmountRange = 0.0...0.15
+    static let defaultLyricsHighlightGradientWidth = 1.2
+    static let lyricsHighlightGradientWidthRange = 0.4...3.0
     private enum Key {
         static let hasCompletedOnboarding = "melox.hasCompletedOnboarding"
         static let cookie = "musicCookie"
@@ -109,6 +113,8 @@ final class AppSettings {
         static let lyricsWordByWord = "lyricsWordByWord"
         static let lyricsPseudoWordByWord = "lyricsPseudoWordByWord"
         static let lyricsLiftMode = "lyricsLiftMode"
+        static let lyricsHighlightGradientWidth =
+            "lyricsHighlightGradientWidth"
         static let lyricsGlowEnabled = "lyricsGlowEnabled"
         static let lyricsLongSyllableDetectionMode =
             "lyricsLongSyllableDetectionMode"
@@ -116,6 +122,8 @@ final class AppSettings {
             "lyricsGlowLongSyllablesOnly"
         static let lyricsLongSyllableDurationThreshold =
             "lyricsLongSyllableDurationThreshold"
+        static let lyricsLongToneExpansionAmount =
+            "lyricsLongToneExpansionAmount"
         static let lyricsGlowIntensity = "lyricsGlowIntensity"
         static let lyricsTranslationEnabled = "lyricsTranslationEnabled"
         static let lyricsTranslationDisplayMode = "lyricsTranslationDisplayMode"
@@ -330,6 +338,15 @@ final class AppSettings {
         }
     }
 
+    var lyricsHighlightGradientWidth: Double {
+        didSet {
+            defaults.set(
+                lyricsHighlightGradientWidth,
+                forKey: Key.lyricsHighlightGradientWidth
+            )
+        }
+    }
+
     var lyricsGlowEnabled: Bool {
         didSet { defaults.set(lyricsGlowEnabled, forKey: Key.lyricsGlowEnabled) }
     }
@@ -358,6 +375,15 @@ final class AppSettings {
             defaults.set(
                 lyricsLongSyllableDurationThreshold,
                 forKey: Key.lyricsLongSyllableDurationThreshold
+            )
+        }
+    }
+
+    var lyricsLongToneExpansionAmount: Double {
+        didSet {
+            defaults.set(
+                lyricsLongToneExpansionAmount,
+                forKey: Key.lyricsLongToneExpansionAmount
             )
         }
     }
@@ -691,6 +717,16 @@ final class AppSettings {
         lyricsLiftMode = LyricsLiftMode(
             rawValue: defaults.string(forKey: Key.lyricsLiftMode) ?? ""
         ) ?? Self.defaultLyricsLiftMode
+        let storedLyricsHighlightGradientWidth = defaults.object(
+            forKey: Key.lyricsHighlightGradientWidth
+        ) as? Double ?? Self.defaultLyricsHighlightGradientWidth
+        lyricsHighlightGradientWidth = min(
+            max(
+                storedLyricsHighlightGradientWidth,
+                Self.lyricsHighlightGradientWidthRange.lowerBound
+            ),
+            Self.lyricsHighlightGradientWidthRange.upperBound
+        )
         lyricsGlowEnabled = defaults.object(forKey: Key.lyricsGlowEnabled) as? Bool ?? true
         lyricsLongSyllableDetectionMode =
             LyricsLongSyllableDetectionMode(
@@ -710,6 +746,16 @@ final class AppSettings {
                 Self.lyricsLongSyllableDurationThresholdRange.lowerBound
             ),
             Self.lyricsLongSyllableDurationThresholdRange.upperBound
+        )
+        let storedLyricsLongToneExpansionAmount = defaults.object(
+            forKey: Key.lyricsLongToneExpansionAmount
+        ) as? Double ?? Self.defaultLyricsLongToneExpansionAmount
+        lyricsLongToneExpansionAmount = min(
+            max(
+                storedLyricsLongToneExpansionAmount,
+                Self.lyricsLongToneExpansionAmountRange.lowerBound
+            ),
+            Self.lyricsLongToneExpansionAmountRange.upperBound
         )
         lyricsGlowIntensity = defaults.object(forKey: Key.lyricsGlowIntensity) as? Double ?? 1
         lyricsTranslationEnabled = defaults.object(forKey: Key.lyricsTranslationEnabled) as? Bool ?? true
@@ -928,6 +974,8 @@ final class AppSettings {
         lyricsWordByWord = true
         lyricsPseudoWordByWord = false
         lyricsLiftMode = Self.defaultLyricsLiftMode
+        lyricsHighlightGradientWidth =
+            Self.defaultLyricsHighlightGradientWidth
         lyricsGlowEnabled = true
         lyricsLongSyllableDetectionMode =
             Self.defaultLyricsLongSyllableDetectionMode
@@ -935,6 +983,8 @@ final class AppSettings {
             Self.defaultLyricsGlowLongSyllablesOnly
         lyricsLongSyllableDurationThreshold =
             Self.defaultLyricsLongSyllableDurationThreshold
+        lyricsLongToneExpansionAmount =
+            Self.defaultLyricsLongToneExpansionAmount
         lyricsGlowIntensity = 1
         lyricsTranslationEnabled = true
         lyricsTranslationDisplayMode = .focusedLine

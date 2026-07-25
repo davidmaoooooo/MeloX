@@ -270,6 +270,9 @@ struct SynchronizedLyricText: View {
                 playedRise: playedRise,
                 maximumLongSyllableScale: maximumLongSyllableScale,
                 longSyllableExpansionPadding: longSyllableExpansionPadding,
+                highlightGradientWidth: CGFloat(
+                    settings.lyricsHighlightGradientWidth
+                ),
                 liftMode: settings.lyricsLiftMode
             ),
             layoutConfiguration: .init(
@@ -319,14 +322,14 @@ struct SynchronizedLyricText: View {
         guard settings.lyricsGlowEnabled else { return 0 }
         return CGFloat(
             Double(fontSize)
-                * 0.34
+                * 0.2
                 * settings.lyricsGlowIntensity
         )
     }
 
     private var glowOpacity: Double {
         guard settings.lyricsGlowEnabled else { return 0 }
-        return min(settings.lyricsGlowIntensity * 0.9, 1)
+        return min(settings.lyricsGlowIntensity, 1)
     }
 
     private var maximumUnplayedBlurRadius: CGFloat {
@@ -339,11 +342,15 @@ struct SynchronizedLyricText: View {
     }
 
     private var maximumLongSyllableScale: CGFloat {
-        accessibilityReduceMotion ? 1 : 1.08
+        accessibilityReduceMotion
+            ? 1
+            : 1 + CGFloat(settings.lyricsLongToneExpansionAmount)
     }
 
     private var longSyllableExpansionPadding: CGFloat {
-        fontSize * (maximumLongSyllableScale - 1)
+        fontSize
+            * (maximumLongSyllableScale - 1)
+            * CGFloat(1.2)
     }
 
     private var timedLayoutWidth: CGFloat? {

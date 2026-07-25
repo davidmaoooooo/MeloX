@@ -74,7 +74,10 @@ enum TimedLyricTextBuilder {
                     characterCount: character.characterCount,
                     wordStartTime: wordTiming.startTime,
                     wordEndTime: wordTiming.endTime,
-                    wordIndex: wordTiming.index,
+                    wordCharacterIndex: wordTiming.characterIndex,
+                    wordCharacterCount: wordTiming.characterCount,
+                    usesWordTimingForLongTone:
+                        wordTiming.usesWordTimingForLongTone,
                     isWhitespace: character.isWhitespace
                 )
             )
@@ -86,34 +89,54 @@ enum TimedLyricTextBuilder {
         for characters: [TimedCharacter],
         source: String
     ) -> [WordTiming] {
-        var result = characters.enumerated().map { index, character in
+        var result = characters.map { character in
             WordTiming(
                 startTime: character.startTime,
                 endTime: character.endTime,
-                index: index
+                characterIndex: 0,
+                characterCount: 1,
+                usesWordTimingForLongTone: false
             )
         }
 
-        for (wordIndex, range) in LyricWordSegmenter
-            .blockRanges(in: source)
-            .enumerated() {
+        for range in LyricWordSegmenter.blockRanges(in: source) {
             guard range.lowerBound >= characters.startIndex,
                   range.upperBound <= characters.endIndex,
                   range.lowerBound < range.upperBound else {
                 continue
             }
 
-            let block = characters[range]
-            let timedBlock = block.filter { !$0.isWhitespace }
-            guard let startTime = timedBlock.map(\.startTime).min(),
-                  let endTime = timedBlock.map(\.endTime).max() else {
+            let timedIndices = range.filter {
+                !characters[$0].isWhitespace
+            }
+            guard let startTime = timedIndices
+                .map({ characters[$0].startTime })
+                .min(),
+                let endTime = timedIndices
+                    .map({ characters[$0].endTime })
+                    .max() else {
                 continue
             }
+            let characterPositions = Dictionary(
+                uniqueKeysWithValues: timedIndices.enumerated().map {
+                    ($0.element, $0.offset)
+                }
+            )
+            let usesWordTimingForLongTone =
+                timedIndices.count > 1
+                    && timedIndices.allSatisfy {
+                        characters[$0].isLatinLetter
+                    }
             for index in range {
                 result[index] = WordTiming(
                     startTime: startTime,
                     endTime: endTime,
-                    index: wordIndex
+                    characterIndex:
+                        characterPositions[index]
+                            ?? max(timedIndices.count - 1, 0),
+                    characterCount: max(timedIndices.count, 1),
+                    usesWordTimingForLongTone:
+                        usesWordTimingForLongTone
                 )
             }
         }
@@ -339,7 +362,9 @@ private extension TimedLyricTextBuilder {
     struct WordTiming {
         let startTime: TimeInterval
         let endTime: TimeInterval
-        let index: Int
+        let characterIndex: Int
+        let characterCount: Int
+        let usesWordTimingForLongTone: Bool
     }
 
     struct TimedCharacter {
@@ -357,6 +382,14 @@ private extension TimedLyricTextBuilder {
 
         var isWhitespace: Bool {
             text.allSatisfy(\.isWhitespace)
+        }
+
+        var isLatinLetter: Bool {
+            !text.isEmpty
+                && text.unicodeScalars.allSatisfy { scalar in
+                    (65...90).contains(scalar.value)
+                        || (97...122).contains(scalar.value)
+                }
         }
     }
 }
