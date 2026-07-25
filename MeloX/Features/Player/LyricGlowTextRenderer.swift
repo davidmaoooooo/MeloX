@@ -14,11 +14,11 @@ struct LyricTimingTextAttribute: TextAttribute, Hashable, Sendable {
 }
 
 /// Renders timed lyric runs in the coordinates supplied by SwiftUI.
-/// Each glyph fades uniformly from its unplayed style to white, avoiding a
-/// sweeping highlight that competes with the lyric glow. Word lift moves both
-/// layers as one block, while character lift preserves the original played-only
-/// movement. Word-based long tones also scale every glyph around one shared
-/// word center. Glow and text stay composited through all transforms.
+/// Each glyph keeps its unplayed style while the played style is revealed
+/// horizontally across it. Word lift moves both layers as one block, while
+/// character lift preserves the original played-only movement. Word-based long
+/// tones also scale every glyph around one shared word center. Glow and text
+/// stay composited through all transforms.
 struct LyricGlowTextRenderer: TextRenderer {
     struct Style: Equatable, Sendable {
         let glowRadius: CGFloat
@@ -169,7 +169,6 @@ struct LyricGlowTextRenderer: TextRenderer {
 
         drawUnplayed(
             run,
-            revealProgress: state.revealProgress,
             blurRadius: state.unplayedBlurRadius,
             in: &runContext
         )
@@ -359,13 +358,11 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawUnplayed(
         _ run: Text.Layout.Run,
-        revealProgress: Double,
         blurRadius: CGFloat,
         in context: inout GraphicsContext
     ) {
         var unplayedContext = context
         unplayedContext.opacity = style.unplayedOpacity
-            * (1 - unitProgress(revealProgress))
         if blurRadius > 0 {
             unplayedContext.addFilter(.blur(radius: blurRadius))
         }
@@ -381,10 +378,6 @@ struct LyricGlowTextRenderer: TextRenderer {
         glowStrength: Double,
         in context: inout GraphicsContext
     ) {
-        let revealedBounds = revealedBounds(
-            of: run,
-            progress: revealProgress
-        )
         let verticalOffset = liftOffset(at: liftProgress)
         let scale = max(expansionScale, 1)
         let bounds = run.typographicBounds.rect
@@ -407,7 +400,7 @@ struct LyricGlowTextRenderer: TextRenderer {
             if glowStrength > 0 {
                 drawGlow(
                     for: run,
-                    revealedBounds: revealedBounds,
+                    revealProgress: revealProgress,
                     rawProgress: rawProgress,
                     strength: glowStrength,
                     in: &layer
@@ -415,8 +408,11 @@ struct LyricGlowTextRenderer: TextRenderer {
             }
 
             var textContext = layer
-            textContext.opacity = unitProgress(revealProgress)
-            textContext.draw(run)
+            drawRevealed(
+                run,
+                progress: revealProgress,
+                in: &textContext
+            )
         }
     }
 
@@ -470,7 +466,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawGlow(
         for run: Text.Layout.Run,
-        revealedBounds: CGRect,
+        revealProgress: Double,
         rawProgress: Double,
         strength: Double,
         in context: inout GraphicsContext
@@ -480,7 +476,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
         drawGlowLayer(
             for: run,
-            revealedBounds: revealedBounds,
+            revealProgress: revealProgress,
             radius: style.glowRadius
                 * Metrics.outerGlowRadiusMultiplier
                 * CGFloat(pulse),
@@ -489,7 +485,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         )
         drawGlowLayer(
             for: run,
-            revealedBounds: revealedBounds,
+            revealProgress: revealProgress,
             radius: style.glowRadius
                 * Metrics.innerGlowRadiusMultiplier
                 * CGFloat(pulse),
@@ -500,7 +496,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func drawGlowLayer(
         for run: Text.Layout.Run,
-        revealedBounds: CGRect,
+        revealProgress: Double,
         radius: CGFloat,
         opacity: Double,
         in context: inout GraphicsContext
@@ -512,27 +508,69 @@ struct LyricGlowTextRenderer: TextRenderer {
         glowContext.blendMode = .plusLighter
         glowContext.addFilter(.blur(radius: radius))
         glowContext.drawLayer { layer in
-            layer.clip(to: Path(revealedBounds))
-            layer.draw(run)
+            drawRevealed(
+                run,
+                progress: revealProgress,
+                in: &layer
+            )
         }
     }
 
-    private func revealedBounds(
-        of run: Text.Layout.Run,
-        progress: Double
-    ) -> CGRect {
-        let bounds = run.typographicBounds.rect
-        let revealedWidth = bounds.width * CGFloat(unitProgress(progress))
-        let originX = run.layoutDirection == .rightToLeft
-            ? bounds.maxX - revealedWidth
-            : bounds.minX
+    private func drawRevealed(
+        _ run: Text.Layout.Run,
+        progress: Double,
+        in context: inout GraphicsContext
+    ) {
+        let progress = unitProgress(progress)
+        guard progress > 0 else { return }
+        guard progress < 1 else {
+            context.draw(run)
+            return
+        }
 
-        return CGRect(
-            x: originX,
-            y: bounds.minY,
-            width: revealedWidth,
-            height: bounds.height
+        let bounds = run.typographicBounds.rect
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        let featherWidth = max(
+            bounds.width * Metrics.revealFeatherWidthRatio,
+            Metrics.minimumRevealFeatherWidth
         )
+        let travelDistance = bounds.width + featherWidth
+        let gradient: Gradient
+        let startPoint: CGPoint
+        let endPoint: CGPoint
+
+        if run.layoutDirection == .rightToLeft {
+            let boundaryX = bounds.maxX
+                - CGFloat(progress) * travelDistance
+            gradient = Gradient(colors: [.clear, .white])
+            startPoint = CGPoint(x: boundaryX, y: bounds.midY)
+            endPoint = CGPoint(
+                x: boundaryX + featherWidth,
+                y: bounds.midY
+            )
+        } else {
+            let boundaryX = bounds.minX
+                + CGFloat(progress) * travelDistance
+            gradient = Gradient(colors: [.white, .clear])
+            startPoint = CGPoint(
+                x: boundaryX - featherWidth,
+                y: bounds.midY
+            )
+            endPoint = CGPoint(x: boundaryX, y: bounds.midY)
+        }
+
+        context.clipToLayer { maskContext in
+            maskContext.fill(
+                Path(bounds),
+                with: .linearGradient(
+                    gradient,
+                    startPoint: startPoint,
+                    endPoint: endPoint
+                )
+            )
+        }
+        context.draw(run)
     }
 
     private func unplayedBlurRadius(
@@ -625,5 +663,7 @@ private extension LyricGlowTextRenderer {
         static let outerGlowRadiusMultiplier: CGFloat = 1.75
         static let outerGlowOpacityMultiplier = 0.72
         static let innerGlowRadiusMultiplier: CGFloat = 0.62
+        static let revealFeatherWidthRatio: CGFloat = 0.85
+        static let minimumRevealFeatherWidth: CGFloat = 2
     }
 }
