@@ -258,6 +258,10 @@ final class PlayerStore {
         updateNowPlayingLyricMetadata()
     }
 
+    func applySystemNowPlayingLyricsPreference() {
+        updateNowPlayingLyricMetadata(force: true)
+    }
+
     func estimatedProgress(at date: Date = Date()) -> TimeInterval {
         guard isPlaying else { return progress }
         let elapsed = max(date.timeIntervalSince(lastProgressUpdateDate), 0)
@@ -324,7 +328,8 @@ final class PlayerStore {
             song,
             duration: duration,
             queueIndex: currentIndex,
-            queueCount: queue.count
+            queueCount: queue.count,
+            lyricsDisplaySettings: nowPlayingLyricsDisplaySettings
         )
         updateNowPlayingState()
         persistSnapshot()
@@ -508,24 +513,41 @@ final class PlayerStore {
         )
     }
 
-    private func updateNowPlayingLyricMetadata() {
+    private func updateNowPlayingLyricMetadata(force: Bool = false) {
         guard let song = currentSong else { return }
         let lyrics = nowPlayingLyricsSongID == song.id
             ? nowPlayingLyrics
             : []
-        let position = LyricPlaybackTimeline.position(
-            at: estimatedProgress() + settings.lyricsAdvanceTime,
-            in: lyrics
-        )
-        guard position.highlightedLyricID != publishedNowPlayingLyricID else {
+        let highlightedLyricID = settings.systemNowPlayingLyricsEnabled
+            ? LyricPlaybackTimeline.position(
+                at: estimatedProgress() + settings.lyricsAdvanceTime,
+                in: lyrics
+            ).highlightedLyricID
+            : nil
+        guard force
+                || highlightedLyricID
+                    != publishedNowPlayingLyricID else {
             return
         }
 
-        let currentLyric = position.highlightedLyricID.flatMap { lyricID in
+        let currentLyric = highlightedLyricID.flatMap { lyricID in
             lyrics.first(where: { $0.id == lyricID })
         }
-        publishedNowPlayingLyricID = position.highlightedLyricID
-        nowPlayingSession.updateCurrentLyric(currentLyric?.text, for: song)
+        publishedNowPlayingLyricID = highlightedLyricID
+        nowPlayingSession.updateCurrentLyric(
+            currentLyric?.text,
+            for: song,
+            lyricsDisplaySettings: nowPlayingLyricsDisplaySettings
+        )
+    }
+
+    private var nowPlayingLyricsDisplaySettings:
+        NowPlayingLyricsDisplaySettings {
+        NowPlayingLyricsDisplaySettings(
+            isEnabled: settings.systemNowPlayingLyricsEnabled,
+            titleFormat: settings.systemNowPlayingLyricsTitleFormat,
+            subtitleFormat: settings.systemNowPlayingLyricsSubtitleFormat
+        )
     }
 
     private func recordCurrentPlayback(completed: Bool = false) {

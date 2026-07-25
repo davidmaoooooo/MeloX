@@ -33,6 +33,10 @@ enum MusicQuality: String, CaseIterable, Identifiable, Codable {
 @Observable
 final class AppSettings {
     static let defaultPlayerVolumeControlMode: PlayerVolumeControlMode = .system
+    static let defaultSystemNowPlayingLyricsEnabled = true
+    static let defaultSystemNowPlayingLyricsTitleFormat = "{歌词}"
+    static let defaultSystemNowPlayingLyricsSubtitleFormat =
+        "{歌名} · {作者}"
     static let automaticCachePlaybackThresholdOptions = [3, 5, 10, 20]
     static let defaultLyricsFontSize = 28.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
@@ -91,6 +95,12 @@ final class AppSettings {
         static let cookie = "musicCookie"
         static let quality = "musicQuality"
         static let playerVolumeControlMode = "playerVolumeControlMode"
+        static let systemNowPlayingLyricsEnabled =
+            "systemNowPlayingLyricsEnabled"
+        static let systemNowPlayingLyricsTitleFormat =
+            "systemNowPlayingLyricsTitleFormat"
+        static let systemNowPlayingLyricsSubtitleFormat =
+            "systemNowPlayingLyricsSubtitleFormat"
         static let defaultLaunchTab = "defaultLaunchTab"
         static let restoresLastSelectedTab = "restoresLastSelectedTab"
         static let lastSelectedTab = "lastSelectedTab"
@@ -193,6 +203,33 @@ final class AppSettings {
             defaults.set(
                 playerVolumeControlMode.rawValue,
                 forKey: Key.playerVolumeControlMode
+            )
+        }
+    }
+
+    var systemNowPlayingLyricsEnabled: Bool {
+        didSet {
+            defaults.set(
+                systemNowPlayingLyricsEnabled,
+                forKey: Key.systemNowPlayingLyricsEnabled
+            )
+        }
+    }
+
+    var systemNowPlayingLyricsTitleFormat: String {
+        didSet {
+            defaults.set(
+                systemNowPlayingLyricsTitleFormat,
+                forKey: Key.systemNowPlayingLyricsTitleFormat
+            )
+        }
+    }
+
+    var systemNowPlayingLyricsSubtitleFormat: String {
+        didSet {
+            defaults.set(
+                systemNowPlayingLyricsSubtitleFormat,
+                forKey: Key.systemNowPlayingLyricsSubtitleFormat
             )
         }
     }
@@ -651,6 +688,23 @@ final class AppSettings {
         playerVolumeControlMode = PlayerVolumeControlMode(
             rawValue: defaults.string(forKey: Key.playerVolumeControlMode) ?? ""
         ) ?? Self.defaultPlayerVolumeControlMode
+        systemNowPlayingLyricsEnabled = defaults.object(
+            forKey: Key.systemNowPlayingLyricsEnabled
+        ) as? Bool
+            ?? defaults.object(
+                forKey: "dynamicIslandLyricsEnabled"
+            ) as? Bool
+            ?? Self.defaultSystemNowPlayingLyricsEnabled
+        systemNowPlayingLyricsTitleFormat = defaults.string(
+            forKey: Key.systemNowPlayingLyricsTitleFormat
+        )
+            ?? defaults.string(forKey: "dynamicIslandLyricsTitleFormat")
+            ?? Self.defaultSystemNowPlayingLyricsTitleFormat
+        systemNowPlayingLyricsSubtitleFormat = defaults.string(
+            forKey: Key.systemNowPlayingLyricsSubtitleFormat
+        )
+            ?? defaults.string(forKey: "dynamicIslandLyricsSubtitleFormat")
+            ?? Self.defaultSystemNowPlayingLyricsSubtitleFormat
         defaultLaunchTab = AppTab(
             rawValue: defaults.string(forKey: Key.defaultLaunchTab) ?? ""
         ) ?? .home
@@ -980,6 +1034,12 @@ final class AppSettings {
     func resetPlayerSettings() {
         quality = .high
         playerVolumeControlMode = Self.defaultPlayerVolumeControlMode
+        systemNowPlayingLyricsEnabled =
+            Self.defaultSystemNowPlayingLyricsEnabled
+        systemNowPlayingLyricsTitleFormat =
+            Self.defaultSystemNowPlayingLyricsTitleFormat
+        systemNowPlayingLyricsSubtitleFormat =
+            Self.defaultSystemNowPlayingLyricsSubtitleFormat
         equalizer.reset()
         playerBackgroundBlur = 90
         playerBackgroundSaturation = 0.82

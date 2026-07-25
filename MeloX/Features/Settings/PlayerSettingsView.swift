@@ -95,6 +95,45 @@ struct PlayerSettingsView: View {
             }
 
             Section {
+                Toggle(
+                    "系统播放歌词",
+                    isOn: $settings.systemNowPlayingLyricsEnabled
+                )
+
+                if settings.systemNowPlayingLyricsEnabled {
+                    LabeledContent("标题格式") {
+                        TextField(
+                            "标题格式",
+                            text:
+                                $settings
+                                    .systemNowPlayingLyricsTitleFormat
+                        )
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    }
+
+                    LabeledContent("副标题格式") {
+                        TextField(
+                            "副标题格式",
+                            text:
+                                $settings
+                                    .systemNowPlayingLyricsSubtitleFormat
+                        )
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    }
+                }
+            } header: {
+                Text("系统播放信息")
+            } footer: {
+                Text("可使用 {歌词}、{歌名}、{作者} 占位符；格式为空时会自动回退。关闭后恢复显示标准歌名和作者。")
+            }
+
+            Section {
                 NavigationLink {
                     SkylineLyricsSettingsView()
                 } label: {
@@ -605,6 +644,15 @@ struct PlayerSettingsView: View {
         .navigationTitle("播放器")
         .onChange(of: settings.playerVolumeControlMode) {
             player.applyVolumeControlMode()
+        }
+        .onChange(of: settings.systemNowPlayingLyricsEnabled) {
+            player.applySystemNowPlayingLyricsPreference()
+        }
+        .onChange(of: settings.systemNowPlayingLyricsTitleFormat) {
+            player.applySystemNowPlayingLyricsPreference()
+        }
+        .onChange(of: settings.systemNowPlayingLyricsSubtitleFormat) {
+            player.applySystemNowPlayingLyricsPreference()
         }
         .confirmationDialog("恢复播放器默认设置？", isPresented: $showsResetConfirmation) {
             Button("恢复默认设置", role: .destructive) {

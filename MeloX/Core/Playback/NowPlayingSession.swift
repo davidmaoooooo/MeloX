@@ -41,14 +41,21 @@ final class NowPlayingSession {
         _ song: Song,
         duration: TimeInterval,
         queueIndex: Int,
-        queueCount: Int
+        queueCount: Int,
+        lyricsDisplaySettings: NowPlayingLyricsDisplaySettings
     ) {
         playbackSession.becomeActiveIfPossible(completion: nil)
         representedSongID = song.id
         artworkTask?.cancel()
+        let metadata = NowPlayingLyricsFormatter.metadata(
+            songTitle: song.name,
+            songArtist: song.artistText,
+            currentLyric: nil,
+            settings: lyricsDisplaySettings
+        )
         nowPlayingInfo = [
-            MPMediaItemPropertyTitle: song.name,
-            MPMediaItemPropertyArtist: Self.trackDescription(for: song),
+            MPMediaItemPropertyTitle: metadata.title,
+            MPMediaItemPropertyArtist: metadata.subtitle,
             MPMediaItemPropertyAlbumTitle: song.album?.name ?? "",
             MPMediaItemPropertyPersistentID: NSNumber(value: UInt64(max(song.id, 0))),
             MPMediaItemPropertyPlaybackDuration: max(duration, 0),
@@ -66,19 +73,28 @@ final class NowPlayingSession {
         loadArtwork(from: song.album?.artworkURL, songID: song.id)
     }
 
-    func updateCurrentLyric(_ lyric: String?, for song: Song) {
+    func updateCurrentLyric(
+        _ lyric: String?,
+        for song: Song,
+        lyricsDisplaySettings: NowPlayingLyricsDisplaySettings
+    ) {
         guard representedSongID == song.id else { return }
 
-        let lyric = lyric?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = lyric.flatMap { $0.isEmpty ? nil : $0 } ?? song.name
-        let artist = Self.trackDescription(for: song)
-        guard nowPlayingInfo[MPMediaItemPropertyTitle] as? String != title
-                || nowPlayingInfo[MPMediaItemPropertyArtist] as? String != artist else {
+        let metadata = NowPlayingLyricsFormatter.metadata(
+            songTitle: song.name,
+            songArtist: song.artistText,
+            currentLyric: lyric,
+            settings: lyricsDisplaySettings
+        )
+        guard nowPlayingInfo[MPMediaItemPropertyTitle] as? String
+                != metadata.title
+                || nowPlayingInfo[MPMediaItemPropertyArtist] as? String
+                    != metadata.subtitle else {
             return
         }
 
-        nowPlayingInfo[MPMediaItemPropertyTitle] = title
-        nowPlayingInfo[MPMediaItemPropertyArtist] = artist
+        nowPlayingInfo[MPMediaItemPropertyTitle] = metadata.title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = metadata.subtitle
         nowPlayingCenter.nowPlayingInfo = nowPlayingInfo
     }
 
@@ -155,12 +171,6 @@ final class NowPlayingSession {
     ) {
         let target = command.addTarget(handler: handler)
         commandTargets.append((command, target))
-    }
-
-    private static func trackDescription(for song: Song) -> String {
-        [song.name, song.artistText]
-            .filter { !$0.isEmpty }
-            .joined(separator: " · ")
     }
 
     private func loadArtwork(from url: URL?, songID: Int) {
