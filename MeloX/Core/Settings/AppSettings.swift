@@ -53,6 +53,7 @@ final class AppSettings {
     static let defaultLyricsLiveActivityScrollPause = 1.0
     static let lyricsLiveActivityScrollPauseRange = 0.0...3.0
     static let automaticCachePlaybackThresholdOptions = [3, 5, 10, 20]
+    static let defaultLyricsInterludeCountdownEnabled = true
     static let defaultLyricsFontSize = 28.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
     static let defaultLyricsCurrentLineScale = 1.18
@@ -150,6 +151,8 @@ final class AppSettings {
         static let playerBackgroundSaturation = "playerBackgroundSaturation"
         static let shrinksPausedArtwork = "shrinksPausedArtwork"
         static let lyricsStyle = "lyricsStyle"
+        static let lyricsInterludeCountdownEnabled =
+            "lyricsInterludeCountdownEnabled"
         static let lyricsFontSize = "lyricsFontSize"
         static let lyricsFontWeight = "lyricsFontWeight"
         static let lyricsCurrentLineScale = "lyricsCurrentLineScale"
@@ -446,6 +449,15 @@ final class AppSettings {
 
     var lyricsStyle: LyricsStyle {
         didSet { defaults.set(lyricsStyle.rawValue, forKey: Key.lyricsStyle) }
+    }
+
+    var lyricsInterludeCountdownEnabled: Bool {
+        didSet {
+            defaults.set(
+                lyricsInterludeCountdownEnabled,
+                forKey: Key.lyricsInterludeCountdownEnabled
+            )
+        }
     }
 
     var lyricsFontSize: Double {
@@ -908,6 +920,9 @@ final class AppSettings {
         default:
             lyricsStyle = LyricsStyle(rawValue: storedLyricsStyle) ?? .appleMusic
         }
+        lyricsInterludeCountdownEnabled = defaults.object(
+            forKey: Key.lyricsInterludeCountdownEnabled
+        ) as? Bool ?? Self.defaultLyricsInterludeCountdownEnabled
         lyricsFontSize = defaults.object(
             forKey: Key.lyricsFontSize
         ) as? Double ?? Self.defaultLyricsFontSize
@@ -1240,6 +1255,8 @@ final class AppSettings {
         playerBackgroundSaturation = 0.82
         shrinksPausedArtwork = true
         lyricsStyle = .appleMusic
+        lyricsInterludeCountdownEnabled =
+            Self.defaultLyricsInterludeCountdownEnabled
         lyricsFontSize = Self.defaultLyricsFontSize
         lyricsFontWeight = Self.defaultLyricsFontWeight
         lyricsCurrentLineScale = Self.defaultLyricsCurrentLineScale

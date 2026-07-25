@@ -208,6 +208,12 @@ struct PlayerSettingsView: View {
                 }
 
                 if settings.lyricsStyle == .appleMusic {
+                    Toggle(
+                        "显示等待倒计时",
+                        isOn: $settings
+                            .lyricsInterludeCountdownEnabled
+                    )
+
                     valueSlider(
                         title: "当前歌词大小",
                         value: $settings.lyricsCurrentLineScale,
@@ -276,6 +282,10 @@ struct PlayerSettingsView: View {
                         "\(settings.lyricsStyle.description)。字号是正文基准，翻译按比例缩放；EVA 与文字PV会保留模板字体。"
                     )
                     if settings.lyricsStyle == .appleMusic {
+                        footerDescription(
+                            "等待倒计时",
+                            "首句歌词前，以及精确歌词中较长的演奏空档，会显示 Apple Music 风格的三点倒计时。"
+                        )
                         footerDescription(
                             "模糊与焦点",
                             "基础模糊控制整体强度，两项逐句加强分别用于显示和隐藏控制栏时；焦点位置数值越大，当前行越靠下。"
