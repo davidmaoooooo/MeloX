@@ -998,8 +998,12 @@ struct AppleMusicLyricsView: View {
             ?? visualCascadeFocusLyricID
             ?? scrollPositionID
         guard movementFocusLyricID != highlightedLyricID else {
-            visualHighlightedLyricID = highlightedLyricID
-            visualCascadeFocusLyricID = highlightedLyricID
+            if interludeHandoffLyricID != nil {
+                completeCascadeMovement(to: highlightedLyricID)
+            } else {
+                visualHighlightedLyricID = highlightedLyricID
+                visualCascadeFocusLyricID = highlightedLyricID
+            }
             await ensureFocusAlignment(
                 to: highlightedLyricID,
                 viewportHeight: viewportHeight,
