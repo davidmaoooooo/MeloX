@@ -360,6 +360,18 @@ final class NeteaseAPI {
         return response.data.dailySongs
     }
 
+    func similarSongs(id: Int, limit: Int = 50) async throws -> [Song] {
+        let response: SimilarSongsResponse = try await client.weapi(
+            "/api/v1/discovery/simiSong",
+            data: [
+                "songid": id,
+                "limit": limit,
+                "offset": 0,
+            ]
+        )
+        return response.songs
+    }
+
     func lyrics(id: Int) async throws -> [LyricLine] {
         do {
             let response: LyricResponse = try await client.eapi(

@@ -195,13 +195,13 @@ struct ContentView: View {
         if player.currentSong != nil {
             tabs
                 .tabViewBottomAccessory {
-                    MiniPlayerView {
+                    MiniPlayerView(
+                        artworkTransitionID: playerTransitionID,
+                        artworkTransitionNamespace:
+                            playerTransitionNamespace
+                    ) {
                         playerPresentation = .nowPlaying
                     }
-                    .matchedTransitionSource(
-                        id: playerTransitionID,
-                        in: playerTransitionNamespace
-                    )
                 }
         } else {
             tabs

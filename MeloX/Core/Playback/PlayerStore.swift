@@ -32,14 +32,33 @@ final class PlayerStore {
     private(set) var playbackIssue: PlaybackIssue?
     private(set) var volume: Double = 1
     private(set) var repeatMode: RepeatMode = .off
+    private(set) var isAutoplayEnabled = false
+    private(set) var isAutoMixEnabled = false
+    private(set) var queueModeIndicator:
+        QueuePlaybackModeIndicator?
 
     private var playbackQueue = PlaybackQueue()
 
     var queue: [Song] { playbackQueue.songs }
     var currentIndex: Int { playbackQueue.currentIndex }
     var isShuffled: Bool { playbackQueue.isShuffled }
+    var upcomingQueueIndices: [Int] {
+        playbackQueue.upcomingIndices(
+            wraps: repeatMode == .all
+        )
+    }
+    var queueModeBadgeSystemImage: String? {
+        queueModeIndicator?.systemImage
+    }
     var canPlayNext: Bool {
-        queue.count > 1 && playbackQueue.canMove(by: 1, wraps: repeatMode == .all)
+        isAutoplayEnabled
+            || (
+                queue.count > 1
+                    && playbackQueue.canMove(
+                        by: 1,
+                        wraps: repeatMode == .all
+                    )
+            )
     }
 
     @ObservationIgnored
@@ -96,6 +115,9 @@ final class PlayerStore {
 
     @ObservationIgnored
     private var currentLoadShouldAutoplay = false
+
+    @ObservationIgnored
+    private var isLoadingAutoplayRecommendations = false
 
     @ObservationIgnored
     private var nowPlayingLyricsSongID: Int?
@@ -157,6 +179,13 @@ final class PlayerStore {
         repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
         volume = min(max(snapshot.volume, 0), 1)
         historySourceID = snapshot.historySourceID
+        isAutoplayEnabled = snapshot.autoplayEnabled ?? false
+        isAutoMixEnabled = snapshot.autoMixEnabled ?? false
+        updateQueueModeIndicator(
+            preferred: snapshot.queueModeIndicator.flatMap(
+                QueuePlaybackModeIndicator.init(rawValue:)
+            )
+        )
         applyVolumeControlMode()
 
         await loadCurrentSong(
@@ -236,8 +265,24 @@ final class PlayerStore {
 
     private func moveToNext(recordingCurrentPlayback: Bool) async {
         guard !queue.isEmpty else { return }
+        if !playbackQueue.canMove(
+            by: 1,
+            wraps: repeatMode == .all
+        ), isAutoplayEnabled {
+            await appendAutoplayRecommendationsIfNeeded()
+        }
         if recordingCurrentPlayback {
             recordCurrentPlayback()
+        }
+        guard playbackQueue.canMove(
+            by: 1,
+            wraps: repeatMode == .all
+        ) else {
+            stopAtQueueEnd()
+            return
+        }
+        if recordingCurrentPlayback {
+            await fadeOutForAutoMixIfNeeded()
         }
         guard playbackQueue.move(by: 1, wraps: repeatMode == .all) else {
             stopAtQueueEnd()
@@ -258,6 +303,7 @@ final class PlayerStore {
             return
         }
         recordCurrentPlayback()
+        await fadeOutForAutoMixIfNeeded()
         guard playbackQueue.move(by: -1, wraps: repeatMode == .all) else { return }
         hasRecordedCurrentStart = false
         await loadCurrentSong(autoplay: true)
@@ -266,9 +312,27 @@ final class PlayerStore {
     func playFromQueue(at index: Int) async {
         guard queue.indices.contains(index) else { return }
         recordCurrentPlayback()
+        await fadeOutForAutoMixIfNeeded()
         guard playbackQueue.select(index: index) else { return }
         hasRecordedCurrentStart = false
         await loadCurrentSong(autoplay: true)
+    }
+
+    func addToPlaybackQueue(_ song: Song) {
+        playbackQueue.append(song)
+        persistSnapshot()
+    }
+
+    func moveUpcomingQueueItems(
+        fromOffsets source: IndexSet,
+        toOffset destination: Int
+    ) {
+        playbackQueue.moveUpcomingSongs(
+            fromOffsets: source,
+            toOffset: destination,
+            wraps: repeatMode == .all
+        )
+        persistSnapshot()
     }
 
     func seek(to seconds: TimeInterval) {
@@ -332,15 +396,54 @@ final class PlayerStore {
 
     func cycleRepeatMode() {
         switch repeatMode {
-        case .off: repeatMode = .all
-        case .all: repeatMode = .one
-        case .one: repeatMode = .off
+        case .off:
+            repeatMode = .all
+            queueModeIndicator = .repeatAll
+        case .all:
+            repeatMode = .one
+            queueModeIndicator = .repeatOne
+        case .one:
+            repeatMode = .off
+            updateQueueModeIndicator()
         }
         persistSnapshot()
     }
 
     func toggleShuffle() {
         playbackQueue.toggleShuffle()
+        if isShuffled {
+            queueModeIndicator = .shuffle
+        } else {
+            updateQueueModeIndicator()
+        }
+        persistSnapshot()
+    }
+
+    func toggleAutoplay() {
+        isAutoplayEnabled.toggle()
+        if isAutoplayEnabled {
+            queueModeIndicator = .autoplay
+        } else {
+            updateQueueModeIndicator()
+        }
+        persistSnapshot()
+        guard isAutoplayEnabled else { return }
+
+        Task { @MainActor [weak self] in
+            await self?.appendAutoplayRecommendationsIfNeeded()
+        }
+    }
+
+    func toggleAutoMix() {
+        isAutoMixEnabled.toggle()
+        if isAutoMixEnabled {
+            queueModeIndicator = .autoMix
+        } else {
+            updateQueueModeIndicator()
+        }
+        if !isAutoMixEnabled {
+            engine.resetTransitionGain()
+        }
         persistSnapshot()
     }
 
@@ -390,7 +493,8 @@ final class PlayerStore {
             await engine.load(
                 source,
                 startAt: startAt,
-                autoplay: autoplay
+                autoplay: autoplay,
+                fadeInDuration: isAutoMixEnabled && autoplay ? 0.65 : 0
             )
         } catch is CancellationError {
             return
@@ -447,6 +551,7 @@ final class PlayerStore {
     }
 
     private func stopAtQueueEnd() {
+        engine.resetTransitionGain()
         engine.pause()
         engine.seek(to: 0)
         progress = 0
@@ -838,8 +943,87 @@ final class PlayerStore {
                 isShuffled: isShuffled,
                 shuffledOrder: playbackQueue.persistedShuffleOrder,
                 volume: volume,
-                historySourceID: historySourceID
+                historySourceID: historySourceID,
+                autoplayEnabled: isAutoplayEnabled,
+                autoMixEnabled: isAutoMixEnabled,
+                queueModeIndicator: queueModeIndicator?.rawValue
             )
         )
+    }
+
+    private func updateQueueModeIndicator(
+        preferred: QueuePlaybackModeIndicator? = nil
+    ) {
+        if let preferred, isModeActive(preferred) {
+            queueModeIndicator = preferred
+            return
+        }
+
+        if repeatMode == .one {
+            queueModeIndicator = .repeatOne
+        } else if repeatMode == .all {
+            queueModeIndicator = .repeatAll
+        } else if isShuffled {
+            queueModeIndicator = .shuffle
+        } else if isAutoplayEnabled {
+            queueModeIndicator = .autoplay
+        } else if isAutoMixEnabled {
+            queueModeIndicator = .autoMix
+        } else {
+            queueModeIndicator = nil
+        }
+    }
+
+    private func isModeActive(
+        _ mode: QueuePlaybackModeIndicator
+    ) -> Bool {
+        switch mode {
+        case .shuffle:
+            isShuffled
+        case .repeatAll:
+            repeatMode == .all
+        case .repeatOne:
+            repeatMode == .one
+        case .autoplay:
+            isAutoplayEnabled
+        case .autoMix:
+            isAutoMixEnabled
+        }
+    }
+
+    private func appendAutoplayRecommendationsIfNeeded() async {
+        guard isAutoplayEnabled,
+              !isLoadingAutoplayRecommendations,
+              playbackQueue.upcomingIndices(wraps: false).isEmpty,
+              let currentSong else {
+            return
+        }
+
+        isLoadingAutoplayRecommendations = true
+        defer { isLoadingAutoplayRecommendations = false }
+
+        do {
+            let recommendations = try await api.similarSongs(
+                id: currentSong.id
+            )
+            guard isAutoplayEnabled else { return }
+            let existingSongIDs = Set(queue.map(\.id))
+            let newSongs = recommendations.filter {
+                !existingSongIDs.contains($0.id)
+            }
+            playbackQueue.append(
+                contentsOf: Array(newSongs.prefix(25))
+            )
+            persistSnapshot()
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
+    }
+
+    private func fadeOutForAutoMixIfNeeded() async {
+        guard isAutoMixEnabled, isPlaying else { return }
+        await engine.fadeOutForTransition(duration: 0.24)
     }
 }

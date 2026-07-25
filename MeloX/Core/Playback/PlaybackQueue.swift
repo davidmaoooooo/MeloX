@@ -23,6 +23,29 @@ enum RepeatMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum QueuePlaybackModeIndicator: String {
+    case shuffle
+    case repeatAll
+    case repeatOne
+    case autoplay
+    case autoMix
+
+    var systemImage: String {
+        switch self {
+        case .shuffle:
+            "shuffle"
+        case .repeatAll:
+            "repeat"
+        case .repeatOne:
+            "repeat.1"
+        case .autoplay:
+            "infinity"
+        case .autoMix:
+            "circle.circle.fill"
+        }
+    }
+}
+
 struct PlaybackQueue {
     private(set) var songs: [Song] = []
     private(set) var currentIndex = 0
@@ -38,6 +61,20 @@ struct PlaybackQueue {
 
     var persistedShuffleOrder: [Int] {
         shuffledOrder
+    }
+
+    func upcomingIndices(wraps: Bool) -> [Int] {
+        guard !songs.isEmpty else { return [] }
+        let order = isShuffled
+            ? shuffledOrder
+            : Array(songs.indices)
+        let position = isShuffled
+            ? shuffledPosition
+            : currentIndex
+        let nextPosition = min(position + 1, order.count)
+        let remaining = Array(order.dropFirst(nextPosition))
+        guard wraps, position > 0 else { return remaining }
+        return remaining + Array(order.prefix(position))
     }
 
     mutating func restore(
@@ -117,6 +154,72 @@ struct PlaybackQueue {
         }
     }
 
+    mutating func append(_ song: Song) {
+        append(contentsOf: [song])
+    }
+
+    mutating func append(contentsOf newSongs: [Song]) {
+        guard !newSongs.isEmpty else { return }
+        let firstNewIndex = songs.count
+        songs.append(contentsOf: newSongs)
+        guard isShuffled else { return }
+
+        let newIndices = Array(firstNewIndex..<songs.count).shuffled()
+        shuffledOrder.append(contentsOf: newIndices)
+    }
+
+    mutating func moveUpcomingSongs(
+        fromOffsets source: IndexSet,
+        toOffset destination: Int,
+        wraps: Bool
+    ) {
+        if isShuffled {
+            var positions = Array(
+                shuffledOrder.indices.dropFirst(
+                    min(shuffledPosition + 1, shuffledOrder.count)
+                )
+            )
+            if wraps, shuffledPosition > 0 {
+                positions.append(
+                    contentsOf: shuffledOrder.indices.prefix(
+                        shuffledPosition
+                    )
+                )
+            }
+            let upcomingOrder = moved(
+                positions.map { shuffledOrder[$0] },
+                fromOffsets: source,
+                toOffset: destination
+            )
+            for (position, songIndex) in zip(
+                positions,
+                upcomingOrder
+            ) {
+                shuffledOrder[position] = songIndex
+            }
+            return
+        }
+
+        var positions = Array(
+            songs.indices.dropFirst(
+                min(currentIndex + 1, songs.count)
+            )
+        )
+        if wraps, currentIndex > 0 {
+            positions.append(
+                contentsOf: songs.indices.prefix(currentIndex)
+            )
+        }
+        let upcomingSongs = moved(
+            positions.map { songs[$0] },
+            fromOffsets: source,
+            toOffset: destination
+        )
+        for (position, song) in zip(positions, upcomingSongs) {
+            songs[position] = song
+        }
+    }
+
     private mutating func rebuildShuffleOrder() {
         guard songs.indices.contains(currentIndex) else {
             shuffledOrder = []
@@ -138,5 +241,32 @@ struct PlaybackQueue {
 
     private func isValidShuffleOrder(_ order: [Int]) -> Bool {
         order.count == songs.count && Set(order) == Set(songs.indices)
+    }
+
+    private func moved<Element>(
+        _ elements: [Element],
+        fromOffsets source: IndexSet,
+        toOffset destination: Int
+    ) -> [Element] {
+        let validSource = source
+            .filter(elements.indices.contains)
+            .sorted()
+        guard !validSource.isEmpty else { return elements }
+
+        var result = elements
+        let movingElements = validSource.map { elements[$0] }
+        for index in validSource.reversed() {
+            result.remove(at: index)
+        }
+
+        let removedBeforeDestination = validSource.filter {
+            $0 < destination
+        }.count
+        let insertionIndex = min(
+            max(destination - removedBeforeDestination, 0),
+            result.count
+        )
+        result.insert(contentsOf: movingElements, at: insertionIndex)
+        return result
     }
 }

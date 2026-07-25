@@ -1,41 +1,119 @@
 import SwiftUI
 
 struct NowPlayingArtworkPage: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
     let song: Song
     let artworkNamespace: Namespace.ID
-    let onShowDetails: () -> Void
+    let usesArtworkTransition: Bool
+    let showsArtwork: Bool
+    let onArtworkFrameChange: (CGRect) -> Void
+
+    @State private var artworkBounceScale: CGFloat = 1
+
+    init(
+        song: Song,
+        artworkNamespace: Namespace.ID,
+        usesArtworkTransition: Bool = true,
+        showsArtwork: Bool = true,
+        onArtworkFrameChange:
+            @escaping (CGRect) -> Void = { _ in }
+    ) {
+        self.song = song
+        self.artworkNamespace = artworkNamespace
+        self.usesArtworkTransition = usesArtworkTransition
+        self.showsArtwork = showsArtwork
+        self.onArtworkFrameChange = onArtworkFrameChange
+    }
+
+    private var isArtworkExpanded: Bool {
+        player.isPlaying || !settings.shrinksPausedArtwork
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let artworkSize = max(
                 170,
-                min(proxy.size.width - 28, proxy.size.height - 104)
+                min(
+                    proxy.size.width + 16,
+                    proxy.size.height
+                        - NowPlayingBottomControls.coreHeight
+                        - 92
+                )
             )
+            let displayedArtworkSize =
+                artworkSize * (isArtworkExpanded ? 1 : 0.74)
 
             VStack(spacing: 0) {
                 Spacer(minLength: 8)
 
-                ArtworkImage(url: song.album?.artworkURL, cornerRadius: 10)
-                    .matchedGeometryEffect(
-                        id: song.id,
-                        in: artworkNamespace,
-                        properties: .frame
-                    )
-                    .frame(width: artworkSize, height: artworkSize)
-                    .scaleEffect(player.isPlaying || !settings.shrinksPausedArtwork ? 1 : 0.9)
-                    .shadow(color: .black.opacity(0.24), radius: 22, y: 12)
-                    .animation(.smooth(duration: 0.45), value: player.isPlaying)
-                    .contentShape(.rect)
-                    .onTapGesture(perform: onShowDetails)
-                    .accessibilityElement()
-                    .accessibilityLabel("查看歌曲资料")
-                    .accessibilityHint("轻点切换到歌曲资料")
-                    .accessibilityAction {
-                        onShowDetails()
+                ZStack {
+                    if showsArtwork {
+                        ArtworkImage(
+                            url: song.album?.artworkURL,
+                            cornerRadius: 12
+                        )
+                        .frame(
+                            width: displayedArtworkSize,
+                            height: displayedArtworkSize
+                        )
+                        .scaleEffect(artworkBounceScale)
+                        .nowPlayingArtworkTransition(
+                            id: song.id,
+                            in: artworkNamespace,
+                            isEnabled: usesArtworkTransition,
+                            isSource: true
+                        )
+                        .shadow(
+                            color: .black.opacity(
+                                player.isPlaying ? 0.34 : 0.18
+                            ),
+                            radius: player.isPlaying ? 26 : 14,
+                            y: player.isPlaying ? 15 : 8
+                        )
+                    } else {
+                        Color.clear
+                            .frame(
+                                width: displayedArtworkSize,
+                                height: displayedArtworkSize
+                            )
+                            .onGeometryChange(
+                                for: CGRect.self
+                            ) { geometry in
+                                geometry.frame(
+                                    in: .named(
+                                        NowPlayingPortraitCoordinateSpace
+                                            .name
+                                    )
+                                )
+                            } action: { newFrame in
+                                onArtworkFrameChange(newFrame)
+                            }
                     }
+                }
+                .frame(width: artworkSize, height: artworkSize)
+                .animation(
+                    accessibilityReduceMotion
+                        ? nil
+                        : .smooth(duration: 0.48),
+                    value: isArtworkExpanded
+                )
+                .animation(
+                    accessibilityReduceMotion
+                        ? nil
+                        : .easeInOut(duration: 0.3),
+                    value: player.isPlaying
+                )
+                .accessibilityElement()
+                .accessibilityLabel("\(song.name)的封面")
+                .accessibilityHidden(!showsArtwork)
+                .task(id: player.isPlaying) {
+                    await animateArtworkBounce(
+                        whenPlaying: player.isPlaying
+                    )
+                }
 
                 Spacer(minLength: 22)
 
@@ -54,123 +132,38 @@ struct NowPlayingArtworkPage: View {
 
                     NowPlayingSongActions(
                         song: song,
-                        isShowingDetails: false,
-                        onToggleDetails: onShowDetails
+                        showsFavoriteButton: false
                     )
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
+            .padding(.bottom, NowPlayingBottomControls.coreHeight)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
-}
 
-struct NowPlayingSongActions: View {
-    @Environment(LibraryStore.self) private var library
-    @Environment(DownloadStore.self) private var downloads
-
-    let song: Song
-    let isShowingDetails: Bool
-    let onToggleDetails: () -> Void
-
-    @State private var presentedSheet: NowPlayingSongSheet?
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                library.toggle(song: song)
-            } label: {
-                Image(systemName: library.contains(song: song) ? "star.fill" : "star")
-                    .font(.title3.weight(.medium))
-                    .frame(width: 40, height: 40)
-                    .background(.white.opacity(0.13), in: .circle)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(library.contains(song: song) ? "取消收藏" : "收藏")
-
-            Menu {
-                if downloads.isDownloading(songID: song.id) {
-                    Button {
-                        downloads.cancel(songID: song.id)
-                    } label: {
-                        Label("取消下载", systemImage: "xmark.circle")
-                    }
-                } else if downloads.contains(songID: song.id) {
-                    Button(role: .destructive) {
-                        downloads.remove(songID: song.id)
-                    } label: {
-                        Label("删除下载", systemImage: "trash")
-                    }
-                } else {
-                    Menu {
-                        ForEach(MusicQuality.allCases) { quality in
-                            Button(quality.title) {
-                                downloads.start(song, quality: quality)
-                            }
-                        }
-                    } label: {
-                        Label("下载歌曲", systemImage: "arrow.down.circle")
-                    }
-                }
-
-                Button(action: onToggleDetails) {
-                    Label(
-                        isShowingDetails ? "返回封面" : "歌曲资料",
-                        systemImage: isShowingDetails ? "music.note" : "info.circle"
-                    )
-                }
-
-                Button {
-                    presentedSheet = .comments(song)
-                } label: {
-                    Label("评论", systemImage: "bubble.left.and.bubble.right")
-                }
-
-                Button {
-                    presentedSheet = .addToPlaylist(song)
-                } label: {
-                    Label("添加到歌单", systemImage: "text.badge.plus")
-                }
-
-                Menu {
-                    NeteaseShareMenuContent(resource: .song(song))
-                } label: {
-                    Label("分享", systemImage: "square.and.arrow.up")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.title3.weight(.semibold))
-                    .frame(width: 40, height: 40)
-                    .background(.white.opacity(0.13), in: .circle)
-                    .contentShape(.circle)
-            }
-            .accessibilityLabel("更多")
+    private func animateArtworkBounce(
+        whenPlaying isPlaying: Bool
+    ) async {
+        artworkBounceScale = 1
+        guard showsArtwork,
+              isPlaying,
+              !accessibilityReduceMotion else {
+            return
         }
-        .sheet(item: $presentedSheet) { sheet in
-            switch sheet {
-            case .comments(let selectedSong):
-                SongCommentsSheet(song: selectedSong)
-            case .addToPlaylist(let selectedSong):
-                AddToPlaylistSheet(song: selectedSong)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
+
+        await Task.yield()
+        withAnimation(.easeOut(duration: 0.17)) {
+            artworkBounceScale = 1.055
         }
-    }
-}
 
-private enum NowPlayingSongSheet: Identifiable {
-    case comments(Song)
-    case addToPlaylist(Song)
+        do {
+            try await Task.sleep(for: .milliseconds(170))
+        } catch {
+            return
+        }
 
-    var id: String {
-        switch self {
-        case .comments(let song):
-            "comments-\(song.id)"
-        case .addToPlaylist(let song):
-            "playlist-\(song.id)"
+        withAnimation(.spring(duration: 0.42, bounce: 0.24)) {
+            artworkBounceScale = 1
         }
     }
 }

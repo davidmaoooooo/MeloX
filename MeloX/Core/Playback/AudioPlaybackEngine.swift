@@ -51,6 +51,10 @@ final class AudioPlaybackEngine {
     private var suppressesProgressUpdates = false
     private var didReportCurrentItemFailure = false
     private var loadGeneration = 0
+    private var baseVolume: Float = 1
+    private var transitionGain: Float = 1
+    private var transitionGainGeneration = 0
+    private var pendingFadeInDuration: TimeInterval = 0
 
     var hasCurrentItem: Bool {
         player.currentItem != nil
@@ -86,12 +90,19 @@ final class AudioPlaybackEngine {
     func load(
         _ source: PlaybackSource,
         startAt: TimeInterval = 0,
-        autoplay: Bool
+        autoplay: Bool,
+        fadeInDuration: TimeInterval = 0
     ) async {
         loadGeneration += 1
         let generation = loadGeneration
         wantsPlayback = autoplay
         pendingSeekTime = max(0, startAt)
+        pendingFadeInDuration = autoplay
+            ? max(fadeInDuration, 0)
+            : 0
+        transitionGainGeneration += 1
+        transitionGain = pendingFadeInDuration > 0 ? 0 : 1
+        applyOutputVolume()
         seekGeneration += 1
         suppressesProgressUpdates = pendingSeekTime > 0
         didReportCurrentItemFailure = false
@@ -131,10 +142,14 @@ final class AudioPlaybackEngine {
         seekGeneration += 1
         suppressesProgressUpdates = false
         didReportCurrentItemFailure = false
-        itemStatusObserver?.invalidate()
-        itemStatusObserver = nil
+        pendingFadeInDuration = 0
+        transitionGainGeneration += 1
         player.pause()
         player.replaceCurrentItem(with: nil)
+        transitionGain = 1
+        applyOutputVolume()
+        itemStatusObserver?.invalidate()
+        itemStatusObserver = nil
         transition(to: .idle)
     }
 
@@ -181,7 +196,22 @@ final class AudioPlaybackEngine {
     }
 
     func setVolume(_ volume: Double) {
-        player.volume = Float(min(max(volume, 0), 1))
+        baseVolume = Float(min(max(volume, 0), 1))
+        applyOutputVolume()
+    }
+
+    func fadeOutForTransition(duration: TimeInterval) async {
+        await animateTransitionGain(
+            to: 0,
+            duration: duration
+        )
+    }
+
+    func resetTransitionGain() {
+        pendingFadeInDuration = 0
+        transitionGainGeneration += 1
+        transitionGain = 1
+        applyOutputVolume()
     }
 
     func setEqualizerConfiguration(
@@ -340,7 +370,16 @@ final class AudioPlaybackEngine {
 
     private func resumePlaybackIfNeeded() {
         if wantsPlayback {
+            let fadeInDuration = pendingFadeInDuration
+            pendingFadeInDuration = 0
             play()
+            guard fadeInDuration > 0 else { return }
+            Task { @MainActor [weak self] in
+                await self?.animateTransitionGain(
+                    to: 1,
+                    duration: fadeInDuration
+                )
+            }
         } else {
             updateStateFromPlayer()
         }
@@ -359,6 +398,41 @@ final class AudioPlaybackEngine {
         guard state != newState else { return }
         state = newState
         onStateChanged?(newState)
+    }
+
+    private func animateTransitionGain(
+        to target: Float,
+        duration: TimeInterval
+    ) async {
+        transitionGainGeneration += 1
+        let generation = transitionGainGeneration
+        let start = transitionGain
+        let clampedDuration = max(duration, 0)
+        guard clampedDuration > 0 else {
+            transitionGain = target
+            applyOutputVolume()
+            return
+        }
+
+        let stepCount = max(Int(clampedDuration / 0.02), 1)
+        let stepDuration = clampedDuration / Double(stepCount)
+        for step in 1...stepCount {
+            do {
+                try await Task.sleep(for: .seconds(stepDuration))
+            } catch {
+                return
+            }
+            guard generation == transitionGainGeneration else {
+                return
+            }
+            let progress = Float(step) / Float(stepCount)
+            transitionGain = start + ((target - start) * progress)
+            applyOutputVolume()
+        }
+    }
+
+    private func applyOutputVolume() {
+        player.volume = baseVolume * transitionGain
     }
 
     private func activateAudioSession() throws {

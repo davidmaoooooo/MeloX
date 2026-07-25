@@ -59,13 +59,20 @@ private struct NowPlayingQualityMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 9, weight: .semibold))
                 Text(settings.quality.title)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
             }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                .white.opacity(0.12),
+                in: .rect(cornerRadius: 7)
+            )
             .contentShape(.rect)
         }
+        .tint(.white)
         .accessibilityLabel("播放音质")
         .accessibilityValue(settings.quality.title)
         .accessibilityHint("轻点调整当前歌曲音质")
@@ -243,41 +250,17 @@ private struct SystemVolumeSlider: UIViewRepresentable {
 }
 
 struct NowPlayingPageSelector: View {
-    @Environment(AppSettings.self) private var settings
+    @Environment(PlayerStore.self) private var player
 
     @Binding var page: NowPlayingPage
 
     var body: some View {
         HStack {
-            Spacer()
-
             pageButton(
                 page: .lyrics,
                 systemImage: "quote.bubble",
                 accessibilityLabel: "歌词"
             )
-
-            Spacer()
-
-            Menu {
-                Picker("歌词样式", selection: lyricsStyleBinding) {
-                    ForEach([LyricsStyle.appleMusic, .eva]) { style in
-                        Label(style.title, systemImage: style.systemImage)
-                            .tag(style)
-                    }
-                }
-
-                TextPVStyleMenu(page: $page)
-            } label: {
-                Image(systemName: "textformat.size")
-                    .font(.title3)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("歌词样式")
-            .accessibilityValue(settings.lyricsStyle.title)
-            .accessibilityHint("轻点切换歌词样式")
 
             Spacer()
 
@@ -288,31 +271,23 @@ struct NowPlayingPageSelector: View {
             pageButton(
                 page: .queue,
                 systemImage: "list.bullet",
-                accessibilityLabel: "播放队列"
+                accessibilityLabel: "播放队列",
+                badgeSystemImage:
+                    page == .queue
+                        ? nil
+                        : player.queueModeBadgeSystemImage
             )
-
-            Spacer()
         }
+        .padding(.horizontal, 32)
         .foregroundStyle(.white.opacity(0.72))
         .frame(height: 50)
-    }
-
-    private var lyricsStyleBinding: Binding<LyricsStyle> {
-        Binding(
-            get: { settings.lyricsStyle },
-            set: { style in
-                settings.lyricsStyle = style
-                withAnimation(.smooth(duration: 0.3)) {
-                    page = .lyrics
-                }
-            }
-        )
     }
 
     private func pageButton(
         page destination: NowPlayingPage,
         systemImage: String,
-        accessibilityLabel: String
+        accessibilityLabel: String,
+        badgeSystemImage: String? = nil
     ) -> some View {
         let isSelected = page == destination
 
@@ -321,11 +296,41 @@ struct NowPlayingPageSelector: View {
                 page = isSelected ? .artwork : destination
             }
         } label: {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .frame(width: 44, height: 44)
-                .background(.white.opacity(isSelected ? 0.2 : 0), in: .circle)
-                .contentShape(.circle)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: systemImage)
+                    .symbolVariant(isSelected ? .fill : .none)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .foregroundStyle(
+                        isSelected
+                            ? .black.opacity(0.68)
+                            : .white.opacity(0.72)
+                    )
+                    .background(
+                        .white.opacity(isSelected ? 0.68 : 0),
+                        in: .circle
+                    )
+
+                if let badgeSystemImage {
+                    Image(systemName: badgeSystemImage)
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(
+                            isSelected
+                                ? .white.opacity(0.9)
+                                : .black.opacity(0.74)
+                        )
+                        .frame(width: 15, height: 15)
+                        .background(
+                            isSelected
+                                ? .black.opacity(0.58)
+                                : .white.opacity(0.82),
+                            in: .circle
+                        )
+                        .offset(x: 3, y: 1)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)

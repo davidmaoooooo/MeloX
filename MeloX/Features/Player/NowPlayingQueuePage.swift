@@ -3,95 +3,378 @@ import SwiftUI
 struct NowPlayingQueuePage: View {
     @Environment(PlayerStore.self) private var player
 
+    let song: Song
+    let presentation: NowPlayingLyricsPresentation
+    let artworkNamespace: Namespace.ID
+    let usesArtworkTransition: Bool
+    let showsSongHeader: Bool
+    let onSongHeaderHiddenChange: (Bool) -> Void
+    let onSongHeaderOffsetChange: (CGFloat) -> Void
+
+    @State private var songHeaderHeight: CGFloat = 0
+    @State private var isSongHeaderHidden = false
+    @State private var isSongHeaderAtRest = true
+
+    init(
+        song: Song,
+        presentation: NowPlayingLyricsPresentation,
+        artworkNamespace: Namespace.ID,
+        usesArtworkTransition: Bool = true,
+        showsSongHeader: Bool = true,
+        onSongHeaderHiddenChange:
+            @escaping (Bool) -> Void = { _ in },
+        onSongHeaderOffsetChange:
+            @escaping (CGFloat) -> Void = { _ in }
+    ) {
+        self.song = song
+        self.presentation = presentation
+        self.artworkNamespace = artworkNamespace
+        self.usesArtworkTransition = usesArtworkTransition
+        self.showsSongHeader = showsSongHeader
+        self.onSongHeaderHiddenChange = onSongHeaderHiddenChange
+        self.onSongHeaderOffsetChange = onSongHeaderOffsetChange
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("接下来播放")
-                    .font(.title2.bold())
+        VStack(spacing: 0) {
+            NowPlayingQueueModeControls()
+                .padding(.vertical, 8)
+                .frame(height: isSongHeaderHidden ? 60 : 0)
+                .clipped()
+                .opacity(isSongHeaderHidden ? 1 : 0)
+                .allowsHitTesting(isSongHeaderHidden)
+                .accessibilityHidden(!isSongHeaderHidden)
 
-                Spacer()
-
-                Button {
-                    player.toggleShuffle()
-                } label: {
-                    Image(systemName: "shuffle")
-                        .frame(width: 40, height: 40)
-                        .background(.white.opacity(player.isShuffled ? 0.24 : 0.1), in: .circle)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(player.isShuffled ? "关闭随机播放" : "开启随机播放")
-
-                Button {
-                    player.cycleRepeatMode()
-                } label: {
-                    Image(systemName: player.repeatMode.systemImage)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            .white.opacity(player.repeatMode == .off ? 0.1 : 0.24),
-                            in: .circle
-                        )
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(player.repeatMode.accessibilityTitle)
-            }
-
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(player.queue.enumerated()), id: \.offset) { index, song in
-                        Button {
-                            Task { await player.playFromQueue(at: index) }
-                        } label: {
-                            HStack(spacing: 12) {
-                                ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
-                                    .frame(width: 48, height: 48)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(song.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
-
-                                    Text(song.artistText)
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.58))
-                                        .lineLimit(1)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                if index == player.currentIndex {
-                                    Image(
-                                        systemName: player.isPlaying
-                                            ? "speaker.wave.2.fill"
-                                            : "speaker.fill"
-                                    )
-                                    .foregroundStyle(.white.opacity(0.72))
-                                    .accessibilityLabel("当前歌曲")
-                                }
-                            }
-                            .padding(.vertical, 8)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < player.queue.count - 1 {
-                            Divider()
-                                .overlay(.white.opacity(0.12))
-                                .padding(.leading, 60)
+            List {
+                if presentation == .portrait {
+                    Group {
+                        if showsSongHeader {
+                            NowPlayingSongHeader(
+                                song: song,
+                                artworkNamespace: artworkNamespace,
+                                usesReferenceLayout: true,
+                                usesArtworkTransition:
+                                    usesArtworkTransition
+                                    && isSongHeaderAtRest
+                            )
+                        } else {
+                            Color.clear
+                                .frame(
+                                    height:
+                                        NowPlayingSongHeader
+                                        .referenceHeight
+                                )
                         }
                     }
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.height
+                    } action: { newHeight in
+                        if newHeight > 0 {
+                            songHeaderHeight = newHeight
+                        }
+                    }
+                    .listRowInsets(.init())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+
+                Section {
+                    Text("继续播放")
+                        .font(.title2.bold())
+                        .padding(.top, 14)
+                        .padding(.bottom, 10)
+                        .listRowInsets(.init())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+
+                    if upcomingEntries.isEmpty {
+                        ContentUnavailableView(
+                            "没有待播放歌曲",
+                            systemImage: "list.bullet"
+                        )
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .listRowInsets(
+                            .init(
+                                top: 24,
+                                leading: 0,
+                                bottom: 24,
+                                trailing: 0
+                            )
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(upcomingEntries) { entry in
+                            NowPlayingQueueRow(entry: entry)
+                        }
+                        .onMove(perform: moveQueueItems)
+                    }
+                } header: {
+                    NowPlayingQueueModeControls()
+                        .padding(.vertical, 8)
+                        .frame(
+                            height:
+                                isSongHeaderHidden
+                                    ? 0
+                                    : 60
+                        )
+                        .clipped()
+                        .opacity(isSongHeaderHidden ? 0 : 1)
+                        .allowsHitTesting(!isSongHeaderHidden)
+                        .accessibilityHidden(isSongHeaderHidden)
+                        .textCase(nil)
+                        .listRowInsets(.init())
                 }
             }
-            .scrollIndicators(.hidden)
-            .overlay {
-                if player.queue.isEmpty {
-                    ContentUnavailableView("播放队列为空", systemImage: "list.bullet")
-                        .foregroundStyle(.white)
+            .listStyle(.plain)
+            .listSectionSpacing(0)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.visible)
+            .contentMargins(.top, 0, for: .scrollContent)
+            .environment(\.defaultMinListRowHeight, 1)
+            .environment(\.defaultMinListHeaderHeight, 0)
+            .environment(\.editMode, .constant(.active))
+            .padding(.bottom, bottomContentInset)
+            .onScrollGeometryChange(
+                for: CGFloat.self,
+                of: { geometry in
+                    max(
+                        geometry.contentOffset.y
+                            + geometry.contentInsets.top,
+                        0
+                    )
                 }
+            ) { _, offset in
+                updateSongHeaderState(for: offset)
             }
         }
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .onAppear {
+            if presentation == .portrait {
+                isSongHeaderHidden = false
+                isSongHeaderAtRest = true
+                onSongHeaderHiddenChange(false)
+                onSongHeaderOffsetChange(0)
+            }
+        }
     }
+
+    private var upcomingEntries: [UpcomingQueueEntry] {
+        var occurrences: [Int: Int] = [:]
+        return player.upcomingQueueIndices.compactMap { index in
+            guard player.queue.indices.contains(index) else {
+                return nil
+            }
+            let song = player.queue[index]
+            let occurrence = occurrences[song.id, default: 0]
+            occurrences[song.id] = occurrence + 1
+            return UpcomingQueueEntry(
+                id: UpcomingQueueEntry.ID(
+                    songID: song.id,
+                    occurrence: occurrence
+                ),
+                queueIndex: index,
+                song: song
+            )
+        }
+    }
+
+    private var bottomContentInset: CGFloat {
+        presentation == .portrait
+            ? NowPlayingBottomControls.coreHeight
+            : 12
+    }
+
+    private func updateSongHeaderState(for offset: CGFloat) {
+        guard presentation == .portrait else { return }
+
+        onSongHeaderOffsetChange(
+            -min(offset, max(songHeaderHeight, 0))
+        )
+
+        let isHidden =
+            songHeaderHeight > 0
+            && offset >= songHeaderHeight
+        if isSongHeaderHidden != isHidden {
+            isSongHeaderHidden = isHidden
+            onSongHeaderHiddenChange(isHidden)
+        }
+
+        let isAtRest = offset <= 0.5
+        if isSongHeaderAtRest != isAtRest {
+            isSongHeaderAtRest = isAtRest
+        }
+    }
+
+    private func moveQueueItems(
+        from source: IndexSet,
+        to destination: Int
+    ) {
+        withAnimation(.smooth(duration: 0.28)) {
+            player.moveUpcomingQueueItems(
+                fromOffsets: source,
+                toOffset: destination
+            )
+        }
+    }
+}
+
+private struct NowPlayingQueueModeControls: View {
+    @Environment(PlayerStore.self) private var player
+
+    var body: some View {
+        HStack(spacing: 14) {
+            modeButton(
+                systemImage: "shuffle",
+                isSelected: player.isShuffled,
+                accessibilityLabel:
+                    player.isShuffled
+                        ? "关闭随机播放"
+                        : "开启随机播放",
+                action: toggleShuffle
+            )
+
+            modeButton(
+                systemImage: player.repeatMode.systemImage,
+                isSelected: player.repeatMode != .off,
+                accessibilityLabel:
+                    player.repeatMode.accessibilityTitle,
+                action: cycleRepeatMode
+            )
+
+            modeButton(
+                systemImage: "infinity",
+                isSelected: player.isAutoplayEnabled,
+                accessibilityLabel:
+                    player.isAutoplayEnabled
+                        ? "关闭自动播放"
+                        : "开启自动播放",
+                action: toggleAutoplay
+            )
+
+            modeButton(
+                systemImage: "circle.circle.fill",
+                isSelected: player.isAutoMixEnabled,
+                accessibilityLabel:
+                    player.isAutoMixEnabled
+                        ? "关闭自动混音"
+                        : "开启自动混音",
+                action: toggleAutoMix
+            )
+        }
+    }
+
+    private func modeButton(
+        systemImage: String,
+        isSelected: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .contentTransition(
+                    .symbolEffect(.replace.downUp.wholeSymbol)
+                )
+                .font(.title3.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .foregroundStyle(
+                    isSelected
+                        ? .black.opacity(0.62)
+                        : .white.opacity(0.86)
+                )
+                .background(
+                    .white.opacity(isSelected ? 0.7 : 0.12),
+                    in: .rect(cornerRadius: 22)
+                )
+                .contentShape(.rect(cornerRadius: 22))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func toggleShuffle() {
+        withAnimation(.smooth(duration: 0.34)) {
+            player.toggleShuffle()
+        }
+    }
+
+    private func cycleRepeatMode() {
+        withAnimation(.smooth(duration: 0.34)) {
+            player.cycleRepeatMode()
+        }
+    }
+
+    private func toggleAutoplay() {
+        withAnimation(.smooth(duration: 0.34)) {
+            player.toggleAutoplay()
+        }
+    }
+
+    private func toggleAutoMix() {
+        withAnimation(.smooth(duration: 0.34)) {
+            player.toggleAutoMix()
+        }
+    }
+}
+
+private struct NowPlayingQueueRow: View {
+    @Environment(PlayerStore.self) private var player
+
+    let entry: UpcomingQueueEntry
+
+    var body: some View {
+        Button(action: play) {
+            HStack(spacing: 12) {
+                ArtworkImage(
+                    url: entry.song.album?.artworkURL,
+                    cornerRadius: 6
+                )
+                .frame(width: 48, height: 48)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.song.name)
+                        .font(.body)
+                        .lineLimit(1)
+
+                    Text(entry.song.artistText)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.58))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(
+            .init(
+                top: 4,
+                leading: 0,
+                bottom: 4,
+                trailing: 0
+            )
+        )
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    private func play() {
+        Task {
+            await player.playFromQueue(at: entry.queueIndex)
+        }
+    }
+}
+
+private struct UpcomingQueueEntry: Identifiable {
+    struct ID: Hashable {
+        let songID: Int
+        let occurrence: Int
+    }
+
+    let id: ID
+    let queueIndex: Int
+    let song: Song
 }

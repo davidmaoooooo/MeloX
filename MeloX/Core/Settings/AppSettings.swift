@@ -56,11 +56,11 @@ final class AppSettings {
     static let defaultLyricsInterludeCountdownEnabled = true
     static let defaultAppleMusicLyricsInterfaceAutoHideDelay = 5.0
     static let appleMusicLyricsInterfaceAutoHideDelayRange = 3.0...15.0
-    static let defaultAppleMusicLyricsScrollHideThreshold = 100.0
+    static let defaultAppleMusicLyricsScrollHideThreshold = 200.0
     static let appleMusicLyricsScrollHideThresholdRange = 40.0...240.0
-    static let defaultLyricsFontSize = 28.0
+    static let defaultLyricsFontSize = 31.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
-    static let defaultLyricsCurrentLineScale = 1.18
+    static let defaultLyricsCurrentLineScale = 1.08
     static let defaultLyricsLineSpacing = 28.0
     static let defaultLyricsBlurIntensity = 0.8
     static let defaultLyricsUsesUniformDimmingWhileBrowsing = true

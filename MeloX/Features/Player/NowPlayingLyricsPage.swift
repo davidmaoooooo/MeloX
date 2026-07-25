@@ -16,9 +16,10 @@ struct NowPlayingLyricsPage: View {
     let presentation: NowPlayingLyricsPresentation
     let isInterfaceHidden: Bool
     let artworkNamespace: Namespace.ID
+    let usesArtworkTransition: Bool
+    let showsSongHeader: Bool
     let onInterfaceInteraction: (() -> Void)?
     let onInterfaceVisibilityChange: ((Bool) -> Void)?
-    let onShowDetails: (() -> Void)?
 
     init(
         song: Song,
@@ -28,9 +29,10 @@ struct NowPlayingLyricsPage: View {
         presentation: NowPlayingLyricsPresentation = .portrait,
         isInterfaceHidden: Bool = false,
         artworkNamespace: Namespace.ID,
+        usesArtworkTransition: Bool = true,
+        showsSongHeader: Bool = true,
         onInterfaceInteraction: (() -> Void)? = nil,
-        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil,
-        onShowDetails: (() -> Void)? = nil
+        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil
     ) {
         self.song = song
         self.lyrics = lyrics
@@ -39,14 +41,15 @@ struct NowPlayingLyricsPage: View {
         self.presentation = presentation
         self.isInterfaceHidden = isInterfaceHidden
         self.artworkNamespace = artworkNamespace
+        self.usesArtworkTransition = usesArtworkTransition
+        self.showsSongHeader = showsSongHeader
         self.onInterfaceInteraction = onInterfaceInteraction
         self.onInterfaceVisibilityChange = onInterfaceVisibilityChange
-        self.onShowDetails = onShowDetails
     }
 
     var body: some View {
-        VStack(spacing: presentation == .portrait ? 18 : 0) {
-            if presentation == .portrait {
+        VStack(spacing: lyricsContentSpacing) {
+            if presentation == .portrait, showsSongHeader {
                 songHeader
             }
 
@@ -54,7 +57,8 @@ struct NowPlayingLyricsPage: View {
                 .id(settings.lyricsStyle)
                 .transition(.opacity)
         }
-        .padding(.bottom, presentation == .portrait ? 12 : 0)
+        .padding(.top, sharedSongHeaderInset)
+        .padding(.bottom, portraitContentBottomInset)
         .animation(
             accessibilityReduceMotion ? nil : .smooth(duration: 0.3),
             value: settings.lyricsStyle
@@ -62,33 +66,12 @@ struct NowPlayingLyricsPage: View {
     }
 
     private var songHeader: some View {
-        HStack(spacing: 12) {
-            ArtworkImage(url: song.album?.artworkURL, cornerRadius: 10)
-                .matchedGeometryEffect(
-                    id: song.id,
-                    in: artworkNamespace,
-                    properties: .frame
-                )
-                .frame(width: 68, height: 68)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(song.name)
-                    .font(.headline)
-                    .lineLimit(1)
-
-                Text(song.artistText)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.64))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            NowPlayingSongActions(
-                song: song,
-                isShowingDetails: false,
-                onToggleDetails: { onShowDetails?() }
-            )
-        }
+        NowPlayingSongHeader(
+            song: song,
+            artworkNamespace: artworkNamespace,
+            usesReferenceLayout: usesReferencePortraitLayout,
+            usesArtworkTransition: usesArtworkTransition
+        )
     }
 
     @ViewBuilder
@@ -125,9 +108,34 @@ struct NowPlayingLyricsPage: View {
     private var appleMusicBottomOverlayHeight: CGFloat {
         switch presentation {
         case .portrait:
-            226
+            NowPlayingBottomControls.overlayHeight
         case .landscape:
             50
         }
     }
+
+    private var portraitContentBottomInset: CGFloat {
+        guard presentation == .portrait else { return 0 }
+        return settings.lyricsStyle == .appleMusic
+            ? 12
+            : NowPlayingBottomControls.coreHeight
+    }
+
+    private var usesReferencePortraitLayout: Bool {
+        presentation == .portrait && settings.lyricsStyle == .appleMusic
+    }
+
+    private var lyricsContentSpacing: CGFloat {
+        guard presentation == .portrait else { return 0 }
+        return usesReferencePortraitLayout ? 16 : 18
+    }
+
+    private var sharedSongHeaderInset: CGFloat {
+        guard presentation == .portrait, !showsSongHeader else {
+            return 0
+        }
+        return NowPlayingSongHeader.referenceHeight
+            + lyricsContentSpacing
+    }
+
 }

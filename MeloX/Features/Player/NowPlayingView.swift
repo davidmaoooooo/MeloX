@@ -2,7 +2,6 @@ import SwiftUI
 
 enum NowPlayingPage: String, Hashable {
     case artwork
-    case details
     case lyrics
     case queue
 }
@@ -21,6 +20,10 @@ struct NowPlayingView: View {
     @State private var appleMusicControlsActivityGeneration = 0
     @State private var highlightedLyricID: LyricLine.ID?
     @State private var showsTextPVLandscapeSuggestion = false
+    @State private var isQueueSongHeaderHidden = false
+    @State private var queueSongHeaderOffset: CGFloat = 0
+    @State private var artworkPageFrame = CGRect.zero
+    @State private var entersPageFromHiddenQueue = false
     @GestureState private var isInteractingWithPlayer = false
     @Namespace private var pageArtworkNamespace
 
@@ -43,7 +46,7 @@ struct NowPlayingView: View {
                 if let song = player.currentSong {
                     if usesFullScreenTextPV {
                         TextPVFullScreenPlayerView(
-                            page: $page,
+                            page: pageSelection,
                             showsControls: $showsLyricsControls,
                             song: song,
                             lyrics: lyrics,
@@ -56,7 +59,7 @@ struct NowPlayingView: View {
                         .transition(.opacity)
                     } else if proxy.size.width > proxy.size.height {
                         NowPlayingLandscapeView(
-                            page: $page,
+                            page: pageSelection,
                             showsLyricsControls: showsLyricsControls,
                             song: song,
                             lyrics: lyrics,
@@ -157,6 +160,9 @@ struct NowPlayingView: View {
                 showsLyricsControls = false
             }
         }
+        .task(id: entersPageFromHiddenQueue) {
+            await restoreArtworkTransitionAfterHiddenQueueEntry()
+        }
         .onChange(of: page) { _, newPage in
             if newPage == .lyrics,
                settings.lyricsStyle == .appleMusic {
@@ -167,9 +173,7 @@ struct NowPlayingView: View {
             }
 
             guard settings.rememberNowPlayingPage else { return }
-            settings.rememberedNowPlayingPage = (
-                newPage == .details ? NowPlayingPage.artwork : newPage
-            ).rawValue
+            settings.rememberedNowPlayingPage = newPage.rawValue
         }
         .onChange(of: accessibilityVoiceOverEnabled) {
             _, voiceOverEnabled in
@@ -195,44 +199,48 @@ struct NowPlayingView: View {
         ) {
             registerAppleMusicControlsActivity()
         }
-        .animation(.smooth(duration: 0.4), value: page)
     }
 
     private func portraitContent(for song: Song) -> some View {
         VStack(spacing: 0) {
             dismissalHandle
 
-            if usesExpandedAppleMusicLyricsLayout {
-                pageContent(for: song)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .bottom) {
-                        portraitPlayerControls(for: song)
-                            .opacity(hidesLyricsControls ? 0 : 1)
-                            .allowsHitTesting(!hidesLyricsControls)
-                            .accessibilityHidden(hidesLyricsControls)
-                    }
-            } else {
-                pageContent(for: song)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                portraitPlayerControls(for: song)
-                    .opacity(hidesLyricsControls ? 0 : 1)
-                    .allowsHitTesting(!hidesLyricsControls)
-                    .accessibilityHidden(hidesLyricsControls)
-            }
+            pageContent(for: song)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) {
+                    portraitPlayerControls(for: song)
+                        .opacity(hidesLyricsControls ? 0 : 1)
+                        .allowsHitTesting(!hidesLyricsControls)
+                        .accessibilityHidden(hidesLyricsControls)
+                }
         }
-        .padding(.horizontal, 28)
-        .safeAreaPadding(.top, 4)
-        .safeAreaPadding(.bottom, 8)
+        .padding(.horizontal, 32)
+        .safeAreaPadding(.bottom, 3)
     }
 
     private func portraitPlayerControls(for song: Song) -> some View {
-        VStack(spacing: 0) {
-            NowPlayingProgressControl(song: song)
-            NowPlayingTransportControls()
-            NowPlayingVolumeControl()
-            NowPlayingPageSelector(page: $page)
-        }
+        NowPlayingBottomControls(
+            song: song,
+            page: pageSelection,
+            showsLyricsUtilities: usesExpandedAppleMusicLyricsLayout
+        )
+    }
+
+    private var pageSelection: Binding<NowPlayingPage> {
+        Binding(
+            get: { page },
+            set: { newPage in
+                entersPageFromHiddenQueue =
+                    page == .queue
+                    && isQueueSongHeaderHidden
+                    && newPage != .queue
+                if newPage == .queue, page != .queue {
+                    isQueueSongHeaderHidden = false
+                    queueSongHeaderOffset = 0
+                }
+                page = newPage
+            }
+        )
     }
 
     private var hidesLyricsControls: Bool {
@@ -277,42 +285,42 @@ struct NowPlayingView: View {
     }
 
     private var dismissalHandle: some View {
-        Capsule()
-            .fill(.white.opacity(0.52))
-            .frame(width: 38, height: 5)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .contentShape(.rect)
-            .onTapGesture {
-                dismiss()
-            }
-            .gesture(dismissalDragGesture)
-            .accessibilityElement()
-            .accessibilityLabel("收起播放器")
-            .accessibilityHint("轻点收起，或向下拖动播放器")
-            .accessibilityAction {
-                dismiss()
-            }
+        ZStack(alignment: .top) {
+            Capsule()
+                .fill(.white.opacity(0.52))
+                .frame(width: 60, height: 5)
+                .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 34)
+        .contentShape(.rect)
+        .onTapGesture {
+            dismiss()
+        }
+        .gesture(dismissalDragGesture)
+        .accessibilityElement()
+        .accessibilityLabel("收起播放器")
+        .accessibilityHint("轻点收起，或向下拖动播放器")
+        .accessibilityAction {
+            dismiss()
+        }
     }
 
     private func pageContent(for song: Song) -> some View {
-        ZStack {
+        ZStack(alignment: .top) {
             switch page {
             case .artwork:
                 NowPlayingArtworkPage(
                     song: song,
                     artworkNamespace: pageArtworkNamespace,
-                    onShowDetails: showDetails
+                    usesArtworkTransition: false,
+                    showsArtwork: false,
+                    onArtworkFrameChange: {
+                        guard page == .artwork else { return }
+                        artworkPageFrame = $0
+                    }
                 )
-                .transition(.opacity)
-            case .details:
-                NowPlayingSongDetailsPage(
-                    song: song,
-                    showsArtworkToggle: true,
-                    artworkNamespace: pageArtworkNamespace,
-                    onShowArtwork: showArtwork
-                )
-                .transition(.opacity)
+                .transition(pageContentTransition)
             case .lyrics:
                 NowPlayingLyricsPage(
                     song: song,
@@ -321,22 +329,122 @@ struct NowPlayingView: View {
                     highlightedLyricID: highlightedLyricID,
                     isInterfaceHidden: hidesLyricsControls,
                     artworkNamespace: pageArtworkNamespace,
+                    usesArtworkTransition:
+                        !entersPageFromHiddenQueue,
+                    showsSongHeader: false,
                     onInterfaceInteraction:
                         handleLyricsInterfaceInteraction,
                     onInterfaceVisibilityChange:
-                        setAppleMusicLyricsControlsVisible,
-                    onShowDetails: showDetails
+                        setAppleMusicLyricsControlsVisible
                 )
                 .accessibilityAction(
                     named: lyricsInterfaceAccessibilityActionName
                 ) {
                     handleLyricsInterfaceInteraction()
                 }
-                .transition(.opacity)
+                .transition(pageContentTransition)
             case .queue:
-                NowPlayingQueuePage()
-                    .transition(.opacity)
+                NowPlayingQueuePage(
+                    song: song,
+                    presentation: .portrait,
+                    artworkNamespace: pageArtworkNamespace,
+                    usesArtworkTransition:
+                        !entersPageFromHiddenQueue,
+                    showsSongHeader: false,
+                    onSongHeaderHiddenChange: {
+                        isQueueSongHeaderHidden = $0
+                    },
+                    onSongHeaderOffsetChange: {
+                        queueSongHeaderOffset = $0
+                    }
+                )
+                .transition(pageContentTransition)
             }
+
+            if page != .artwork {
+                sharedPortraitSongHeader(for: song)
+                    .offset(y: sharedPortraitSongHeaderOffset)
+                    .transition(.identity)
+            }
+
+            if portraitArtworkFrame.width > 0 {
+                NowPlayingPortraitArtwork(
+                    song: song,
+                    isArtworkPage: page == .artwork
+                )
+                .frame(
+                    width: portraitArtworkFrame.width,
+                    height: portraitArtworkFrame.height
+                )
+                .position(
+                    x: portraitArtworkFrame.midX,
+                    y: portraitArtworkFrame.midY
+                )
+                .allowsHitTesting(false)
+            }
+        }
+        .clipped()
+        .coordinateSpace(
+            name: NowPlayingPortraitCoordinateSpace.name
+        )
+    }
+
+    private func sharedPortraitSongHeader(
+        for song: Song
+    ) -> some View {
+        NowPlayingSongHeader(
+            song: song,
+            artworkNamespace: pageArtworkNamespace,
+            usesReferenceLayout: true,
+            usesArtworkTransition: false,
+            showsArtwork: false
+        )
+    }
+
+    private var portraitArtworkFrame: CGRect {
+        if page == .artwork {
+            return artworkPageFrame
+        }
+
+        return CGRect(
+            x: 0,
+            y: sharedPortraitSongHeaderOffset,
+            width: NowPlayingSongHeader.referenceHeight,
+            height: NowPlayingSongHeader.referenceHeight
+        )
+    }
+
+    private var sharedPortraitSongHeaderOffset: CGFloat {
+        page == .queue ? queueSongHeaderOffset : 0
+    }
+
+    private var pageContentTransition: AnyTransition {
+        let insertion: AnyTransition
+        if entersPageFromHiddenQueue, !accessibilityReduceMotion {
+            insertion = .move(edge: .top).combined(with: .opacity)
+        } else {
+            insertion = .opacity
+        }
+        return .asymmetric(
+            insertion: insertion,
+            removal: .opacity
+        )
+    }
+
+    private func restoreArtworkTransitionAfterHiddenQueueEntry() async {
+        guard entersPageFromHiddenQueue else { return }
+
+        do {
+            try await Task.sleep(for: .milliseconds(420))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            entersPageFromHiddenQueue = false
         }
     }
 
@@ -349,18 +457,6 @@ struct NowPlayingView: View {
                 }
                 dismiss()
             }
-    }
-
-    private func showDetails() {
-        withAnimation(.smooth(duration: 0.3)) {
-            page = .details
-        }
-    }
-
-    private func showArtwork() {
-        withAnimation(.smooth(duration: 0.3)) {
-            page = .artwork
-        }
     }
 
     private var playerActivityGesture: some Gesture {

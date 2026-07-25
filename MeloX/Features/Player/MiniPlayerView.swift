@@ -5,6 +5,8 @@ struct MiniPlayerView: View {
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     @Environment(PlayerStore.self) private var player
 
+    let artworkTransitionID: String
+    let artworkTransitionNamespace: Namespace.ID
     let onExpand: () -> Void
 
     var body: some View {
@@ -14,6 +16,10 @@ struct MiniPlayerView: View {
                     HStack(spacing: isInline ? 8 : 10) {
                         ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
                             .frame(width: artworkSize, height: artworkSize)
+                            .matchedTransitionSource(
+                                id: artworkTransitionID,
+                                in: artworkTransitionNamespace
+                            )
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(song.name)

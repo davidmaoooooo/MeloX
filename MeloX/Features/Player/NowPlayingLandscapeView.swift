@@ -91,16 +91,16 @@ struct NowPlayingLandscapeView: View {
         ArtworkImage(url: song.album?.artworkURL, cornerRadius: 12)
             .frame(width: side, height: side)
             .scaleEffect(player.isPlaying || !settings.shrinksPausedArtwork ? 1 : 0.9)
-            .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+            .shadow(
+                color: .black.opacity(
+                    player.isPlaying ? 0.32 : 0.18
+                ),
+                radius: player.isPlaying ? 24 : 14,
+                y: player.isPlaying ? 12 : 7
+            )
             .animation(.smooth(duration: 0.45), value: player.isPlaying)
-            .contentShape(.rect)
-            .onTapGesture(perform: toggleArtworkDetails)
             .accessibilityElement()
-            .accessibilityLabel(page == .details ? "返回封面" : "查看歌曲资料")
-            .accessibilityHint("轻点切换封面和歌曲资料")
-            .accessibilityAction {
-                toggleArtworkDetails()
-            }
+            .accessibilityLabel("\(song.name)的封面")
     }
 
     private var rightPanel: some View {
@@ -164,9 +164,7 @@ struct NowPlayingLandscapeView: View {
             }
 
             NowPlayingSongActions(
-                song: song,
-                isShowingDetails: page == .details,
-                onToggleDetails: toggleArtworkDetails
+                song: song
             )
         }
         .frame(height: 52)
@@ -184,14 +182,6 @@ struct NowPlayingLandscapeView: View {
                     Spacer(minLength: 0)
                 }
                 .transition(.opacity)
-            case .details:
-                NowPlayingSongDetailsPage(
-                    song: song,
-                    showsArtworkToggle: false,
-                    artworkNamespace: artworkNamespace,
-                    onShowArtwork: toggleArtworkDetails
-                )
-                .transition(.opacity)
             case .lyrics:
                 NowPlayingLyricsPage(
                     song: song,
@@ -203,8 +193,7 @@ struct NowPlayingLandscapeView: View {
                     artworkNamespace: artworkNamespace,
                     onInterfaceInteraction: onInterfaceInteraction,
                     onInterfaceVisibilityChange:
-                        onInterfaceVisibilityChange,
-                    onShowDetails: { page = .details }
+                        onInterfaceVisibilityChange
                 )
                 .accessibilityAction(
                     named: lyricsInterfaceAccessibilityActionName
@@ -213,7 +202,11 @@ struct NowPlayingLandscapeView: View {
                 }
                 .transition(.opacity)
             case .queue:
-                NowPlayingQueuePage()
+                NowPlayingQueuePage(
+                    song: song,
+                    presentation: .landscape,
+                    artworkNamespace: artworkNamespace
+                )
                     .transition(.opacity)
             }
         }
@@ -238,12 +231,6 @@ struct NowPlayingLandscapeView: View {
 
     private func exitSkylineLyrics() {
         showsSkylineLyrics = false
-    }
-
-    private func toggleArtworkDetails() {
-        withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.3)) {
-            page = page == .details ? .artwork : .details
-        }
     }
 
     private var dismissalDragGesture: some Gesture {

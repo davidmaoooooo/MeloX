@@ -99,6 +99,10 @@ struct DailySongsData: Decodable {
     let dailySongs: [Song]
 }
 
+struct SimilarSongsResponse: Decodable {
+    let songs: [Song]
+}
+
 struct LyricResponse: Decodable {
     let lrc: LyricContent?
     let yrc: LyricContent?
