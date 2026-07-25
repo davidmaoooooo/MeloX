@@ -3,6 +3,7 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.openURL) private var openURL
     @Environment(AppSettings.self) private var settings
+    @Environment(AppReleaseNotesStore.self) private var releaseNotes
 
     @State private var isCheckingUpdate = false
     @State private var updateAlert: AppUpdateAlert?
@@ -36,6 +37,23 @@ struct AboutView: View {
             }
 
             Section {
+                NavigationLink {
+                    ReleaseNotesView(
+                        releaseNotes: releaseNotes.currentReleaseNotes,
+                        currentVersion: releaseNotes.currentVersion
+                    )
+                } label: {
+                    HStack {
+                        Label("更新日志", systemImage: "doc.text")
+
+                        Spacer()
+
+                        Text("MeloX \(appVersion)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Toggle("启动时自动检查更新", isOn: $settings.checksUpdatesOnLaunch)
 
                 Button {

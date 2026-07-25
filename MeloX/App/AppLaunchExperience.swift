@@ -9,16 +9,25 @@ extension View {
 private struct AppLaunchExperienceModifier: ViewModifier {
     @Environment(\.openURL) private var openURL
     @Environment(AppSettings.self) private var settings
+    @Environment(AppReleaseNotesStore.self) private var releaseNotes
 
     @State private var didHandleLaunch = false
+    @State private var didContinueLaunchExperience = false
     @State private var didRunAutomaticUpdateCheck = false
     @State private var showsRecommendationDialog = false
+    @State private var presentedReleaseNotes: AppReleaseNotes?
     @State private var automaticUpdateAlert: AutomaticUpdateAlert?
 
     func body(content: Content) -> some View {
         content
             .task {
                 await handleLaunch()
+            }
+            .sheet(
+                item: $presentedReleaseNotes,
+                onDismiss: finishReleaseNotesPresentation
+            ) { notes in
+                ReleaseNotesSheet(releaseNotes: notes)
             }
             .confirmationDialog(
                 "喜欢 MeloX 吗？",
@@ -61,6 +70,29 @@ private struct AppLaunchExperienceModifier: ViewModifier {
         guard !didHandleLaunch else { return }
         didHandleLaunch = true
 
+        if settings.hasCompletedOnboarding,
+           let pendingReleaseNotes = releaseNotes.releaseNotesToPresent {
+            presentedReleaseNotes = pendingReleaseNotes
+            return
+        }
+
+        await continueLaunchExperience()
+    }
+
+    @MainActor
+    private func finishReleaseNotesPresentation() {
+        releaseNotes.markCurrentVersionPresented()
+
+        Task {
+            await continueLaunchExperience()
+        }
+    }
+
+    @MainActor
+    private func continueLaunchExperience() async {
+        guard !didContinueLaunchExperience else { return }
+        didContinueLaunchExperience = true
+
         if AppRecommendationPrompt.recordLaunch() {
             showsRecommendationDialog = true
         } else {
@@ -97,14 +129,4 @@ private struct AutomaticUpdateAlert: Identifiable {
     let id = UUID()
     let message: String
     let releaseURL: URL
-}
-
-extension Bundle {
-    var appVersion: String {
-        object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-    }
-
-    var appBuildNumber: String {
-        object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-    }
 }

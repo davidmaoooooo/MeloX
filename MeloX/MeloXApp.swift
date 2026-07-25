@@ -12,10 +12,16 @@ struct MeloXApp: App {
     @State private var lyrics: LyricsStore
     @State private var floatingLyrics: FloatingLyricsController
     @State private var screenAwakeCoordinator: ScreenAwakeCoordinator
+    @State private var releaseNotes: AppReleaseNotesStore
     @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     init() {
         let settings = AppSettings()
+        let releaseNotes = AppReleaseNotesStore(
+            currentVersion: Bundle.main.appVersion,
+            hadCompletedOnboarding: settings.hasCompletedOnboarding,
+            currentReleaseNotes: AppReleaseNotesLoader.load()
+        )
         let api = NeteaseAPI(settings: settings)
         let library = LibraryStore(api: api, settings: settings)
         let cloud = CloudMusicStore(api: api, settings: settings)
@@ -43,6 +49,7 @@ struct MeloXApp: App {
         _lyrics = State(initialValue: lyrics)
         _floatingLyrics = State(initialValue: floatingLyrics)
         _screenAwakeCoordinator = State(initialValue: ScreenAwakeCoordinator())
+        _releaseNotes = State(initialValue: releaseNotes)
     }
 
     var body: some Scene {
@@ -57,6 +64,7 @@ struct MeloXApp: App {
                 .environment(lyrics)
                 .environment(floatingLyrics)
                 .environment(screenAwakeCoordinator)
+                .environment(releaseNotes)
                 .environment(\.effectiveLyricsRefreshRate, effectiveLyricsRefreshRate)
                 .tint(.red)
                 .onReceive(

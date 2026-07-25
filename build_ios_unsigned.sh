@@ -9,9 +9,10 @@ APP_NAME="MeloX"
 DERIVED_DATA="$BUILD/DerivedData-iOS"
 STAGING="$BUILD/IPA"
 IPA_PATH="$BUILD/MeloX-iOS-unsigned.ipa"
+RELEASE_NOTES_PATH="$BUILD/ReleaseNotes.json"
 
 rm -rf "$DERIVED_DATA" "$STAGING"
-rm -f "$IPA_PATH"
+rm -f "$IPA_PATH" "$RELEASE_NOTES_PATH"
 mkdir -p "$BUILD"
 
 echo "========== 构建 iOS Release =========="
@@ -40,6 +41,13 @@ if [[ -z "$APP_PATH" ]]; then
   echo "找不到 iOS 构建产物：$APP_NAME.app"
   exit 1
 fi
+
+if [[ ! -f "$APP_PATH/ReleaseNotes.json" ]]; then
+  echo "构建产物中缺少自动生成的更新日志"
+  exit 1
+fi
+
+ditto --norsrc "$APP_PATH/ReleaseNotes.json" "$RELEASE_NOTES_PATH"
 
 echo "========== 生成未签名 IPA =========="
 

@@ -821,16 +821,10 @@ struct PlayerSettingsView: View {
         isResettingSettings = true
 
         Task { @MainActor in
-            await Task.yield()
-
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                settings.resetPlayerSettings()
-            }
-
-            await Task.yield()
-            player.applyEqualizerSettings()
+            await PlayerSettingsResetter.reset(
+                settings: settings,
+                player: player
+            )
             isResettingSettings = false
         }
     }
