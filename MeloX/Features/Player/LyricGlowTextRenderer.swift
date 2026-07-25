@@ -7,13 +7,15 @@ struct LyricTimingTextAttribute: TextAttribute, Hashable, Sendable {
     let syllableEndTime: TimeInterval
     let characterIndex: Int
     let characterCount: Int
+    let wordStartTime: TimeInterval
+    let wordEndTime: TimeInterval
 }
 
 /// Renders timed lyric runs in the coordinates supplied by SwiftUI.
 /// Each glyph fades uniformly from its unplayed style to white, avoiding a
-/// sweeping highlight that competes with the lyric glow. The played glyph and
-/// its original glow are composited once before lift and long-syllable scale
-/// transforms are applied, keeping their relative brightness stable.
+/// sweeping highlight that competes with the lyric glow. Word lift moves both
+/// layers as one block, while character lift preserves the original played-only
+/// movement. Glow and text stay composited through all transforms.
 struct LyricGlowTextRenderer: TextRenderer {
     struct Style: Equatable, Sendable {
         let glowRadius: CGFloat
@@ -25,6 +27,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         let playedRise: CGFloat
         let maximumLongSyllableScale: CGFloat
         let longSyllableExpansionPadding: CGFloat
+        let liftMode: LyricsLiftMode
 
         fileprivate var drawsGlow: Bool {
             glowRadius > 0 && glowOpacity > 0
@@ -131,22 +134,31 @@ struct LyricGlowTextRenderer: TextRenderer {
         }
 
         let state = visualState(for: timing)
+        var runContext = context
+        let liftsWholeWord = style.liftMode == .word
+        if liftsWholeWord {
+            applyLift(
+                to: &runContext,
+                progress: state.liftProgress
+            )
+        }
+
         drawUnplayed(
             run,
             revealProgress: state.revealProgress,
             blurRadius: state.unplayedBlurRadius,
-            in: &context
+            in: &runContext
         )
         guard state.revealProgress > 0 else { return }
 
         drawPlayed(
             run,
             revealProgress: state.revealProgress,
-            liftProgress: state.liftProgress,
+            liftProgress: liftsWholeWord ? 0 : state.liftProgress,
             expansionScale: state.expansionScale,
             rawProgress: state.rawProgress,
             glowStrength: state.glowStrength,
-            in: &context
+            in: &runContext
         )
     }
 
@@ -173,14 +185,20 @@ struct LyricGlowTextRenderer: TextRenderer {
     private func liftProgress(
         for timing: LyricTimingTextAttribute
     ) -> Double {
-        guard playbackTime > timing.startTime else { return 0 }
+        let liftStartTime = style.liftMode == .word
+            ? timing.wordStartTime
+            : timing.startTime
+        let liftEndTime = style.liftMode == .word
+            ? timing.wordEndTime
+            : timing.endTime
+        guard playbackTime > liftStartTime else { return 0 }
 
-        let transitionEndTime = timing.endTime
+        let transitionEndTime = liftEndTime
             + Metrics.liftContinuationDuration
-        let transitionDuration = transitionEndTime - timing.startTime
+        let transitionDuration = transitionEndTime - liftStartTime
         guard transitionDuration > 0 else { return 1 }
         return smootherStep(
-            (playbackTime - timing.startTime) / transitionDuration
+            (playbackTime - liftStartTime) / transitionDuration
         )
     }
 
@@ -257,8 +275,7 @@ struct LyricGlowTextRenderer: TextRenderer {
             of: run,
             progress: revealProgress
         )
-        let verticalOffset = -max(style.playedRise, 0)
-            * CGFloat(unitProgress(liftProgress))
+        let verticalOffset = liftOffset(at: liftProgress)
         let scale = max(expansionScale, 1)
         let bounds = run.typographicBounds.rect
         var playedContext = context
@@ -291,6 +308,31 @@ struct LyricGlowTextRenderer: TextRenderer {
             textContext.opacity = unitProgress(revealProgress)
             textContext.draw(run)
         }
+    }
+
+    private func applyLift(
+        to context: inout GraphicsContext,
+        progress: Double
+    ) {
+        let verticalOffset = liftOffset(at: progress)
+        guard verticalOffset != 0 else { return }
+        context.addFilter(
+            .projectionTransform(
+                ProjectionTransform(
+                    CGAffineTransform(
+                        translationX: 0,
+                        y: verticalOffset
+                    )
+                )
+            )
+        )
+    }
+
+    private func liftOffset(
+        at progress: Double
+    ) -> CGFloat {
+        -max(style.playedRise, 0)
+            * CGFloat(unitProgress(progress))
     }
 
     private func drawGlow(

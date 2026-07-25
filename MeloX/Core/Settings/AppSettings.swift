@@ -70,6 +70,7 @@ final class AppSettings {
     static let lyricsFocusColorLeadTimeRange = -0.3...0.3
     static let defaultLyricsTranslationFontScale = 0.65
     static let defaultLyricsTranslationOpacity = 0.9
+    static let defaultLyricsLiftMode: LyricsLiftMode = .character
     static let defaultLyricsGlowLongSyllablesOnly = true
     static let defaultLyricsLongSyllableDurationThreshold = 0.7
     static let lyricsLongSyllableDurationThresholdRange = 0.3...1.5
@@ -101,6 +102,7 @@ final class AppSettings {
         static let lyricsTapToSeek = "lyricsTapToSeek"
         static let lyricsWordByWord = "lyricsWordByWord"
         static let lyricsPseudoWordByWord = "lyricsPseudoWordByWord"
+        static let lyricsLiftMode = "lyricsLiftMode"
         static let lyricsGlowEnabled = "lyricsGlowEnabled"
         static let lyricsGlowLongSyllablesOnly =
             "lyricsGlowLongSyllablesOnly"
@@ -305,6 +307,15 @@ final class AppSettings {
 
     var lyricsPseudoWordByWord: Bool {
         didSet { defaults.set(lyricsPseudoWordByWord, forKey: Key.lyricsPseudoWordByWord) }
+    }
+
+    var lyricsLiftMode: LyricsLiftMode {
+        didSet {
+            defaults.set(
+                lyricsLiftMode.rawValue,
+                forKey: Key.lyricsLiftMode
+            )
+        }
     }
 
     var lyricsGlowEnabled: Bool {
@@ -637,6 +648,9 @@ final class AppSettings {
         lyricsTapToSeek = defaults.object(forKey: Key.lyricsTapToSeek) as? Bool ?? true
         lyricsWordByWord = defaults.object(forKey: Key.lyricsWordByWord) as? Bool ?? true
         lyricsPseudoWordByWord = defaults.object(forKey: Key.lyricsPseudoWordByWord) as? Bool ?? false
+        lyricsLiftMode = LyricsLiftMode(
+            rawValue: defaults.string(forKey: Key.lyricsLiftMode) ?? ""
+        ) ?? Self.defaultLyricsLiftMode
         lyricsGlowEnabled = defaults.object(forKey: Key.lyricsGlowEnabled) as? Bool ?? true
         lyricsGlowLongSyllablesOnly = defaults.object(
             forKey: Key.lyricsGlowLongSyllablesOnly
@@ -847,6 +861,7 @@ final class AppSettings {
         lyricsTapToSeek = true
         lyricsWordByWord = true
         lyricsPseudoWordByWord = false
+        lyricsLiftMode = Self.defaultLyricsLiftMode
         lyricsGlowEnabled = true
         lyricsGlowLongSyllablesOnly =
             Self.defaultLyricsGlowLongSyllablesOnly

@@ -345,6 +345,16 @@ struct PlayerSettingsView: View {
                 Toggle("逐字歌词", isOn: $settings.lyricsWordByWord)
 
                 if settings.lyricsWordByWord || settings.lyricsPseudoWordByWord {
+                    Picker(
+                        "抬升方式",
+                        selection: $settings.lyricsLiftMode
+                    ) {
+                        ForEach(LyricsLiftMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     Toggle("逐字歌词光效", isOn: $settings.lyricsGlowEnabled)
 
                     valueSlider(
@@ -377,7 +387,7 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("歌词内容与光效")
             } footer: {
-                Text("中英翻译直接使用网易云提供的 ytlrc 或 tlyric。Apple Music 样式默认只展开当前播放行的翻译，换句时旧翻译收起、新翻译淡入并参与整页位移；也可以改为全部显示。逐字歌词开关仅控制歌曲自带的 YRC 时间轴。长音判定阈值默认 0.70 秒，并同时控制膨胀和“仅长音显示辉光”的触发；关闭该选项后，普通音节也会显示辉光，但膨胀仍只用于长音。")
+                Text("中英翻译直接使用网易云提供的 ytlrc 或 tlyric。Apple Music 样式默认只展开当前播放行的翻译，换句时旧翻译收起、新翻译淡入并参与整页位移；也可以改为全部显示。逐字歌词开关仅控制歌曲自带的 YRC 时间轴；抬升方式只改变播放中文字的位移粒度，不影响逐字高亮。长音判定阈值默认 0.70 秒，并同时控制膨胀和“仅长音显示辉光”的触发；关闭该选项后，普通音节也会显示辉光，但膨胀仍只用于长音。")
             }
 
             Section {

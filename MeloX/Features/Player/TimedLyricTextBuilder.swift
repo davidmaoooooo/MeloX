@@ -11,6 +11,10 @@ enum TimedLyricTextBuilder {
     ) -> Text {
         let characters = timedCharacters(from: syllables)
         let source = characters.map(\.text).joined()
+        let liftTimings = liftTimings(
+            for: characters,
+            source: source
+        )
         let lineBreakOffsets = lineBreakCharacterOffsets(
             in: source,
             constrainedWidth: constrainedWidth,
@@ -30,6 +34,7 @@ enum TimedLyricTextBuilder {
             }
 
             let character = entry.element
+            let liftTiming = liftTimings[offset]
             let fragment = Text(verbatim: character.text).customAttribute(
                 LyricTimingTextAttribute(
                     startTime: character.startTime,
@@ -37,11 +42,47 @@ enum TimedLyricTextBuilder {
                     syllableStartTime: character.syllableStartTime,
                     syllableEndTime: character.syllableEndTime,
                     characterIndex: character.characterIndex,
-                    characterCount: character.characterCount
+                    characterCount: character.characterCount,
+                    wordStartTime: liftTiming.startTime,
+                    wordEndTime: liftTiming.endTime
                 )
             )
             return Text("\(text)\(fragment)")
         }
+    }
+
+    private static func liftTimings(
+        for characters: [TimedCharacter],
+        source: String
+    ) -> [LiftTiming] {
+        var result = characters.map {
+            LiftTiming(
+                startTime: $0.startTime,
+                endTime: $0.endTime
+            )
+        }
+
+        for range in LyricWordSegmenter.blockRanges(in: source) {
+            guard range.lowerBound >= characters.startIndex,
+                  range.upperBound <= characters.endIndex,
+                  range.lowerBound < range.upperBound else {
+                continue
+            }
+
+            let block = characters[range]
+            let timedBlock = block.filter { !$0.isWhitespace }
+            guard let startTime = timedBlock.map(\.startTime).min(),
+                  let endTime = timedBlock.map(\.endTime).max() else {
+                continue
+            }
+            for index in range {
+                result[index] = LiftTiming(
+                    startTime: startTime,
+                    endTime: endTime
+                )
+            }
+        }
+        return result
     }
 
     private static func timedCharacters(
@@ -229,6 +270,11 @@ enum TimedLyricTextBuilder {
 }
 
 private extension TimedLyricTextBuilder {
+    struct LiftTiming {
+        let startTime: TimeInterval
+        let endTime: TimeInterval
+    }
+
     struct TimedCharacter {
         let text: String
         let startTime: TimeInterval
@@ -240,6 +286,10 @@ private extension TimedLyricTextBuilder {
 
         var isLineBreak: Bool {
             text == "\n" || text == "\r" || text == "\r\n"
+        }
+
+        var isWhitespace: Bool {
+            text.allSatisfy(\.isWhitespace)
         }
     }
 }

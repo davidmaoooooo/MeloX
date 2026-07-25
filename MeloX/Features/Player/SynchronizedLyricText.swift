@@ -267,7 +267,8 @@ struct SynchronizedLyricText: View {
                 maximumUnplayedBlurRadius: maximumUnplayedBlurRadius,
                 playedRise: playedRise,
                 maximumLongSyllableScale: maximumLongSyllableScale,
-                longSyllableExpansionPadding: longSyllableExpansionPadding
+                longSyllableExpansionPadding: longSyllableExpansionPadding,
+                liftMode: settings.lyricsLiftMode
             ),
             layoutConfiguration: .init(
                 width: timedLayoutWidth,
