@@ -244,6 +244,14 @@ struct PlayerSettingsView: View {
                 )
 
                 valueSlider(
+                    title: "追赶速度梯度",
+                    value: $settings.lyricsFocusCascadeChaseSpeedGradient,
+                    range: AppSettings.lyricsFocusCascadeChaseSpeedGradientRange,
+                    step: 0.01,
+                    valueText: "\(Int((settings.lyricsFocusCascadeChaseSpeedGradient * 100).rounded()))%"
+                )
+
+                valueSlider(
                     title: "位移收束时长",
                     value: $settings.lyricsFocusCascadeDuration,
                     range: AppSettings.lyricsFocusCascadeDurationRange,
@@ -266,11 +274,19 @@ struct PlayerSettingsView: View {
 
                 if settings.lyricsFocusCascadeBounceEnabled {
                     valueSlider(
-                        title: "回弹弹性",
+                        title: "最大回弹弹性",
                         value: $settings.lyricsFocusCascadeBounce,
                         range: AppSettings.lyricsFocusCascadeBounceRange,
                         step: 0.01,
                         valueText: "\(Int((settings.lyricsFocusCascadeBounce * 100).rounded()))%"
+                    )
+
+                    valueSlider(
+                        title: "回弹强度梯度",
+                        value: $settings.lyricsFocusCascadeBounceGradient,
+                        range: AppSettings.lyricsFocusCascadeBounceGradientRange,
+                        step: 0.01,
+                        valueText: "\(Int((settings.lyricsFocusCascadeBounceGradient * 100).rounded()))%"
                     )
                 }
 
@@ -307,7 +323,7 @@ struct PlayerSettingsView: View {
             } header: {
                 Text("歌词动画")
             } footer: {
-                Text("当前句及之前的歌词先移动，等待“后续歌词启动延迟”（默认 40 毫秒）后，下一句及之后的歌词才开始位移；后续歌词的实际延迟再由“基础拖尾延迟”和“逐句拖尾增量”完整累计，不设内部最大延迟；三项均可调至 0 毫秒。“拖尾追赶节奏”默认 96%，数值越低追赶越快。位移基准时长为 0.68 秒，默认关闭位移回弹；当前句升格放大另有独立的 0.58 秒、28% 回弹。瞬移阈值默认 260 毫秒，可在 50–500 毫秒之间调整；剩余时间短于该阈值时会直接对齐。")
+                Text("当前句及之前的歌词先移动，等待“后续歌词启动延迟”（默认 40 毫秒）后，下一句及之后的歌词才开始位移；后续歌词的实际延迟再由“基础拖尾延迟”和“逐句拖尾增量”完整累计，不设内部最大延迟；三项均可调至 0 毫秒。“拖尾追赶节奏”默认 95%，数值越低追赶越快。“追赶速度梯度”和“回弹强度梯度”在 0% 时各句一致，100% 时完整逐句增强，默认分别为 80% 和 85%。位移基准时长为 0.68 秒，默认开启 26% 位移回弹；当前句升格放大另有独立的 0.58 秒、32% 回弹。瞬移阈值默认 260 毫秒，可在 50–500 毫秒之间调整；剩余时间短于该阈值时会直接对齐。")
             }
 
             Section {

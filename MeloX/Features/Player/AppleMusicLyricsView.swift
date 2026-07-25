@@ -1098,9 +1098,24 @@ struct AppleMusicLyricsView: View {
                 return (id, lineOrder)
             }
         )
-        let maximumLineOrder = movementOrderByID.values.max() ?? 0
+        // Keep the focus line's start delay unchanged, while grading its
+        // catch-up speed and bounce from the preceding line downward.
+        let firstChasingIndex = max(
+            highlightedIndex - 1,
+            lyrics.startIndex
+        )
+        let chaseOrderByID: [LyricLine.ID: Int] = Dictionary(
+            uniqueKeysWithValues: orderedMovingIDs.compactMap { id in
+                guard let lineIndex = lyricIndexByID[id],
+                      lineIndex >= firstChasingIndex else {
+                    return nil
+                }
+                return (id, lineIndex - firstChasingIndex)
+            }
+        )
+        let maximumChaseOrder = chaseOrderByID.values.max() ?? 0
         guard let cascadeTiming = LyricPlaybackTimeline.focusCascadeTiming(
-            maximumLineOrder: maximumLineOrder,
+            maximumLineOrder: maximumChaseOrder,
             preferredDelayPerLine:
                 settings.lyricsFocusCascadeDelay,
             preferredDelayIncreasePerLine:
@@ -1123,6 +1138,8 @@ struct AppleMusicLyricsView: View {
             orderedMovingIDs,
             to: highlightedLyricID,
             movementOrderByID: movementOrderByID,
+            chaseOrderByID: chaseOrderByID,
+            maximumChaseOrder: maximumChaseOrder,
             cascadeTiming: cascadeTiming,
             focusColorLeadTime: focusColorLeadTime,
             transitionID: preparedMovementTransition.id
@@ -1133,24 +1150,48 @@ struct AppleMusicLyricsView: View {
         _ orderedMovingIDs: [LyricLine.ID],
         to highlightedLyricID: LyricLine.ID,
         movementOrderByID: [LyricLine.ID: Int],
+        chaseOrderByID: [LyricLine.ID: Int],
+        maximumChaseOrder: Int,
         cascadeTiming: LyricFocusCascadeTiming,
         focusColorLeadTime: TimeInterval,
         transitionID: UUID
     ) async {
         let usesBounce = cascadeTiming.usesBounce
+        let chaseSpeedGradient = min(
+            max(
+                settings.lyricsFocusCascadeChaseSpeedGradient,
+                AppSettings.lyricsFocusCascadeChaseSpeedGradientRange.lowerBound
+            ),
+            AppSettings.lyricsFocusCascadeChaseSpeedGradientRange.upperBound
+        )
+        let slowestChaseDuration = cascadeTiming.lineTiming(
+            for: 0
+        ).duration
         let movementAnimations = Dictionary(
             uniqueKeysWithValues: orderedMovingIDs.map { id in
-                let lineOrder = movementOrderByID[id, default: 0]
-                let lineTiming = cascadeTiming.lineTiming(
-                    for: lineOrder
+                let movementOrder = movementOrderByID[id, default: 0]
+                let chaseOrder = chaseOrderByID[id]
+                let movementTiming = cascadeTiming.lineTiming(
+                    for: movementOrder
                 )
+                let chaseTiming = cascadeTiming.lineTiming(
+                    for: chaseOrder ?? 0
+                )
+                let chaseDuration = slowestChaseDuration
+                    + (
+                        chaseTiming.duration
+                            - slowestChaseDuration
+                    ) * chaseSpeedGradient
                 return (
                     id,
                     LyricMovementAnimationConfiguration(
-                        delay: lineTiming.delay,
-                        duration: lineTiming.duration,
+                        delay: movementTiming.delay,
+                        duration: chaseDuration,
                         usesBounce: usesBounce,
-                        bounce: settings.lyricsFocusCascadeBounce
+                        bounce: lyricFocusCascadeBounce(
+                            chaseOrder: chaseOrder,
+                            maximumChaseOrder: maximumChaseOrder
+                        )
                     )
                 )
             }
@@ -1208,6 +1249,38 @@ struct AppleMusicLyricsView: View {
         // Clearing it on the furthest row's timer can swap a retained row back
         // to LazyVStack's layout frame while the current lyric is still playing.
         // The next transition reads this state and retargets it continuously.
+    }
+
+    private func lyricFocusCascadeBounce(
+        chaseOrder: Int?,
+        maximumChaseOrder: Int
+    ) -> Double {
+        let maximumBounce = min(
+            max(
+                settings.lyricsFocusCascadeBounce,
+                AppSettings.lyricsFocusCascadeBounceRange.lowerBound
+            ),
+            AppSettings.lyricsFocusCascadeBounceRange.upperBound
+        )
+        guard maximumBounce > 0, let chaseOrder else { return 0 }
+
+        let bounceGradient = min(
+            max(
+                settings.lyricsFocusCascadeBounceGradient,
+                AppSettings.lyricsFocusCascadeBounceGradientRange.lowerBound
+            ),
+            AppSettings.lyricsFocusCascadeBounceGradientRange.upperBound
+        )
+        let bouncingLineCount = max(maximumChaseOrder + 1, 1)
+        let linePosition = min(
+            max(chaseOrder, 0),
+            maximumChaseOrder
+        ) + 1
+        let normalizedPosition =
+            Double(linePosition) / Double(bouncingLineCount)
+        let bounceScale =
+            1 - (1 - normalizedPosition) * bounceGradient
+        return maximumBounce * bounceScale
     }
 
     private func lyricMovementAnimation(
