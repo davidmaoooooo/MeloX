@@ -101,7 +101,7 @@ struct AppleMusicLyricInterludeView: View {
 
     let interlude: LyricInterlude
     let fontSize: CGFloat
-    let onToggleInterface: (() -> Void)?
+    let onInterfaceInteraction: (() -> Void)?
 
     var body: some View {
         Group {
@@ -137,7 +137,7 @@ struct AppleMusicLyricInterludeView: View {
         )
         .contentShape(.rect)
         .onTapGesture {
-            onToggleInterface?()
+            onInterfaceInteraction?()
         }
         .accessibilityHidden(true)
     }

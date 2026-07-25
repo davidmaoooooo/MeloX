@@ -16,7 +16,7 @@ struct NowPlayingLyricsPage: View {
     let presentation: NowPlayingLyricsPresentation
     let isInterfaceHidden: Bool
     let artworkNamespace: Namespace.ID
-    let onToggleInterface: (() -> Void)?
+    let onInterfaceInteraction: (() -> Void)?
     let onShowDetails: (() -> Void)?
 
     init(
@@ -27,7 +27,7 @@ struct NowPlayingLyricsPage: View {
         presentation: NowPlayingLyricsPresentation = .portrait,
         isInterfaceHidden: Bool = false,
         artworkNamespace: Namespace.ID,
-        onToggleInterface: (() -> Void)? = nil,
+        onInterfaceInteraction: (() -> Void)? = nil,
         onShowDetails: (() -> Void)? = nil
     ) {
         self.song = song
@@ -37,7 +37,7 @@ struct NowPlayingLyricsPage: View {
         self.presentation = presentation
         self.isInterfaceHidden = isInterfaceHidden
         self.artworkNamespace = artworkNamespace
-        self.onToggleInterface = onToggleInterface
+        self.onInterfaceInteraction = onInterfaceInteraction
         self.onShowDetails = onShowDetails
     }
 
@@ -98,21 +98,21 @@ struct NowPlayingLyricsPage: View {
                 highlightedLyricID: highlightedLyricID,
                 isInterfaceHidden: isInterfaceHidden,
                 bottomOverlayHeight: appleMusicBottomOverlayHeight,
-                onToggleInterface: onToggleInterface
+                onInterfaceInteraction: onInterfaceInteraction
             )
         case .eva:
             EVALyricsView(
                 lyrics: lyrics,
                 errorMessage: errorMessage,
                 highlightedLyricID: highlightedLyricID,
-                onToggleInterface: onToggleInterface
+                onToggleInterface: onInterfaceInteraction
             )
         case .textPV:
             TextPVLyricsView(
                 lyrics: lyrics,
                 errorMessage: errorMessage,
                 highlightedLyricID: highlightedLyricID,
-                onToggleInterface: onToggleInterface
+                onToggleInterface: onInterfaceInteraction
             )
         }
     }

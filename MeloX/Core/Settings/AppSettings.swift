@@ -54,6 +54,8 @@ final class AppSettings {
     static let lyricsLiveActivityScrollPauseRange = 0.0...3.0
     static let automaticCachePlaybackThresholdOptions = [3, 5, 10, 20]
     static let defaultLyricsInterludeCountdownEnabled = true
+    static let defaultAppleMusicLyricsInterfaceAutoHideDelay = 5.0
+    static let appleMusicLyricsInterfaceAutoHideDelayRange = 3.0...15.0
     static let defaultLyricsFontSize = 28.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
     static let defaultLyricsCurrentLineScale = 1.18
@@ -153,6 +155,8 @@ final class AppSettings {
         static let lyricsStyle = "lyricsStyle"
         static let lyricsInterludeCountdownEnabled =
             "lyricsInterludeCountdownEnabled"
+        static let appleMusicLyricsInterfaceAutoHideDelay =
+            "appleMusicLyricsInterfaceAutoHideDelay"
         static let lyricsFontSize = "lyricsFontSize"
         static let lyricsFontWeight = "lyricsFontWeight"
         static let lyricsCurrentLineScale = "lyricsCurrentLineScale"
@@ -456,6 +460,15 @@ final class AppSettings {
             defaults.set(
                 lyricsInterludeCountdownEnabled,
                 forKey: Key.lyricsInterludeCountdownEnabled
+            )
+        }
+    }
+
+    var appleMusicLyricsInterfaceAutoHideDelay: Double {
+        didSet {
+            defaults.set(
+                appleMusicLyricsInterfaceAutoHideDelay,
+                forKey: Key.appleMusicLyricsInterfaceAutoHideDelay
             )
         }
     }
@@ -923,6 +936,16 @@ final class AppSettings {
         lyricsInterludeCountdownEnabled = defaults.object(
             forKey: Key.lyricsInterludeCountdownEnabled
         ) as? Bool ?? Self.defaultLyricsInterludeCountdownEnabled
+        let storedAppleMusicInterfaceAutoHideDelay = defaults.object(
+            forKey: Key.appleMusicLyricsInterfaceAutoHideDelay
+        ) as? Double ?? Self.defaultAppleMusicLyricsInterfaceAutoHideDelay
+        appleMusicLyricsInterfaceAutoHideDelay = min(
+            max(
+                storedAppleMusicInterfaceAutoHideDelay,
+                Self.appleMusicLyricsInterfaceAutoHideDelayRange.lowerBound
+            ),
+            Self.appleMusicLyricsInterfaceAutoHideDelayRange.upperBound
+        )
         lyricsFontSize = defaults.object(
             forKey: Key.lyricsFontSize
         ) as? Double ?? Self.defaultLyricsFontSize
@@ -1257,6 +1280,8 @@ final class AppSettings {
         lyricsStyle = .appleMusic
         lyricsInterludeCountdownEnabled =
             Self.defaultLyricsInterludeCountdownEnabled
+        appleMusicLyricsInterfaceAutoHideDelay =
+            Self.defaultAppleMusicLyricsInterfaceAutoHideDelay
         lyricsFontSize = Self.defaultLyricsFontSize
         lyricsFontWeight = Self.defaultLyricsFontWeight
         lyricsCurrentLineScale = Self.defaultLyricsCurrentLineScale

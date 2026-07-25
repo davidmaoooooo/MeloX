@@ -15,7 +15,7 @@ struct AppleMusicLyricsView: View {
     let highlightedLyricID: LyricLine.ID?
     let isInterfaceHidden: Bool
     let bottomOverlayHeight: CGFloat
-    let onToggleInterface: (() -> Void)?
+    let onInterfaceInteraction: (() -> Void)?
     private let lyricIndexByID: [LyricLine.ID: Int]
     private let hasSyllableSyncedLyrics: Bool
     private let hasTranslations: Bool
@@ -42,14 +42,14 @@ struct AppleMusicLyricsView: View {
         highlightedLyricID: LyricLine.ID?,
         isInterfaceHidden: Bool = false,
         bottomOverlayHeight: CGFloat = 0,
-        onToggleInterface: (() -> Void)? = nil
+        onInterfaceInteraction: (() -> Void)? = nil
     ) {
         self.lyrics = lyrics
         self.errorMessage = errorMessage
         self.highlightedLyricID = highlightedLyricID
         self.isInterfaceHidden = isInterfaceHidden
         self.bottomOverlayHeight = bottomOverlayHeight
-        self.onToggleInterface = onToggleInterface
+        self.onInterfaceInteraction = onInterfaceInteraction
         lyricIndexByID = Dictionary(
             uniqueKeysWithValues: lyrics.enumerated().map { index, line in
                 (line.id, index)
@@ -92,7 +92,7 @@ struct AppleMusicLyricsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(.rect)
                 .onTapGesture {
-                    onToggleInterface?()
+                    onInterfaceInteraction?()
                 }
             } else {
                 ProgressView("正在载入歌词")
@@ -101,7 +101,7 @@ struct AppleMusicLyricsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(.rect)
                     .onTapGesture {
-                        onToggleInterface?()
+                        onInterfaceInteraction?()
                     }
             }
         } else {
@@ -184,8 +184,8 @@ struct AppleMusicLyricsView: View {
                                     fontSize: CGFloat(
                                         settings.lyricsFontSize
                                     ),
-                                    onToggleInterface:
-                                        onToggleInterface
+                                    onInterfaceInteraction:
+                                        onInterfaceInteraction
                                 )
                                 .id(activeInterlude.id)
                             }
@@ -337,7 +337,7 @@ struct AppleMusicLyricsView: View {
                             .frame(height: bottomContentPadding)
                             .contentShape(.rect)
                             .onTapGesture {
-                                onToggleInterface?()
+                                onInterfaceInteraction?()
                             }
                             .accessibilityHidden(true)
                     }
@@ -384,6 +384,7 @@ struct AppleMusicLyricsView: View {
                 .onScrollPhaseChange { _, newPhase in
                     switch newPhase {
                     case .tracking, .interacting:
+                        onInterfaceInteraction?()
                         browsingGeneration += 1
                         resetMovementOffsets()
                         isBrowsingLyrics = true
@@ -1737,11 +1738,12 @@ struct AppleMusicLyricsView: View {
         TapGesture(count: 2)
             .exclusively(before: TapGesture(count: 1))
             .onEnded { gesture in
+                onInterfaceInteraction?()
                 switch gesture {
                 case .first:
                     seek(to: line)
                 case .second:
-                    onToggleInterface?()
+                    break
                 }
             }
     }

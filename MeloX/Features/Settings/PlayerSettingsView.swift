@@ -625,6 +625,21 @@ struct PlayerSettingsView: View {
             Section {
                 Toggle("双击歌词跳转", isOn: $settings.lyricsTapToSeek)
 
+                if settings.lyricsStyle == .appleMusic {
+                    valueSlider(
+                        title: "控制栏自动隐藏",
+                        value:
+                            $settings
+                                .appleMusicLyricsInterfaceAutoHideDelay,
+                        range:
+                            AppSettings
+                                .appleMusicLyricsInterfaceAutoHideDelayRange,
+                        step: 1,
+                        valueText:
+                            "\(Int(settings.appleMusicLyricsInterfaceAutoHideDelay)) 秒"
+                    )
+                }
+
                 valueSlider(
                     title: "歌词提前量",
                     value: $settings.lyricsAdvanceTime,
@@ -656,6 +671,12 @@ struct PlayerSettingsView: View {
                         "恢复跟随",
                         "开启后，手动浏览歌词结束并等待指定时间，再返回当前播放行。"
                     )
+                    if settings.lyricsStyle == .appleMusic {
+                        footerDescription(
+                            "控制栏自动隐藏",
+                            "Apple Music 歌词停止操作达到设定时间后自动隐藏控制栏；再次操作只会显示控制栏并重新计时。"
+                        )
+                    }
                 }
             }
 

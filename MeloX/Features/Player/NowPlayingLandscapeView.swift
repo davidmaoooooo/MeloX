@@ -6,7 +6,7 @@ struct NowPlayingLandscapeView: View {
     @Environment(AppSettings.self) private var settings
 
     @Binding var page: NowPlayingPage
-    @Binding var showsLyricsControls: Bool
+    let showsLyricsControls: Bool
 
     let song: Song
     let lyrics: [LyricLine]
@@ -14,6 +14,7 @@ struct NowPlayingLandscapeView: View {
     let highlightedLyricID: LyricLine.ID?
     let artworkNamespace: Namespace.ID
     let onDismiss: () -> Void
+    let onInterfaceInteraction: () -> Void
 
     @State private var showsSkylineLyrics = false
 
@@ -35,7 +36,6 @@ struct NowPlayingLandscapeView: View {
         }
         .onChange(of: page) { _, newPage in
             if newPage != .lyrics {
-                showsLyricsControls = true
                 showsSkylineLyrics = false
             }
         }
@@ -200,13 +200,13 @@ struct NowPlayingLandscapeView: View {
                     presentation: .landscape,
                     isInterfaceHidden: hidesLyricsControls,
                     artworkNamespace: artworkNamespace,
-                    onToggleInterface: toggleLyricsControls,
+                    onInterfaceInteraction: onInterfaceInteraction,
                     onShowDetails: { page = .details }
                 )
                 .accessibilityAction(
-                    named: showsLyricsControls ? "隐藏播放器控制" : "显示播放器控制"
+                    named: lyricsInterfaceAccessibilityActionName
                 ) {
-                    toggleLyricsControls()
+                    onInterfaceInteraction()
                 }
                 .transition(.opacity)
             case .queue:
@@ -220,10 +220,13 @@ struct NowPlayingLandscapeView: View {
         min(max(width * 0.035, 18), 38)
     }
 
-    private func toggleLyricsControls() {
-        withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.3)) {
-            showsLyricsControls.toggle()
+    private var lyricsInterfaceAccessibilityActionName: String {
+        if settings.lyricsStyle == .appleMusic {
+            return "显示播放器控制"
         }
+        return showsLyricsControls
+            ? "隐藏播放器控制"
+            : "显示播放器控制"
     }
 
     private func enterSkylineLyrics() {
