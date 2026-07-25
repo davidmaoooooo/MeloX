@@ -49,7 +49,10 @@ struct SkylineCentralLyricsView: View {
                 .onGeometryChange(for: CGFloat.self) { geometry in
                     geometry.size.height
                 } action: { height in
-                    currentLyricHeight = height
+                    updateMeasuredHeight(
+                        height,
+                        storedIn: &currentLyricHeight
+                    )
                 }
                 .scaleEffect(
                     currentLyricStartingScale
@@ -82,7 +85,10 @@ struct SkylineCentralLyricsView: View {
                     .onGeometryChange(for: CGFloat.self) { geometry in
                         geometry.size.height
                     } action: { height in
-                        nextLyricHeight = height
+                        updateMeasuredHeight(
+                            height,
+                            storedIn: &nextLyricHeight
+                        )
                     }
                     .offset(
                         y: nextLyricStartOffset
@@ -279,5 +285,16 @@ struct SkylineCentralLyricsView: View {
             outgoingLyricProgress = 1
             outgoingLine = nil
         }
+    }
+
+    private func updateMeasuredHeight(
+        _ height: CGFloat,
+        storedIn storedHeight: inout CGFloat
+    ) {
+        guard height.isFinite,
+              abs(storedHeight - height) > 0.5 else {
+            return
+        }
+        storedHeight = height
     }
 }

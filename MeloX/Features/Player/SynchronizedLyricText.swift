@@ -53,6 +53,7 @@ struct SynchronizedLyricText: View {
     let playbackScaleStartDelay: TimeInterval
     private let synchronizedText: Text
     private let pseudoSynchronizedText: Text
+    private let layoutStableText: Text
     private let hasPseudoSyllables: Bool
     private let timedPlaybackRange: ClosedRange<TimeInterval>?
 
@@ -121,6 +122,12 @@ struct SynchronizedLyricText: View {
             fontSize: fontSize * calculationScale,
             fontWeight: fontWeight
         )
+        layoutStableText = TimedLyricTextBuilder.text(
+            from: line.text,
+            constrainedWidth: layoutWidth,
+            fontSize: fontSize * calculationScale,
+            fontWeight: fontWeight
+        )
         hasPseudoSyllables = !pseudoSyllables.isEmpty
         if let firstSyllable = activeSyllables.first,
            let lastSyllable = activeSyllables.last,
@@ -132,16 +139,12 @@ struct SynchronizedLyricText: View {
     }
 
     var body: some View {
-        // Lay out once at the fully promoted size. Normalizing only the
-        // reported height preserves the existing stack geometry while the
-        // visual scale moves between the base and promoted presentations.
         LyricTranslationLayout(
             expansion:
                 reservesTranslationSpace && displaysTranslation
                     ? 1
                     : 0,
-            spacing: 2 * effectivePromotedLayoutScale,
-            footprintScale: 1 / effectivePromotedLayoutScale
+            spacing: 2
         ) {
             primaryLyric
                 .animation(
@@ -167,9 +170,7 @@ struct SynchronizedLyricText: View {
                     .onGeometryChange(for: CGFloat.self) { geometry in
                         geometry.size.height
                     } action: { height in
-                        onTranslationHeightChange?(
-                            height / effectivePromotedLayoutScale
-                        )
+                        onTranslationHeightChange?(height)
                     }
                     .opacity(displaysTranslation ? 1 : 0)
                     .animation(
@@ -185,9 +186,12 @@ struct SynchronizedLyricText: View {
             value: displaysTranslation
         )
         .multilineTextAlignment(alignment.textAlignment)
-        .frame(width: layoutWidth, alignment: alignment.frameAlignment)
+        .frame(
+            width: normalizedLayoutWidth,
+            alignment: alignment.frameAlignment
+        )
         .scaleEffect(
-            visualScale / effectivePromotedLayoutScale,
+            visualScale,
             anchor: alignment.scaleAnchor
         )
         .animation(
@@ -214,7 +218,7 @@ struct SynchronizedLyricText: View {
             .multilineTextAlignment(alignment.textAlignment)
             .lineLimit(nil)
             .fixedSize(
-                horizontal: supportsTimedLyrics,
+                horizontal: primaryLayoutWidth != nil,
                 vertical: true
             )
             .textRenderer(
@@ -270,7 +274,7 @@ struct SynchronizedLyricText: View {
     private var stablePrimaryContent: Text {
         supportsTimedLyrics
             ? activeSynchronizedText
-            : Text(verbatim: line.text)
+            : layoutStableText
     }
 
     private func lyricTextRenderer(
@@ -302,7 +306,7 @@ struct SynchronizedLyricText: View {
                 liftMode: settings.lyricsLiftMode
             ),
             layoutConfiguration: .init(
-                width: timedLayoutWidth,
+                width: rendererLayoutWidth,
                 centersLines: alignment == .center
             ),
             appliesTimingEffects: appliesTimingEffects
@@ -310,7 +314,11 @@ struct SynchronizedLyricText: View {
     }
 
     private var primaryLayoutWidth: CGFloat? {
-        supportsTimedLyrics ? timedLayoutWidth : layoutWidth
+        supportsTimedLyrics ? timedLayoutWidth : normalizedLayoutWidth
+    }
+
+    private var rendererLayoutWidth: CGFloat? {
+        supportsTimedLyrics ? timedLayoutWidth : normalizedLayoutWidth
     }
 
     private var supportsTimedLyrics: Bool {
@@ -329,17 +337,14 @@ struct SynchronizedLyricText: View {
     }
 
     private var primaryFont: Font {
-        .system(
-            size: fontSize * effectivePromotedLayoutScale,
-            weight: fontWeight.swiftUIWeight
-        )
+        .system(size: fontSize, weight: fontWeight.swiftUIWeight)
     }
 
     private var translationFontSize: CGFloat {
         max(
             CGFloat(settings.lyricsFontSize * settings.lyricsTranslationFontScale) * fontScale,
             13 * fontScale
-        ) * effectivePromotedLayoutScale
+        )
     }
 
     private var displaysTranslation: Bool {
@@ -351,7 +356,7 @@ struct SynchronizedLyricText: View {
     private var glowRadius: CGFloat {
         guard settings.lyricsGlowEnabled else { return 0 }
         return CGFloat(
-            Double(fontSize * effectivePromotedLayoutScale)
+            Double(fontSize)
                 * 0.2
                 * settings.lyricsGlowIntensity
         )
@@ -363,16 +368,12 @@ struct SynchronizedLyricText: View {
     }
 
     private var maximumUnplayedBlurRadius: CGFloat {
-        CGFloat(settings.lyricsBlurIntensity)
-            * 0.55
-            * fontScale
-            * effectivePromotedLayoutScale
+        CGFloat(settings.lyricsBlurIntensity) * 0.55 * fontScale
     }
 
     private var playedRise: CGFloat {
         guard !accessibilityReduceMotion else { return 0 }
-        let promotedFontSize = fontSize * effectivePromotedLayoutScale
-        return min(max(promotedFontSize * 0.1, 1.5), 6)
+        return min(max(fontSize * 0.1, 1.5), 6)
     }
 
     private var maximumLongSyllableScale: CGFloat {
@@ -383,7 +384,6 @@ struct SynchronizedLyricText: View {
 
     private var longSyllableExpansionPadding: CGFloat {
         fontSize
-            * effectivePromotedLayoutScale
             * (maximumLongSyllableScale - 1)
             * CGFloat(1.2)
     }
@@ -394,11 +394,17 @@ struct SynchronizedLyricText: View {
     }
 
     private var timedLayoutWidth: CGFloat? {
-        guard let layoutWidth,
+        guard let normalizedLayoutWidth,
               let maximumScale = playbackScaleRange?.upperBound else {
-            return layoutWidth
+            return normalizedLayoutWidth
         }
-        return layoutWidth / max(maximumScale, 1)
+        return normalizedLayoutWidth / max(maximumScale, 1)
+    }
+
+    private var normalizedLayoutWidth: CGFloat? {
+        layoutWidth.map {
+            $0 / effectivePromotedLayoutScale
+        }
     }
 
     private func playbackScale(at playbackTime: TimeInterval) -> CGFloat {

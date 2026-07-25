@@ -4,7 +4,7 @@ import UIKit
 
 @MainActor
 enum TimedLyricTextBuilder {
-    private static let cache = TimedLyricTextCache()
+    private static let cache = LyricTextCache()
 
     static func text(
         from syllables: [LyricSyllable],
@@ -12,7 +12,7 @@ enum TimedLyricTextBuilder {
         fontSize: CGFloat,
         fontWeight: LyricsFontWeight = .bold
     ) -> Text {
-        let key = TimedLyricTextCache.Key(
+        let key = LyricTextCache.Key.timed(
             syllables: syllables,
             constrainedWidth: constrainedWidth,
             fontSize: fontSize,
@@ -24,6 +24,32 @@ enum TimedLyricTextBuilder {
 
         let text = makeText(
             from: syllables,
+            constrainedWidth: constrainedWidth,
+            fontSize: fontSize,
+            fontWeight: fontWeight
+        )
+        cache.insert(text, for: key)
+        return text
+    }
+
+    static func text(
+        from source: String,
+        constrainedWidth: CGFloat?,
+        fontSize: CGFloat,
+        fontWeight: LyricsFontWeight = .bold
+    ) -> Text {
+        let key = LyricTextCache.Key.plain(
+            source: source,
+            constrainedWidth: constrainedWidth,
+            fontSize: fontSize,
+            fontWeight: fontWeight.rawValue
+        )
+        if let cachedText = cache.text(for: key) {
+            return cachedText
+        }
+
+        let text = makeText(
+            from: source,
             constrainedWidth: constrainedWidth,
             fontSize: fontSize,
             fontWeight: fontWeight
@@ -48,7 +74,8 @@ enum TimedLyricTextBuilder {
             in: source,
             constrainedWidth: constrainedWidth,
             fontSize: fontSize,
-            fontWeight: fontWeight
+            fontWeight: fontWeight,
+            usesTimedRunBoundaries: true
         )
 
         return characters.enumerated().reduce(Text(verbatim: "")) {
@@ -83,6 +110,40 @@ enum TimedLyricTextBuilder {
             )
             return Text("\(text)\(fragment)")
         }
+    }
+
+    private static func makeText(
+        from source: String,
+        constrainedWidth: CGFloat?,
+        fontSize: CGFloat,
+        fontWeight: LyricsFontWeight
+    ) -> Text {
+        let lineBreakOffsets = lineBreakCharacterOffsets(
+            in: source,
+            constrainedWidth: constrainedWidth,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            usesTimedRunBoundaries: false
+        )
+        guard !lineBreakOffsets.isEmpty else {
+            return Text(verbatim: source)
+        }
+
+        let characters = Array(source)
+        var plannedSource = ""
+        plannedSource.reserveCapacity(
+            source.utf8.count + lineBreakOffsets.count
+        )
+        for (offset, character) in characters.enumerated() {
+            if lineBreakOffsets.contains(offset),
+               offset > 0,
+               !characters[offset - 1].isNewline,
+               !character.isNewline {
+                plannedSource.append("\n")
+            }
+            plannedSource.append(character)
+        }
+        return Text(verbatim: plannedSource)
     }
 
     private static func wordTimings(
@@ -179,7 +240,8 @@ enum TimedLyricTextBuilder {
         in source: String,
         constrainedWidth: CGFloat?,
         fontSize: CGFloat,
-        fontWeight: LyricsFontWeight
+        fontWeight: LyricsFontWeight,
+        usesTimedRunBoundaries: Bool
     ) -> Set<Int> {
         guard !source.isEmpty,
               let constrainedWidth,
@@ -199,16 +261,22 @@ enum TimedLyricTextBuilder {
             fontSize,
             nil
         )
+        var attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String):
+                layoutFont,
+        ]
+        if usesTimedRunBoundaries {
+            attributes[
+                NSAttributedString.Key(kCTLigatureAttributeName as String)
+            ] = 0
+        }
         let attributedText = NSMutableAttributedString(
             string: source,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String):
-                    layoutFont,
-                NSAttributedString.Key(kCTLigatureAttributeName as String):
-                    0,
-            ]
+            attributes: attributes
         )
-        addTimedRunBoundaries(to: attributedText, source: source)
+        if usesTimedRunBoundaries {
+            addTimedRunBoundaries(to: attributedText, source: source)
+        }
         let typesetter = CTTypesetterCreateWithAttributedString(
             attributedText
         )
@@ -218,7 +286,8 @@ enum TimedLyricTextBuilder {
         let layoutWidth = effectiveLayoutWidth(
             source: source,
             constrainedWidth: constrainedWidth,
-            fontSize: fontSize
+            fontSize: fontSize,
+            usesTimedRunBoundaries: usesTimedRunBoundaries
         )
 
         while utf16Offset < utf16Length {
@@ -256,7 +325,8 @@ enum TimedLyricTextBuilder {
     private static func effectiveLayoutWidth(
         source: String,
         constrainedWidth: CGFloat,
-        fontSize: CGFloat
+        fontSize: CGFloat,
+        usesTimedRunBoundaries: Bool
     ) -> CGFloat {
         let containsLatinText = source.unicodeScalars.contains { scalar in
             (65...90).contains(scalar.value)
@@ -264,7 +334,9 @@ enum TimedLyricTextBuilder {
         }
         let containsWordSpacing = source.contains { $0.isWhitespace }
         let safetyMargin: CGFloat
-        if containsLatinText, containsWordSpacing {
+        if usesTimedRunBoundaries,
+           containsLatinText,
+           containsWordSpacing {
             // SwiftUI's individually attributed Latin glyph runs measure
             // wider than Core Text's typesetter near word boundaries.
             safetyMargin = max(
@@ -328,12 +400,20 @@ enum TimedLyricTextBuilder {
 }
 
 @MainActor
-private final class TimedLyricTextCache {
-    struct Key: Hashable {
-        let syllables: [LyricSyllable]
-        let constrainedWidth: CGFloat?
-        let fontSize: CGFloat
-        let fontWeight: String
+private final class LyricTextCache {
+    enum Key: Hashable {
+        case timed(
+            syllables: [LyricSyllable],
+            constrainedWidth: CGFloat?,
+            fontSize: CGFloat,
+            fontWeight: String
+        )
+        case plain(
+            source: String,
+            constrainedWidth: CGFloat?,
+            fontSize: CGFloat,
+            fontWeight: String
+        )
     }
 
     private static let maximumEntryCount = 256
