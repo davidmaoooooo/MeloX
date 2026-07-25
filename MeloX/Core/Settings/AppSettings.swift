@@ -46,7 +46,7 @@ final class AppSettings {
     static let defaultLyricsDistanceBlurScale = 0.65
     static let defaultLyricsHiddenInterfaceBlurScale = 0.6
     static let lyricsDistanceBlurScaleRange = 0.0...1.5
-    static let defaultLyricsFocusCascadeDelay = 0.04
+    static let defaultLyricsFocusCascadeDelay = 0.026
     static let lyricsFocusCascadeDelayRange = 0.0...0.1
     static let defaultLyricsFocusCascadeDelayIncrease = 0.004
     static let lyricsFocusCascadeDelayIncreaseRange = 0.0...0.1
@@ -54,7 +54,7 @@ final class AppSettings {
     static let lyricsFocusCascadeFollowingDelayRange = 0.0...0.2
     static let defaultLyricsFocusCascadeCatchUpRatio = 0.95
     static let lyricsFocusCascadeCatchUpRatioRange = 0.5...1.0
-    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.8
+    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.75
     static let lyricsFocusCascadeChaseSpeedGradientRange = 0.0...1.0
     static let defaultLyricsFocusCascadeDuration = 0.68
     static let lyricsFocusCascadeDurationRange = 0.2...1.2
@@ -75,8 +75,10 @@ final class AppSettings {
     static let defaultLyricsTranslationFontScale = 0.65
     static let defaultLyricsTranslationOpacity = 0.9
     static let defaultLyricsLiftMode: LyricsLiftMode = .character
+    static let defaultLyricsLongSyllableDetectionMode:
+        LyricsLongSyllableDetectionMode = .character
     static let defaultLyricsGlowLongSyllablesOnly = true
-    static let defaultLyricsLongSyllableDurationThreshold = 0.7
+    static let defaultLyricsLongSyllableDurationThreshold = 0.95
     static let lyricsLongSyllableDurationThresholdRange = 0.3...1.5
     private enum Key {
         static let hasCompletedOnboarding = "melox.hasCompletedOnboarding"
@@ -108,6 +110,8 @@ final class AppSettings {
         static let lyricsPseudoWordByWord = "lyricsPseudoWordByWord"
         static let lyricsLiftMode = "lyricsLiftMode"
         static let lyricsGlowEnabled = "lyricsGlowEnabled"
+        static let lyricsLongSyllableDetectionMode =
+            "lyricsLongSyllableDetectionMode"
         static let lyricsGlowLongSyllablesOnly =
             "lyricsGlowLongSyllablesOnly"
         static let lyricsLongSyllableDurationThreshold =
@@ -328,6 +332,16 @@ final class AppSettings {
 
     var lyricsGlowEnabled: Bool {
         didSet { defaults.set(lyricsGlowEnabled, forKey: Key.lyricsGlowEnabled) }
+    }
+
+    var lyricsLongSyllableDetectionMode:
+        LyricsLongSyllableDetectionMode {
+        didSet {
+            defaults.set(
+                lyricsLongSyllableDetectionMode.rawValue,
+                forKey: Key.lyricsLongSyllableDetectionMode
+            )
+        }
     }
 
     var lyricsGlowLongSyllablesOnly: Bool {
@@ -678,6 +692,12 @@ final class AppSettings {
             rawValue: defaults.string(forKey: Key.lyricsLiftMode) ?? ""
         ) ?? Self.defaultLyricsLiftMode
         lyricsGlowEnabled = defaults.object(forKey: Key.lyricsGlowEnabled) as? Bool ?? true
+        lyricsLongSyllableDetectionMode =
+            LyricsLongSyllableDetectionMode(
+                rawValue: defaults.string(
+                    forKey: Key.lyricsLongSyllableDetectionMode
+                ) ?? ""
+            ) ?? Self.defaultLyricsLongSyllableDetectionMode
         lyricsGlowLongSyllablesOnly = defaults.object(
             forKey: Key.lyricsGlowLongSyllablesOnly
         ) as? Bool ?? Self.defaultLyricsGlowLongSyllablesOnly
@@ -909,6 +929,8 @@ final class AppSettings {
         lyricsPseudoWordByWord = false
         lyricsLiftMode = Self.defaultLyricsLiftMode
         lyricsGlowEnabled = true
+        lyricsLongSyllableDetectionMode =
+            Self.defaultLyricsLongSyllableDetectionMode
         lyricsGlowLongSyllablesOnly =
             Self.defaultLyricsGlowLongSyllablesOnly
         lyricsLongSyllableDurationThreshold =

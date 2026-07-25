@@ -261,6 +261,8 @@ struct SynchronizedLyricText: View {
                 glowOpacity: glowOpacity,
                 glowsLongSyllablesOnly:
                     settings.lyricsGlowLongSyllablesOnly,
+                longSyllableDetectionMode:
+                    settings.lyricsLongSyllableDetectionMode,
                 longSyllableDurationThreshold:
                     settings.lyricsLongSyllableDurationThreshold,
                 unplayedOpacity: 0.3,

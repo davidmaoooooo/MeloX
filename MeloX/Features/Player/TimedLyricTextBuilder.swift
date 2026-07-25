@@ -40,7 +40,7 @@ enum TimedLyricTextBuilder {
     ) -> Text {
         let characters = timedCharacters(from: syllables)
         let source = characters.map(\.text).joined()
-        let liftTimings = liftTimings(
+        let wordTimings = wordTimings(
             for: characters,
             source: source
         )
@@ -63,7 +63,7 @@ enum TimedLyricTextBuilder {
             }
 
             let character = entry.element
-            let liftTiming = liftTimings[offset]
+            let wordTiming = wordTimings[offset]
             let fragment = Text(verbatim: character.text).customAttribute(
                 LyricTimingTextAttribute(
                     startTime: character.startTime,
@@ -72,26 +72,31 @@ enum TimedLyricTextBuilder {
                     syllableEndTime: character.syllableEndTime,
                     characterIndex: character.characterIndex,
                     characterCount: character.characterCount,
-                    wordStartTime: liftTiming.startTime,
-                    wordEndTime: liftTiming.endTime
+                    wordStartTime: wordTiming.startTime,
+                    wordEndTime: wordTiming.endTime,
+                    wordIndex: wordTiming.index,
+                    isWhitespace: character.isWhitespace
                 )
             )
             return Text("\(text)\(fragment)")
         }
     }
 
-    private static func liftTimings(
+    private static func wordTimings(
         for characters: [TimedCharacter],
         source: String
-    ) -> [LiftTiming] {
-        var result = characters.map {
-            LiftTiming(
-                startTime: $0.startTime,
-                endTime: $0.endTime
+    ) -> [WordTiming] {
+        var result = characters.enumerated().map { index, character in
+            WordTiming(
+                startTime: character.startTime,
+                endTime: character.endTime,
+                index: index
             )
         }
 
-        for range in LyricWordSegmenter.blockRanges(in: source) {
+        for (wordIndex, range) in LyricWordSegmenter
+            .blockRanges(in: source)
+            .enumerated() {
             guard range.lowerBound >= characters.startIndex,
                   range.upperBound <= characters.endIndex,
                   range.lowerBound < range.upperBound else {
@@ -105,9 +110,10 @@ enum TimedLyricTextBuilder {
                 continue
             }
             for index in range {
-                result[index] = LiftTiming(
+                result[index] = WordTiming(
                     startTime: startTime,
-                    endTime: endTime
+                    endTime: endTime,
+                    index: wordIndex
                 )
             }
         }
@@ -330,9 +336,10 @@ private final class TimedLyricTextCache {
 }
 
 private extension TimedLyricTextBuilder {
-    struct LiftTiming {
+    struct WordTiming {
         let startTime: TimeInterval
         let endTime: TimeInterval
+        let index: Int
     }
 
     struct TimedCharacter {
