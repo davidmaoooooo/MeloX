@@ -133,8 +133,11 @@ struct LyricGlowTextRenderer: TextRenderer {
         let frontX: CGFloat
 
         if let activeRun {
-            let progress = smootherStep(
-                playedProgress(for: activeRun.timing)
+            let progress = LyricHighlightRevealProgress.progress(
+                playbackTime: playbackTime,
+                timing: activeRun.timing,
+                detectionMode: style.longSyllableDetectionMode,
+                durationThreshold: style.longSyllableDurationThreshold
             )
             if direction == .rightToLeft {
                 frontX = activeRun.bounds.maxX

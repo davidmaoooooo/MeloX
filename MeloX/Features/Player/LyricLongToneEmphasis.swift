@@ -83,8 +83,11 @@ enum LyricLongToneEmphasis {
             detectionMode: detectionMode
         )
         let duration = max(group.endTime - group.startTime, 0)
-        guard !timing.isWhitespace,
-              duration >= max(durationThreshold, 0) else {
+        guard qualifiesAsLongTone(
+            timing: timing,
+            duration: duration,
+            durationThreshold: durationThreshold
+        ) else {
             return .inactive
         }
 
@@ -122,6 +125,31 @@ enum LyricLongToneEmphasis {
             characterIndex: index,
             characterCount: count
         )
+    }
+
+    static func isLongTone(
+        timing: LyricTimingTextAttribute,
+        detectionMode: LyricsLongSyllableDetectionMode,
+        durationThreshold: TimeInterval
+    ) -> Bool {
+        let group = timingGroup(
+            for: timing,
+            detectionMode: detectionMode
+        )
+        return qualifiesAsLongTone(
+            timing: timing,
+            duration: max(group.endTime - group.startTime, 0),
+            durationThreshold: durationThreshold
+        )
+    }
+
+    private static func qualifiesAsLongTone(
+        timing: LyricTimingTextAttribute,
+        duration: TimeInterval,
+        durationThreshold: TimeInterval
+    ) -> Bool {
+        !timing.isWhitespace
+            && duration >= max(durationThreshold, 0)
     }
 
     private static func timingGroup(
