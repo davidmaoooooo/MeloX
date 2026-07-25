@@ -545,6 +545,22 @@ struct PlayerSettingsView: View {
                         valueText: "\(settings.lyricsHighlightGradientWidth.formatted(.number.precision(.fractionLength(1)))) 个字宽"
                     )
 
+                    valueSlider(
+                        title: "渐变削减程度",
+                        value: $settings.lyricsHighlightGradientReduction,
+                        range:
+                            AppSettings
+                                .lyricsHighlightGradientReductionRange,
+                        step: 0.05,
+                        valueText: settings
+                            .lyricsHighlightGradientReduction
+                            .formatted(
+                                .percent.precision(
+                                    .fractionLength(0)
+                                )
+                            )
+                    )
+
                     Toggle("逐字歌词光效", isOn: $settings.lyricsGlowEnabled)
 
                     Picker(
@@ -639,7 +655,11 @@ struct PlayerSettingsView: View {
                         )
                         footerDescription(
                             "高光渐变宽度",
-                            "设置已播放亮色与未播放暗色之间的柔和过渡范围，单位为平均字宽。数值越小边界越集中，数值越大过渡越宽、更柔和；默认是 1.2 个字宽。"
+                            "设置高光越过当前播放位置后继续覆盖的范围，单位为平均字宽。数值越小边界越集中，数值越大后一个字承接得越柔和；默认是 0.7 个字宽。"
+                        )
+                        footerDescription(
+                            "渐变削减程度",
+                            "调整高光在设定宽度内的衰减曲线。渐变始终从当前播放边界的满亮状态连续过渡，不会突然切换；0% 接近线性衰减，数值越高，后一个字越早降低亮度。默认是 65%。"
                         )
                         footerDescription(
                             "逐字歌词光效",

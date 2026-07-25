@@ -82,8 +82,10 @@ final class AppSettings {
     static let lyricsLongSyllableDurationThresholdRange = 0.3...1.5
     static let defaultLyricsLongToneExpansionAmount = 0.05
     static let lyricsLongToneExpansionAmountRange = 0.0...0.15
-    static let defaultLyricsHighlightGradientWidth = 1.2
+    static let defaultLyricsHighlightGradientWidth = 0.7
     static let lyricsHighlightGradientWidthRange = 0.4...3.0
+    static let defaultLyricsHighlightGradientReduction = 0.65
+    static let lyricsHighlightGradientReductionRange = 0.0...1.0
     private enum Key {
         static let hasCompletedOnboarding = "melox.hasCompletedOnboarding"
         static let cookie = "musicCookie"
@@ -115,6 +117,8 @@ final class AppSettings {
         static let lyricsLiftMode = "lyricsLiftMode"
         static let lyricsHighlightGradientWidth =
             "lyricsHighlightGradientWidth"
+        static let lyricsHighlightGradientReduction =
+            "lyricsHighlightGradientReduction"
         static let lyricsGlowEnabled = "lyricsGlowEnabled"
         static let lyricsLongSyllableDetectionMode =
             "lyricsLongSyllableDetectionMode"
@@ -343,6 +347,15 @@ final class AppSettings {
             defaults.set(
                 lyricsHighlightGradientWidth,
                 forKey: Key.lyricsHighlightGradientWidth
+            )
+        }
+    }
+
+    var lyricsHighlightGradientReduction: Double {
+        didSet {
+            defaults.set(
+                lyricsHighlightGradientReduction,
+                forKey: Key.lyricsHighlightGradientReduction
             )
         }
     }
@@ -727,6 +740,16 @@ final class AppSettings {
             ),
             Self.lyricsHighlightGradientWidthRange.upperBound
         )
+        let storedLyricsHighlightGradientReduction = defaults.object(
+            forKey: Key.lyricsHighlightGradientReduction
+        ) as? Double ?? Self.defaultLyricsHighlightGradientReduction
+        lyricsHighlightGradientReduction = min(
+            max(
+                storedLyricsHighlightGradientReduction,
+                Self.lyricsHighlightGradientReductionRange.lowerBound
+            ),
+            Self.lyricsHighlightGradientReductionRange.upperBound
+        )
         lyricsGlowEnabled = defaults.object(forKey: Key.lyricsGlowEnabled) as? Bool ?? true
         lyricsLongSyllableDetectionMode =
             LyricsLongSyllableDetectionMode(
@@ -976,6 +999,8 @@ final class AppSettings {
         lyricsLiftMode = Self.defaultLyricsLiftMode
         lyricsHighlightGradientWidth =
             Self.defaultLyricsHighlightGradientWidth
+        lyricsHighlightGradientReduction =
+            Self.defaultLyricsHighlightGradientReduction
         lyricsGlowEnabled = true
         lyricsLongSyllableDetectionMode =
             Self.defaultLyricsLongSyllableDetectionMode

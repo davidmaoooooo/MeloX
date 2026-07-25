@@ -35,6 +35,7 @@ struct LyricGlowTextRenderer: TextRenderer {
         let maximumLongSyllableScale: CGFloat
         let longSyllableExpansionPadding: CGFloat
         let highlightGradientWidth: CGFloat
+        let highlightGradientReduction: CGFloat
         let liftMode: LyricsLiftMode
 
         fileprivate var drawsGlow: Bool {
@@ -154,14 +155,44 @@ struct LyricGlowTextRenderer: TextRenderer {
         let gradientWidth = style.highlightGradientWidth.isFinite
             ? max(style.highlightGradientWidth, 0.1)
             : Metrics.defaultHighlightGradientWidth
+        let gradientReduction = style.highlightGradientReduction.isFinite
+            ? min(max(style.highlightGradientReduction, 0), 1)
+            : Metrics.defaultHighlightGradientReduction
         return LineRevealMask(
             frontX: frontX,
             featherWidth: max(
                 averageGlyphWidth * gradientWidth,
                 Metrics.minimumRevealFeatherWidth
             ),
+            gradient: highlightGradient(
+                reduction: Double(gradientReduction),
+                layoutDirection: direction
+            ),
             layoutDirection: direction
         )
+    }
+
+    private func highlightGradient(
+        reduction: Double,
+        layoutDirection: LayoutDirection
+    ) -> Gradient {
+        let reduction = min(max(reduction, 0), 1)
+        let stopCount = Metrics.highlightGradientStopCount
+        let stops = (0...stopCount).map { index in
+            let location = Double(index) / Double(stopCount)
+            let distanceFromFront = layoutDirection == .rightToLeft
+                ? 1 - location
+                : location
+            let remainingHighlight = 1 - distanceFromFront
+            let opacity = remainingHighlight
+                * (1 - reduction * distanceFromFront)
+
+            return Gradient.Stop(
+                color: .white.opacity(opacity),
+                location: CGFloat(location)
+            )
+        }
+        return Gradient(stops: stops)
     }
 
     private func lineDrawingTransform(
@@ -465,12 +496,10 @@ struct LyricGlowTextRenderer: TextRenderer {
         let bounds = run.typographicBounds.rect
         guard bounds.width > 0, bounds.height > 0 else { return }
 
-        let gradient: Gradient
         let startPoint: CGPoint
         let endPoint: CGPoint
 
         if revealMask.layoutDirection == .rightToLeft {
-            gradient = Gradient(colors: [.clear, .white])
             startPoint = CGPoint(
                 x: revealMask.frontX - revealMask.featherWidth,
                 y: bounds.midY
@@ -480,7 +509,6 @@ struct LyricGlowTextRenderer: TextRenderer {
                 y: bounds.midY
             )
         } else {
-            gradient = Gradient(colors: [.white, .clear])
             startPoint = CGPoint(
                 x: revealMask.frontX,
                 y: bounds.midY
@@ -495,7 +523,7 @@ struct LyricGlowTextRenderer: TextRenderer {
             maskContext.fill(
                 Path(bounds),
                 with: .linearGradient(
-                    gradient,
+                    revealMask.gradient,
                     startPoint: startPoint,
                     endPoint: endPoint
                 )
@@ -577,6 +605,7 @@ private extension LyricGlowTextRenderer {
     struct LineRevealMask {
         let frontX: CGFloat
         let featherWidth: CGFloat
+        let gradient: Gradient
         let layoutDirection: LayoutDirection
     }
 
@@ -600,7 +629,9 @@ private extension LyricGlowTextRenderer {
         static let outerGlowRadiusMultiplier: CGFloat = 1
         static let outerGlowOpacityMultiplier = 0.55
         static let innerGlowRadiusMultiplier: CGFloat = 0.35
-        static let defaultHighlightGradientWidth: CGFloat = 1.2
+        static let defaultHighlightGradientWidth: CGFloat = 0.7
+        static let defaultHighlightGradientReduction: CGFloat = 0.65
+        static let highlightGradientStopCount = 8
         static let minimumRevealFeatherWidth: CGFloat = 2
     }
 }

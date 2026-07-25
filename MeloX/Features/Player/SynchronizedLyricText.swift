@@ -273,6 +273,9 @@ struct SynchronizedLyricText: View {
                 highlightGradientWidth: CGFloat(
                     settings.lyricsHighlightGradientWidth
                 ),
+                highlightGradientReduction: CGFloat(
+                    settings.lyricsHighlightGradientReduction
+                ),
                 liftMode: settings.lyricsLiftMode
             ),
             layoutConfiguration: .init(
