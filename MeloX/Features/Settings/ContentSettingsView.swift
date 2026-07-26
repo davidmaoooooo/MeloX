@@ -19,6 +19,7 @@ struct ContentSettingsView: View {
                 Toggle("显示歌单播放量", isOn: $settings.showPlayCount)
             }
         }
-        .navigationTitle("内容")
+        .navigationTitle("发现内容")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -48,6 +48,7 @@ struct TextPVSettingsView: View {
             }
         }
         .navigationTitle("文字PV")
+        .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("恢复文字PV默认设置？", isPresented: $showsResetConfirmation) {
             Button("恢复默认设置", role: .destructive) {
                 settings.textPV.reset()

@@ -57,5 +57,6 @@ struct GeneralSettingsView: View {
             }
         }
         .navigationTitle("通用")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

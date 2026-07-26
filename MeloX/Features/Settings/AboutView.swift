@@ -121,6 +121,7 @@ struct AboutView: View {
             }
         }
         .navigationTitle("关于")
+        .navigationBarTitleDisplayMode(.inline)
         .alert(item: $updateAlert) { alert in
             if let releaseURL = alert.releaseURL {
                 Alert(

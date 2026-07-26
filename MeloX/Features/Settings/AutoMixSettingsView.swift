@@ -151,6 +151,7 @@ struct AutoMixSettingsView: View {
             }
         }
         .navigationTitle("自动混音")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: preferences.configuration) {
             player.applyAutoMixSettings()
         }

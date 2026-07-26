@@ -123,6 +123,7 @@ struct LyricsLiveActivitySettingsView: View {
             }
         }
         .navigationTitle("实时活动歌词")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: preferences) {
             player.applyLyricsLiveActivityPreference()
         }

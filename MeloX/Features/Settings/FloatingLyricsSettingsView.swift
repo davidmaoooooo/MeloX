@@ -51,5 +51,6 @@ struct FloatingLyricsSettingsView: View {
             }
         }
         .navigationTitle("悬浮窗歌词")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
