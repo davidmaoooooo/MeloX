@@ -2,19 +2,22 @@ import SwiftUI
 
 enum NowPlayingPageTransition {
     static let animation = Animation.smooth(duration: 0.3)
+    static let directLyricsQueueContentScale: CGFloat = 0.92
+    static let lyricsEntranceOffset: CGFloat = 400
+    static let lyricsEntranceDelay = Duration.milliseconds(110)
+    static let lyricsEntranceAnimation =
+        Animation.smooth(duration: 0.34)
+    private static let directLyricsQueueAnimation =
+        Animation.smooth(duration: 0.44)
 
-    static let lyricsUtilityOffset: CGFloat = 64
-    static let lyricsUtilityHiddenScale: CGFloat = 0.82
-
-    private static let artworkDetailsOffset: CGFloat = -300
+    private static let artworkDetailsInsertionOffset: CGFloat = -300
+    private static let artworkDetailsRemovalOffset: CGFloat = -300
     private static let songHeaderOffset: CGFloat = 40
-    private static let lyricsOffset: CGFloat = 400
+    private static let queueOffset: CGFloat = 400
     private static let outgoingAnimation =
         Animation.smooth(duration: 0.24)
     private static let incomingAnimation =
         Animation.smooth(duration: 0.22).delay(0.07)
-    private static let utilityOutgoingAnimation =
-        Animation.smooth(duration: 0.16)
 
     static func content(
         for page: NowPlayingPage,
@@ -34,13 +37,19 @@ enum NowPlayingPageTransition {
 
         switch page {
         case .artwork:
-            return stagedOffsetAndOpacity(
-                y: artworkDetailsOffset
+            return directionalOffsetAndOpacity(
+                insertionY: artworkDetailsInsertionOffset,
+                removalY: artworkDetailsRemovalOffset
             )
         case .lyrics:
-            return stagedOffsetAndOpacity(y: lyricsOffset)
+            return .asymmetric(
+                insertion: .identity,
+                removal:
+                    offsetAndOpacity(y: lyricsEntranceOffset)
+                    .animation(outgoingAnimation)
+            )
         case .queue:
-            return .opacity
+            return stagedOffsetAndOpacity(y: queueOffset)
         }
     }
 
@@ -49,25 +58,57 @@ enum NowPlayingPageTransition {
         return stagedOffsetAndOpacity(y: songHeaderOffset)
     }
 
-    static func lyricsUtilityAnimation(
-        isVisible: Bool,
+    static func selectionAnimation(
+        from source: NowPlayingPage,
+        to destination: NowPlayingPage
+    ) -> Animation {
+        if isDirectLyricsQueueTransition(
+            from: source,
+            to: destination
+        ) {
+            return directLyricsQueueAnimation
+        }
+        return animation
+    }
+
+    static func isDirectLyricsQueueTransition(
+        from source: NowPlayingPage,
+        to destination: NowPlayingPage
+    ) -> Bool {
+        source == .lyrics && destination == .queue
+            || source == .queue && destination == .lyrics
+    }
+
+    static func directAlternateContent(
         reducesMotion: Bool
-    ) -> Animation? {
-        guard !reducesMotion else { return nil }
-        return isVisible
-            ? incomingAnimation
-            : utilityOutgoingAnimation
+    ) -> AnyTransition {
+        guard !reducesMotion else { return .opacity }
+        return .scale(
+            scale: directLyricsQueueContentScale,
+            anchor: .center
+        )
+        .combined(with: .opacity)
     }
 
     private static func stagedOffsetAndOpacity(
         y: CGFloat
     ) -> AnyTransition {
+        directionalOffsetAndOpacity(
+            insertionY: y,
+            removalY: y
+        )
+    }
+
+    private static func directionalOffsetAndOpacity(
+        insertionY: CGFloat,
+        removalY: CGFloat
+    ) -> AnyTransition {
         .asymmetric(
             insertion:
-                offsetAndOpacity(y: y)
+                offsetAndOpacity(y: insertionY)
                 .animation(incomingAnimation),
             removal:
-                offsetAndOpacity(y: y)
+                offsetAndOpacity(y: removalY)
                 .animation(outgoingAnimation)
         )
     }

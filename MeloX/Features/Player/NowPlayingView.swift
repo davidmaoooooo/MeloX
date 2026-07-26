@@ -24,11 +24,18 @@ struct NowPlayingView: View {
     @State private var queueSongHeaderOffset: CGFloat = 0
     @State private var artworkPageFrame = CGRect.zero
     @State private var entersPageFromHiddenQueue = false
+    @State private var transitionSourcePage: NowPlayingPage
+    @State private var transitionDestinationPage: NowPlayingPage
+    @State private var pageTransitionResetGeneration = 0
+    @State private var lyricsEntranceGeneration = 0
+    @State private var isLyricsEntrancePresented = true
     @GestureState private var isInteractingWithPlayer = false
     @Namespace private var pageArtworkNamespace
 
     init(initialPage: NowPlayingPage = .artwork) {
         _page = State(initialValue: initialPage)
+        _transitionSourcePage = State(initialValue: initialPage)
+        _transitionDestinationPage = State(initialValue: initialPage)
     }
 
     var body: some View {
@@ -153,15 +160,22 @@ struct NowPlayingView: View {
             }
 
             withAnimation(
-                accessibilityReduceMotion
-                    ? nil
-                    : .easeOut(duration: 0.3)
+                NowPlayingInterfaceTransition.interfaceAnimation(
+                    isVisible: false,
+                    reducesMotion: accessibilityReduceMotion
+                )
             ) {
                 showsLyricsControls = false
             }
         }
         .task(id: entersPageFromHiddenQueue) {
             await restoreArtworkTransitionAfterHiddenQueueEntry()
+        }
+        .task(id: pageTransitionResetGeneration) {
+            await restoreDefaultPageTransition()
+        }
+        .task(id: lyricsEntranceGeneration) {
+            await presentLyricsEntrance()
         }
         .onChange(of: page) { _, newPage in
             if newPage == .lyrics,
@@ -209,7 +223,6 @@ struct NowPlayingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottom) {
                     portraitPlayerControls(for: song)
-                        .opacity(hidesLyricsControls ? 0 : 1)
                         .allowsHitTesting(!hidesLyricsControls)
                         .accessibilityHidden(hidesLyricsControls)
                 }
@@ -222,7 +235,9 @@ struct NowPlayingView: View {
         NowPlayingBottomControls(
             song: song,
             page: pageSelection,
-            showsLyricsUtilities: usesExpandedAppleMusicLyricsLayout
+            showsLyricsUtilities:
+                usesExpandedAppleMusicLyricsLayout,
+            isInterfaceHidden: hidesLyricsControls
         )
     }
 
@@ -230,6 +245,13 @@ struct NowPlayingView: View {
         Binding(
             get: { page },
             set: { newPage in
+                transitionSourcePage = page
+                transitionDestinationPage = newPage
+                pageTransitionResetGeneration &+= 1
+                lyricsEntranceGeneration &+= 1
+                if page == .artwork, newPage == .lyrics {
+                    isLyricsEntrancePresented = false
+                }
                 entersPageFromHiddenQueue =
                     page == .queue
                     && isQueueSongHeaderHidden
@@ -344,6 +366,19 @@ struct NowPlayingView: View {
                 ) {
                     handleLyricsInterfaceInteraction()
                 }
+                .offset(
+                    y: usesStagedLyricsEntrance
+                        && !isLyricsEntrancePresented
+                        ? NowPlayingPageTransition
+                            .lyricsEntranceOffset
+                        : 0
+                )
+                .opacity(
+                    usesStagedLyricsEntrance
+                        && !isLyricsEntrancePresented
+                        ? 0
+                        : 1
+                )
                 .transition(
                     pageContentTransition(for: .lyrics)
                 )
@@ -356,9 +391,11 @@ struct NowPlayingView: View {
                         !entersPageFromHiddenQueue,
                     showsSongHeader: false,
                     onSongHeaderHiddenChange: {
+                        guard page == .queue else { return }
                         isQueueSongHeaderHidden = $0
                     },
                     onSongHeaderOffsetChange: {
+                        guard page == .queue else { return }
                         queueSongHeaderOffset = $0
                     }
                 )
@@ -431,7 +468,16 @@ struct NowPlayingView: View {
     private func pageContentTransition(
         for destination: NowPlayingPage
     ) -> AnyTransition {
-        NowPlayingPageTransition.content(
+        if NowPlayingPageTransition.isDirectLyricsQueueTransition(
+            from: transitionSourcePage,
+            to: transitionDestinationPage
+        ) {
+            return NowPlayingPageTransition.directAlternateContent(
+                reducesMotion: accessibilityReduceMotion
+            )
+        }
+
+        return NowPlayingPageTransition.content(
             for: destination,
             entersFromHiddenQueue: entersPageFromHiddenQueue,
             reducesMotion: accessibilityReduceMotion
@@ -452,6 +498,70 @@ struct NowPlayingView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             entersPageFromHiddenQueue = false
+        }
+    }
+
+    private func restoreDefaultPageTransition() async {
+        guard NowPlayingPageTransition
+            .isDirectLyricsQueueTransition(
+                from: transitionSourcePage,
+                to: transitionDestinationPage
+            ) else {
+            return
+        }
+
+        do {
+            try await Task.sleep(for: .milliseconds(460))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled,
+              page == transitionDestinationPage else {
+            return
+        }
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            transitionSourcePage = page
+            transitionDestinationPage = page
+        }
+    }
+
+    private var usesStagedLyricsEntrance: Bool {
+        transitionSourcePage == .artwork
+            && transitionDestinationPage == .lyrics
+    }
+
+    private func presentLyricsEntrance() async {
+        guard page == .lyrics,
+              usesStagedLyricsEntrance,
+              !isLyricsEntrancePresented else {
+            return
+        }
+
+        if accessibilityReduceMotion {
+            isLyricsEntrancePresented = true
+            return
+        }
+
+        do {
+            try await Task.sleep(
+                for: NowPlayingPageTransition.lyricsEntranceDelay
+            )
+        } catch {
+            return
+        }
+        guard !Task.isCancelled,
+              page == .lyrics,
+              usesStagedLyricsEntrance else {
+            return
+        }
+
+        withAnimation(
+            NowPlayingPageTransition.lyricsEntranceAnimation
+        ) {
+            isLyricsEntrancePresented = true
         }
     }
 
@@ -497,9 +607,10 @@ struct NowPlayingView: View {
         guard !showsLyricsControls else { return }
 
         withAnimation(
-            accessibilityReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.25)
+            NowPlayingInterfaceTransition.interfaceAnimation(
+                isVisible: true,
+                reducesMotion: accessibilityReduceMotion
+            )
         ) {
             showsLyricsControls = true
         }
@@ -518,9 +629,10 @@ struct NowPlayingView: View {
         }
         cancelAppleMusicControlsAutoHide()
         withAnimation(
-            accessibilityReduceMotion
-                ? nil
-                : .easeOut(duration: 0.25)
+            NowPlayingInterfaceTransition.interfaceAnimation(
+                isVisible: false,
+                reducesMotion: accessibilityReduceMotion
+            )
         ) {
             showsLyricsControls = false
         }

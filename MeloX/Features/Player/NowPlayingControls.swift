@@ -294,12 +294,18 @@ struct NowPlayingPageSelector: View {
         let isSelected = page == destination
 
         return Button {
+            let targetPage: NowPlayingPage =
+                isSelected ? .artwork : destination
             withAnimation(
                 accessibilityReduceMotion
                     ? nil
-                    : NowPlayingPageTransition.animation
+                    : NowPlayingPageTransition
+                        .selectionAnimation(
+                            from: page,
+                            to: targetPage
+                        )
             ) {
-                page = isSelected ? .artwork : destination
+                page = targetPage
             }
         } label: {
             ZStack(alignment: .topTrailing) {

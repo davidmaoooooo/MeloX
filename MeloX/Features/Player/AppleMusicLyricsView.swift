@@ -39,6 +39,7 @@ struct AppleMusicLyricsView: View {
     @State private var isManuallyScrolling = false
     @State private var interfaceVisibilityTracker =
         LyricsScrollInterfaceVisibilityTracker()
+    @State private var hiddenInterfaceProgress: CGFloat
 
     init(
         lyrics: [LyricLine],
@@ -73,6 +74,9 @@ struct AppleMusicLyricsView: View {
         _scrollPositionID = State(initialValue: highlightedLyricID)
         _visualHighlightedLyricID = State(initialValue: highlightedLyricID)
         _visualCascadeFocusLyricID = State(initialValue: highlightedLyricID)
+        _hiddenInterfaceProgress = State(
+            initialValue: isInterfaceHidden ? 1 : 0
+        )
     }
 
     var body: some View {
@@ -82,6 +86,16 @@ struct AppleMusicLyricsView: View {
                     interludes: interludes,
                     activeInterludeID: $activeInterludeID
                 )
+            }
+            .onChange(of: isInterfaceHidden) { _, isHidden in
+                withAnimation(
+                    NowPlayingInterfaceTransition.interfaceAnimation(
+                        isVisible: !isHidden,
+                        reducesMotion: accessibilityReduceMotion
+                    )
+                ) {
+                    hiddenInterfaceProgress = isHidden ? 1 : 0
+                }
             }
     }
 
@@ -153,6 +167,10 @@ struct AppleMusicLyricsView: View {
             let distanceBlurScale = CGFloat(settings.lyricsDistanceBlurScale)
             let hiddenInterfaceBlurScale = CGFloat(
                 settings.lyricsHiddenInterfaceBlurScale
+            )
+            let activeHiddenInterfaceProgress = min(
+                max(hiddenInterfaceProgress, 0),
+                1
             )
             let dimAmount = settings.lyricsDimAmount
             let distanceDimAmount = usesUniformBrowsingDimming
@@ -279,11 +297,15 @@ struct AppleMusicLyricsView: View {
                                     let distance = Self.lyricVisualDistance(
                                         visualMidY: visualMidY,
                                         focusAnchorY: focusAnchorY,
-                                        softensFollowingLyrics: isInterfaceHidden
+                                        expandedBottomProgress:
+                                            activeHiddenInterfaceProgress
                                     )
-                                    let activeDistanceBlurScale = isInterfaceHidden
-                                        ? hiddenInterfaceBlurScale
-                                        : distanceBlurScale
+                                    let activeDistanceBlurScale =
+                                        distanceBlurScale
+                                        + (
+                                            hiddenInterfaceBlurScale
+                                                - distanceBlurScale
+                                        ) * activeHiddenInterfaceProgress
                                     let bottomRevealOpacity = Self.lyricBottomRevealOpacity(
                                         frame: frame,
                                         movementOffset: movementOffset,
@@ -547,11 +569,15 @@ struct AppleMusicLyricsView: View {
                         let distance = Self.lyricVisualDistance(
                             visualMidY: visualMidY,
                             focusAnchorY: focusAnchorY,
-                            softensFollowingLyrics: isInterfaceHidden
+                            expandedBottomProgress:
+                                hiddenInterfaceProgress
                         )
-                        let activeDistanceBlurScale = isInterfaceHidden
-                            ? hiddenInterfaceBlurScale
-                            : distanceBlurScale
+                        let activeDistanceBlurScale =
+                            distanceBlurScale
+                            + (
+                                hiddenInterfaceBlurScale
+                                    - distanceBlurScale
+                            ) * hiddenInterfaceProgress
 
                         SynchronizedLyricText(
                             line: line,
@@ -696,10 +722,33 @@ struct AppleMusicLyricsView: View {
         guard viewportHeight > 0 else { return (0.08, 0.84, 1) }
         let referenceRatio = referenceLyricsViewportHeight(for: viewportHeight)
             / viewportHeight
+        let progress = min(max(hiddenInterfaceProgress, 0), 1)
+        let collapseStart: CGFloat = 0.68
+        let normalizedCollapse = min(
+            max(
+                (progress - collapseStart)
+                    / (1 - collapseStart),
+                0
+            ),
+            1
+        )
+        let collapseProgress =
+            normalizedCollapse
+            * normalizedCollapse
+            * (3 - 2 * normalizedCollapse)
+        let bottomClear =
+            referenceRatio
+            + (1 - referenceRatio) * collapseProgress
+        let shownFadeHeight = 0.16 * referenceRatio
+        let hiddenFadeHeight: CGFloat = 0.08
+        let fadeHeight =
+            shownFadeHeight
+            + (hiddenFadeHeight - shownFadeHeight)
+                * collapseProgress
         return (
             topOpaque: 0.08 * referenceRatio,
-            bottomOpaque: isInterfaceHidden ? 0.92 : 0.84 * referenceRatio,
-            bottomClear: isInterfaceHidden ? 1 : referenceRatio
+            bottomOpaque: bottomClear - fadeHeight,
+            bottomClear: bottomClear
         )
     }
 
@@ -1649,13 +1698,17 @@ struct AppleMusicLyricsView: View {
     nonisolated private static func lyricVisualDistance(
         visualMidY: CGFloat,
         focusAnchorY: CGFloat,
-        softensFollowingLyrics: Bool
+        expandedBottomProgress: CGFloat
     ) -> CGFloat {
         let signedDistance = visualMidY - focusAnchorY
-        guard softensFollowingLyrics, signedDistance > 0 else {
+        guard signedDistance > 0 else {
             return abs(signedDistance)
         }
-        return signedDistance * expandedBottomDistanceScale
+        let progress = min(max(expandedBottomProgress, 0), 1)
+        let distanceScale =
+            1
+            + (expandedBottomDistanceScale - 1) * progress
+        return signedDistance * distanceScale
     }
 
     nonisolated private static func lyricFocusBlurRadius(
