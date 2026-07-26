@@ -115,20 +115,27 @@
 
 ```text
 MeloX/
-├── App/                  # 页面路由与应用级导航
+├── App/                  # 应用入口、根视图与应用级导航
 ├── Core/
 │   ├── Artwork/          # 封面颜色与视觉数据
+│   ├── Cloud/            # 云盘模型与状态
+│   ├── Downloads/        # 下载存储与传输
 │   ├── Library/          # 账号音乐库状态与收藏操作
 │   ├── Lyrics/           # LRC / YRC 模型和解析
-│   ├── Models/           # 业务模型与接口响应
+│   ├── Models/           # 按账号、音乐、网络和社交分类的业务模型
 │   ├── Networking/       # 网易云接口与直接请求客户端
-│   ├── Persistence/      # 本地持久化支持
-│   ├── Playback/         # 播放引擎、队列和系统媒体会话
-│   └── Settings/         # 应用与播放器偏好
-├── Features/             # 首页、发现、搜索、音乐库、播放器等功能页面
-├── Shared/               # 跨功能复用的 SwiftUI 视图
-├── Assets.xcassets/      # 应用图标、强调色与图片资源
-└── MeloXApp.swift        # 应用入口与依赖装配
+│   ├── Playback/         # AutoMix、播放引擎、均衡器、队列和媒体会话
+│   ├── Settings/         # 应用、歌词与播放偏好
+│   └── Updates/          # 版本与更新服务
+├── Features/
+│   ├── Player/           # Now Playing、歌词渲染方案、TextPV 与播放队列
+│   ├── Settings/         # 按账号、应用、歌词、播放和系统能力分类的设置页面
+│   └── …                 # 首页、发现、搜索、音乐库等独立业务功能
+├── Shared/
+│   ├── Components/       # 通用状态与辅助视图
+│   └── Media/            # 封面、媒体卡片与歌曲行
+├── Resources/            # 字体、Core ML 模型与许可证
+└── Assets.xcassets/      # 应用图标、强调色与图片资源
 ```
 
 ## 已知限制
