@@ -35,13 +35,24 @@ struct PlayerSettingsView: View {
                         value: settings.equalizer.summary
                     )
                 }
+
+                NavigationLink {
+                    AutoMixSettingsView()
+                } label: {
+                    LabeledContent(
+                        "自动混音",
+                        value: player.isAutoMixEnabled
+                            ? settings.autoMix.mode.title
+                            : "关闭"
+                    )
+                }
             } header: {
                 Text("音频")
             } footer: {
                 settingsFooter {
                     footerDescription(
                         "音频",
-                        "音质受歌曲版权和账号权限限制；均衡器会同时作用于网络播放和已下载歌曲。"
+                        "音质受歌曲版权和账号权限限制；均衡器和自动混音会同时作用于网络播放和已下载歌曲。"
                     )
                     footerDescription(
                         "音量控制",

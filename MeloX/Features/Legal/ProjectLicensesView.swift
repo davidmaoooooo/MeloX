@@ -48,6 +48,11 @@ struct ProjectLicensesView: View {
                     license: "SIL OFL 1.1",
                     document: .sourceHanSerif
                 )
+                licenseLink(
+                    title: "BeatNet",
+                    license: "CC BY 4.0",
+                    document: .beatNet
+                )
             }
 
             Section {
@@ -70,6 +75,11 @@ struct ProjectLicensesView: View {
                     name: "DanteAlighieri13210914/pv-tool",
                     contribution: "文字 PV 模板与效果的原始实现",
                     url: URL(string: "https://github.com/DanteAlighieri13210914/pv-tool")!
+                )
+                projectLink(
+                    name: "mjhydri/BeatNet",
+                    contribution: "自动混音的节拍、重拍与速度分析模型",
+                    url: URL(string: "https://github.com/mjhydri/BeatNet")!
                 )
             } header: {
                 Text("参考项目")
@@ -135,6 +145,7 @@ enum LegalDocument: String, Identifiable {
     case yesPlayMusic
     case pvTool
     case sourceHanSerif
+    case beatNet
 
     var id: String { rawValue }
 
@@ -144,6 +155,7 @@ enum LegalDocument: String, Identifiable {
         case .yesPlayMusic: "YesPlayMusic 许可证"
         case .pvTool: "PV Tool 许可与声明"
         case .sourceHanSerif: "思源宋体许可证"
+        case .beatNet: "BeatNet 模型许可"
         }
     }
 
@@ -158,6 +170,12 @@ enum LegalDocument: String, Identifiable {
         case .sourceHanSerif:
             Self.bundledText(named: "SourceHanSerif-LICENSE", extension: "txt")
                 ?? "思源宋体使用 SIL Open Font License 1.1。完整许可证随应用资源一同提供。"
+        case .beatNet:
+            Self.bundledText(
+                named: "BeatNet-NOTICE",
+                extension: "md"
+            )
+                ?? "MeloX 使用 Mojtaba Heydari 的 BeatNet 通用模型，并将其转换为 Core ML 格式。模型以 Creative Commons Attribution 4.0 International（CC BY 4.0）许可。"
         }
     }
 
@@ -171,6 +189,8 @@ enum LegalDocument: String, Identifiable {
             URL(string: "https://github.com/DanteAlighieri13210914/pv-tool")
         case .sourceHanSerif:
             URL(string: "https://openfontlicense.org/open-font-license-official-text/")
+        case .beatNet:
+            URL(string: "https://github.com/mjhydri/BeatNet")
         }
     }
 

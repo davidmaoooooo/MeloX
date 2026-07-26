@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 enum AudioPlaybackState: Equatable {
@@ -33,17 +33,24 @@ final class AudioPlaybackEngine {
     var onDurationChanged: ((TimeInterval) -> Void)?
     var onPlaybackEnded: (() -> Void)?
     var onFailure: ((Error) -> Void)?
+    var onAutoMixTransitionBegan:
+        ((Int, AutoMixTransitionPlan) -> Void)?
+    var onAutoMixTransitionProgress: ((Double) -> Void)?
+    var onAutoMixTransitionCompleted: ((Int) -> Void)?
+    var onAutoMixPreparationFailed: ((Int, Error) -> Void)?
     var onInterruptionBegan: (() -> Void)?
     var onInterruptionEnded: ((Bool) -> Void)?
     var onOutputDeviceDisconnected: (() -> Void)?
 
     private(set) var state: AudioPlaybackState = .idle
 
-    private let player = AVPlayer()
-    private let equalizerProcessor: AudioEqualizerProcessor
-    private var timeObserver: Any?
-    private var itemStatusObserver: NSKeyValueObservation?
-    private var timeControlObserver: NSKeyValueObservation?
+    private let itemFactory: AudioPlaybackItemFactory
+    private let autoMixController:
+        AutoMixDeckTransitionController
+    private let observedPlayers: [AVPlayer]
+    private var timeObservers: [Any?] = [nil, nil]
+    private var timeControlObservers:
+        [NSKeyValueObservation?] = [nil, nil]
     private var notificationObservers: [NSObjectProtocol] = []
     private var wantsPlayback = false
     private var pendingSeekTime: TimeInterval = 0
@@ -51,36 +58,59 @@ final class AudioPlaybackEngine {
     private var suppressesProgressUpdates = false
     private var didReportCurrentItemFailure = false
     private var loadGeneration = 0
-    private var baseVolume: Float = 1
-    private var transitionGain: Float = 1
-    private var transitionGainGeneration = 0
-    private var pendingFadeInDuration: TimeInterval = 0
+
+    private var decks: [AudioPlaybackDeck] {
+        autoMixController.decks
+    }
+
+    private var activeDeckIndex: Int {
+        autoMixController.activeDeckIndex
+    }
+
+    private var activeDeck: AudioPlaybackDeck {
+        autoMixController.activeDeck
+    }
 
     var hasCurrentItem: Bool {
-        player.currentItem != nil
+        activeDeck.player.currentItem != nil
     }
 
     var expectsPlaybackToContinue: Bool {
         wantsPlayback
     }
 
-    var nowPlayingPlayer: AVPlayer {
-        player
+    var nowPlayingPlayers: [AVPlayer] {
+        decks.map(\.player)
+    }
+
+    var hasPreparedAutoMix: Bool {
+        autoMixController.hasPreparedTransition
     }
 
     init(equalizerConfiguration: AudioEqualizerConfiguration) {
-        equalizerProcessor = AudioEqualizerProcessor(
-            configuration: equalizerConfiguration
+        let factory = AudioPlaybackItemFactory(
+            equalizerConfiguration: equalizerConfiguration
         )
-        player.automaticallyWaitsToMinimizeStalling = true
-        player.preventsDisplaySleepDuringVideoPlayback = false
+        itemFactory = factory
+        let controller =
+            AutoMixDeckTransitionController(
+                itemFactory: factory
+            )
+        autoMixController = controller
+        observedPlayers = controller.decks.map(\.player)
+        bindAutoMixController()
         installPlayerObservers()
         installAudioSessionObservers()
     }
 
     deinit {
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
+        for (player, observer) in zip(
+            observedPlayers,
+            timeObservers
+        ) {
+            if let observer {
+                player.removeTimeObserver(observer)
+            }
         }
         for observer in notificationObservers {
             NotificationCenter.default.removeObserver(observer)
@@ -90,46 +120,30 @@ final class AudioPlaybackEngine {
     func load(
         _ source: PlaybackSource,
         startAt: TimeInterval = 0,
-        autoplay: Bool,
-        fadeInDuration: TimeInterval = 0
+        autoplay: Bool
     ) async {
         loadGeneration += 1
         let generation = loadGeneration
+        cancelAutoMix()
         wantsPlayback = autoplay
         pendingSeekTime = max(0, startAt)
-        pendingFadeInDuration = autoplay
-            ? max(fadeInDuration, 0)
-            : 0
-        transitionGainGeneration += 1
-        transitionGain = pendingFadeInDuration > 0 ? 0 : 1
-        applyOutputVolume()
         seekGeneration += 1
         suppressesProgressUpdates = pendingSeekTime > 0
         didReportCurrentItemFailure = false
-        itemStatusObserver?.invalidate()
         transition(to: .loading)
 
-        let asset = AVURLAsset(url: source.url)
-        let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = 8
-
-        do {
-            if let audioTrack = try await asset.loadTracks(
-                withMediaType: .audio
-            ).first {
-                item.audioMix = equalizerProcessor.makeAudioMix(
-                    for: audioTrack
-                )
-            }
-        } catch {
-            // AVPlayerItem will surface an actionable source error if playback
-            // also fails. A missing track here should not prevent playback.
+        let item = await itemFactory.makeItem(
+            for: source,
+            preferredForwardBufferDuration: 8
+        )
+        guard generation == loadGeneration,
+              !Task.isCancelled else {
+            return
         }
-
-        guard generation == loadGeneration, !Task.isCancelled else { return }
-        observeStatus(of: item)
-        player.replaceCurrentItem(with: item)
-
+        activeDeck.replaceCurrentItem(
+            with: item,
+            identifier: nil
+        )
         if autoplay {
             play()
         }
@@ -142,27 +156,24 @@ final class AudioPlaybackEngine {
         seekGeneration += 1
         suppressesProgressUpdates = false
         didReportCurrentItemFailure = false
-        pendingFadeInDuration = 0
-        transitionGainGeneration += 1
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        transitionGain = 1
-        applyOutputVolume()
-        itemStatusObserver?.invalidate()
-        itemStatusObserver = nil
+        autoMixController.reset()
         transition(to: .idle)
     }
 
     func play() {
-        guard let item = player.currentItem else { return }
+        guard let item = activeDeck.player.currentItem else {
+            return
+        }
         wantsPlayback = true
-        guard item.status == .readyToPlay, !suppressesProgressUpdates else {
+        guard item.status == .readyToPlay,
+              !suppressesProgressUpdates else {
             transition(to: .loading)
             return
         }
         do {
             try activateAudioSession()
-            player.play()
+            activeDeck.player.play()
+            autoMixController.resumeIncomingIfNeeded()
             updateStateFromPlayer()
         } catch {
             wantsPlayback = false
@@ -172,13 +183,16 @@ final class AudioPlaybackEngine {
 
     func pause() {
         wantsPlayback = false
-        player.pause()
+        autoMixController.pauseAll()
         publishProgressIfAvailable()
         updateStateFromPlayer()
     }
 
     func seek(to seconds: TimeInterval) {
-        guard let item = player.currentItem else { return }
+        guard let item = activeDeck.player.currentItem else {
+            return
+        }
+        cancelAutoMix()
         let position = max(0, seconds)
         seekGeneration += 1
         if item.status != .readyToPlay {
@@ -190,56 +204,123 @@ final class AudioPlaybackEngine {
 
         pendingSeekTime = 0
         suppressesProgressUpdates = false
-        let target = CMTime(seconds: position, preferredTimescale: 600)
-        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        activeDeck.player.seek(
+            to: CMTime(
+                seconds: position,
+                preferredTimescale: 600
+            ),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
         onProgressChanged?(position)
     }
 
     func setVolume(_ volume: Double) {
-        baseVolume = Float(min(max(volume, 0), 1))
-        applyOutputVolume()
-    }
-
-    func fadeOutForTransition(duration: TimeInterval) async {
-        await animateTransitionGain(
-            to: 0,
-            duration: duration
-        )
-    }
-
-    func resetTransitionGain() {
-        pendingFadeInDuration = 0
-        transitionGainGeneration += 1
-        transitionGain = 1
-        applyOutputVolume()
+        autoMixController.setVolume(volume)
     }
 
     func setEqualizerConfiguration(
         _ configuration: AudioEqualizerConfiguration
     ) {
-        equalizerProcessor.update(configuration: configuration)
+        itemFactory.updateEqualizer(configuration)
+    }
+
+    func prepareAutoMix(
+        _ source: PlaybackSource,
+        identifier: Int,
+        plan: AutoMixTransitionPlan
+    ) async {
+        await autoMixController.prepare(
+            source,
+            identifier: identifier,
+            plan: plan
+        )
+        autoMixController.startIfNeeded(
+            wantsPlayback: wantsPlayback
+        )
+    }
+
+    func cancelAutoMix() {
+        autoMixController.cancel(
+            wantsPlayback: wantsPlayback
+        )
+    }
+
+    private func bindAutoMixController() {
+        autoMixController.onTransitionBegan = {
+            [weak self] identifier, plan in
+            self?.onAutoMixTransitionBegan?(
+                identifier,
+                plan
+            )
+        }
+        autoMixController.onTransitionProgress = {
+            [weak self] progress in
+            self?.onAutoMixTransitionProgress?(progress)
+        }
+        autoMixController.onTransitionCompleted = {
+            [weak self] identifier in
+            self?.onAutoMixTransitionCompleted?(identifier)
+        }
+        autoMixController.onPreparationFailed = {
+            [weak self] identifier, error in
+            self?.onAutoMixPreparationFailed?(
+                identifier,
+                error
+            )
+        }
+        autoMixController.onActiveDeckChanged = {
+            [weak self] in
+            guard let self else { return }
+            self.publishProgressIfAvailable()
+            self.publishDurationIfAvailable()
+            self.updateStateFromPlayer()
+        }
     }
 
     private func installPlayerObservers() {
-        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) {
-            [weak self] time in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let seconds = time.seconds
-                if seconds.isFinite, !self.suppressesProgressUpdates {
-                    self.onProgressChanged?(max(0, seconds))
-                }
-                self.publishDurationIfAvailable()
+        for index in decks.indices {
+            let deck = decks[index]
+            deck.onItemStatusChanged = {
+                [weak self, weak deck] item in
+                guard let self, let deck else { return }
+                self.handleItemStatusChange(
+                    item,
+                    on: deck,
+                    at: index
+                )
             }
-        }
 
-        timeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) {
-            [weak self] _, _ in
-            guard let engine = self else { return }
-            Task { @MainActor [engine] in
-                engine.updateStateFromPlayer()
-            }
+            timeObservers[index] =
+                deck.player.addPeriodicTimeObserver(
+                    forInterval: CMTime(
+                        seconds: 0.1,
+                        preferredTimescale: 600
+                    ),
+                    queue: .main
+                ) { [weak self] time in
+                    MainActor.assumeIsolated {
+                        self?.handlePeriodicTime(
+                            time,
+                            deckIndex: index
+                        )
+                    }
+                }
+
+            timeControlObservers[index] =
+                deck.player.observe(
+                    \.timeControlStatus,
+                    options: [.initial, .new]
+                ) { [weak self] _, _ in
+                    guard let self else { return }
+                    Task { @MainActor [self] in
+                        guard index
+                                == self.activeDeckIndex else {
+                            return
+                        }
+                        self.updateStateFromPlayer()
+                    }
+                }
         }
 
         let center = NotificationCenter.default
@@ -250,41 +331,63 @@ final class AudioPlaybackEngine {
                 queue: .main
             ) { [weak self] notification in
                 MainActor.assumeIsolated {
-                    guard let self,
-                          notification.object as? AVPlayerItem === self.player.currentItem else { return }
-                    self.onPlaybackEnded?()
+                    self?.handleItemEnded(
+                        notification.object
+                    )
                 }
             }
         )
         notificationObservers.append(
             center.addObserver(
-                forName: .AVPlayerItemFailedToPlayToEndTime,
+                forName:
+                    .AVPlayerItemFailedToPlayToEndTime,
                 object: nil,
                 queue: .main
             ) { [weak self] notification in
                 MainActor.assumeIsolated {
-                    guard let self,
-                          notification.object as? AVPlayerItem === self.player.currentItem else { return }
-                    let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey]
-                        as? Error
-                    self.fail(with: error)
+                    let error = notification.userInfo?[
+                        AVPlayerItemFailedToPlayToEndTimeErrorKey
+                    ] as? Error
+                    self?.handleItemFailedToEnd(
+                        notification.object,
+                        error: error
+                    )
                 }
             }
         )
     }
 
-    private func observeStatus(of item: AVPlayerItem) {
-        itemStatusObserver = item.observe(\.status, options: [.initial, .new]) {
-            [weak self, weak item] _, _ in
-            guard let engine = self, let item else { return }
-            Task { @MainActor [engine, item] in
-                engine.handleCurrentItemStatusChange(for: item)
-            }
+    private func handlePeriodicTime(
+        _ time: CMTime,
+        deckIndex: Int
+    ) {
+        guard deckIndex == activeDeckIndex else { return }
+        let seconds = time.seconds
+        if seconds.isFinite,
+           !suppressesProgressUpdates {
+            onProgressChanged?(max(0, seconds))
         }
+        publishDurationIfAvailable()
+        autoMixController.startIfNeeded(
+            wantsPlayback: wantsPlayback
+        )
     }
 
-    private func handleCurrentItemStatusChange(for item: AVPlayerItem) {
-        guard player.currentItem === item else { return }
+    private func handleItemStatusChange(
+        _ item: AVPlayerItem,
+        on deck: AudioPlaybackDeck,
+        at deckIndex: Int
+    ) {
+        guard deck.player.currentItem === item else { return }
+        if deckIndex != activeDeckIndex {
+            autoMixController.handleStandbyStatus(
+                item,
+                deckIndex: deckIndex,
+                wantsPlayback: wantsPlayback
+            )
+            return
+        }
+
         switch item.status {
         case .unknown:
             transition(to: .loading)
@@ -293,7 +396,10 @@ final class AudioPlaybackEngine {
             if pendingSeekTime > 0 {
                 let position = pendingSeekTime
                 pendingSeekTime = 0
-                applyInitialSeek(to: position, for: item)
+                applyInitialSeek(
+                    to: position,
+                    for: item
+                )
                 return
             }
             suppressesProgressUpdates = false
@@ -305,8 +411,43 @@ final class AudioPlaybackEngine {
         }
     }
 
+    private func handleItemEnded(_ object: Any?) {
+        guard let item = object as? AVPlayerItem else {
+            return
+        }
+        if autoMixController.finishIfOutgoingEnded(
+            item,
+            wantsPlayback: wantsPlayback
+        ) {
+            return
+        }
+        guard activeDeck.player.currentItem === item else {
+            return
+        }
+        onPlaybackEnded?()
+    }
+
+    private func handleItemFailedToEnd(
+        _ object: Any?,
+        error: Error?
+    ) {
+        guard let item = object as? AVPlayerItem else {
+            return
+        }
+        if autoMixController.failPreparedIfMatching(
+            item,
+            error: error
+        ) {
+            return
+        }
+        guard activeDeck.player.currentItem === item else {
+            return
+        }
+        fail(with: error)
+    }
+
     private func updateStateFromPlayer() {
-        guard let item = player.currentItem else {
+        guard let item = activeDeck.player.currentItem else {
             transition(to: .idle)
             return
         }
@@ -318,9 +459,14 @@ final class AudioPlaybackEngine {
             transition(to: .loading)
             return
         }
-        switch player.timeControlStatus {
+        switch activeDeck.player.timeControlStatus {
         case .paused:
-            transition(to: item.status == .unknown ? .loading : .paused)
+            transition(
+                to:
+                    item.status == .unknown
+                        ? .loading
+                        : .paused
+            )
         case .waitingToPlayAtSpecifiedRate:
             transition(to: .loading)
         case .playing:
@@ -331,32 +477,45 @@ final class AudioPlaybackEngine {
     }
 
     private func publishDurationIfAvailable() {
-        guard let seconds = player.currentItem?.duration.seconds,
+        guard let seconds =
+                activeDeck.player.currentItem?
+                    .duration.seconds,
               seconds.isFinite,
-              seconds > 0 else { return }
+              seconds > 0 else {
+            return
+        }
         onDurationChanged?(seconds)
     }
 
     private func publishProgressIfAvailable() {
         guard !suppressesProgressUpdates else { return }
-        let seconds = player.currentTime().seconds
+        let seconds =
+            activeDeck.player.currentTime().seconds
         guard seconds.isFinite else { return }
         onProgressChanged?(max(0, seconds))
     }
 
-    private func applyInitialSeek(to position: TimeInterval, for item: AVPlayerItem) {
+    private func applyInitialSeek(
+        to position: TimeInterval,
+        for item: AVPlayerItem
+    ) {
         seekGeneration += 1
         let generation = seekGeneration
-        let target = CMTime(seconds: position, preferredTimescale: 600)
-        player.seek(
-            to: target,
+        activeDeck.player.seek(
+            to: CMTime(
+                seconds: position,
+                preferredTimescale: 600
+            ),
             toleranceBefore: .zero,
             toleranceAfter: .zero
         ) { [weak self] finished in
             guard let self else { return }
             Task { @MainActor [self] in
                 guard generation == self.seekGeneration,
-                      self.player.currentItem === item else { return }
+                      self.activeDeck.player.currentItem
+                        === item else {
+                    return
+                }
                 self.suppressesProgressUpdates = false
                 if finished {
                     self.onProgressChanged?(position)
@@ -370,16 +529,7 @@ final class AudioPlaybackEngine {
 
     private func resumePlaybackIfNeeded() {
         if wantsPlayback {
-            let fadeInDuration = pendingFadeInDuration
-            pendingFadeInDuration = 0
             play()
-            guard fadeInDuration > 0 else { return }
-            Task { @MainActor [weak self] in
-                await self?.animateTransitionGain(
-                    to: 1,
-                    duration: fadeInDuration
-                )
-            }
         } else {
             updateStateFromPlayer()
         }
@@ -389,50 +539,17 @@ final class AudioPlaybackEngine {
         guard !didReportCurrentItemFailure else { return }
         didReportCurrentItemFailure = true
         wantsPlayback = false
-        player.pause()
+        autoMixController.pauseAll()
         transition(to: .paused)
         onFailure?(AudioPlaybackError.itemFailed(error))
     }
 
-    private func transition(to newState: AudioPlaybackState) {
+    private func transition(
+        to newState: AudioPlaybackState
+    ) {
         guard state != newState else { return }
         state = newState
         onStateChanged?(newState)
-    }
-
-    private func animateTransitionGain(
-        to target: Float,
-        duration: TimeInterval
-    ) async {
-        transitionGainGeneration += 1
-        let generation = transitionGainGeneration
-        let start = transitionGain
-        let clampedDuration = max(duration, 0)
-        guard clampedDuration > 0 else {
-            transitionGain = target
-            applyOutputVolume()
-            return
-        }
-
-        let stepCount = max(Int(clampedDuration / 0.02), 1)
-        let stepDuration = clampedDuration / Double(stepCount)
-        for step in 1...stepCount {
-            do {
-                try await Task.sleep(for: .seconds(stepDuration))
-            } catch {
-                return
-            }
-            guard generation == transitionGainGeneration else {
-                return
-            }
-            let progress = Float(step) / Float(stepCount)
-            transitionGain = start + ((target - start) * progress)
-            applyOutputVolume()
-        }
-    }
-
-    private func applyOutputVolume() {
-        player.volume = baseVolume * transitionGain
     }
 
     private func activateAudioSession() throws {
@@ -447,7 +564,8 @@ final class AudioPlaybackEngine {
 
         notificationObservers.append(
             center.addObserver(
-                forName: AVAudioSession.interruptionNotification,
+                forName:
+                    AVAudioSession.interruptionNotification,
                 object: session,
                 queue: .main
             ) { [weak self] notification in
@@ -458,7 +576,8 @@ final class AudioPlaybackEngine {
         )
         notificationObservers.append(
             center.addObserver(
-                forName: AVAudioSession.routeChangeNotification,
+                forName:
+                    AVAudioSession.routeChangeNotification,
                 object: session,
                 queue: .main
             ) { [weak self] notification in
@@ -469,25 +588,44 @@ final class AudioPlaybackEngine {
         )
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+    private func handleInterruption(
+        _ notification: Notification
+    ) {
+        guard let rawType = notification.userInfo?[
+            AVAudioSessionInterruptionTypeKey
+        ] as? UInt,
+              let type =
+                AVAudioSession.InterruptionType(
+                    rawValue: rawType
+                ) else {
+            return
+        }
         switch type {
         case .began:
             onInterruptionBegan?()
         case .ended:
-            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
-            let shouldResume = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
-                .contains(.shouldResume)
+            let rawOptions = notification.userInfo?[
+                AVAudioSessionInterruptionOptionKey
+            ] as? UInt ?? 0
+            let shouldResume =
+                AVAudioSession.InterruptionOptions(
+                    rawValue: rawOptions
+                ).contains(.shouldResume)
             onInterruptionEnded?(shouldResume)
         @unknown default:
             break
         }
     }
 
-    private func handleRouteChange(_ notification: Notification) {
-        guard let rawReason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-              AVAudioSession.RouteChangeReason(rawValue: rawReason) == .oldDeviceUnavailable else {
+    private func handleRouteChange(
+        _ notification: Notification
+    ) {
+        guard let rawReason = notification.userInfo?[
+            AVAudioSessionRouteChangeReasonKey
+        ] as? UInt,
+              AVAudioSession.RouteChangeReason(
+                rawValue: rawReason
+              ) == .oldDeviceUnavailable else {
             return
         }
         pause()

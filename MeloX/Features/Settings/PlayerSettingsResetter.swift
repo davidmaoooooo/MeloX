@@ -17,6 +17,7 @@ enum PlayerSettingsResetter {
         await Task.yield()
         player.applyVolumeControlMode()
         player.applyEqualizerSettings()
+        player.applyAutoMixSettings()
         player.applySystemNowPlayingLyricsPreference()
         player.applyLyricsLiveActivityPreference()
     }

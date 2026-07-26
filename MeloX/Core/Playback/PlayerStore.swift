@@ -34,6 +34,10 @@ final class PlayerStore {
     private(set) var repeatMode: RepeatMode = .off
     private(set) var isAutoplayEnabled = false
     private(set) var isAutoMixEnabled = false
+    private(set) var autoMixTransitionProgress: Double?
+    private(set) var autoMixTransitionKind:
+        AutoMixTransitionKind?
+    private(set) var autoMixIncomingSongName: String?
     private(set) var queueModeIndicator:
         QueuePlaybackModeIndicator?
 
@@ -49,6 +53,9 @@ final class PlayerStore {
     }
     var queueModeBadgeSystemImage: String? {
         queueModeIndicator?.systemImage
+    }
+    var isAutoMixTransitioning: Bool {
+        autoMixTransitionProgress != nil
     }
     var canPlayNext: Bool {
         isAutoplayEnabled
@@ -72,6 +79,10 @@ final class PlayerStore {
 
     @ObservationIgnored
     private let engine: AudioPlaybackEngine
+
+    @ObservationIgnored
+    private let autoMixCoordinator:
+        AutoMixPlaybackCoordinator
 
     @ObservationIgnored
     private let nowPlayingSession: NowPlayingSession
@@ -117,6 +128,9 @@ final class PlayerStore {
     private var currentLoadShouldAutoplay = false
 
     @ObservationIgnored
+    private var currentPlaybackSource: PlaybackSource?
+
+    @ObservationIgnored
     private var isLoadingAutoplayRecommendations = false
 
     @ObservationIgnored
@@ -148,12 +162,21 @@ final class PlayerStore {
             settings: settings,
             onRecorded: onPlaybackRecorded
         )
-        engine = AudioPlaybackEngine(
+        let engine = AudioPlaybackEngine(
             equalizerConfiguration: settings.equalizer.configuration
         )
-        nowPlayingSession = NowPlayingSession(player: engine.nowPlayingPlayer)
+        self.engine = engine
+        autoMixCoordinator = AutoMixPlaybackCoordinator(
+            api: api,
+            downloads: downloads,
+            engine: engine
+        )
+        nowPlayingSession = NowPlayingSession(
+            players: engine.nowPlayingPlayers
+        )
         lyricsLiveActivityController = LyricsLiveActivityController()
         bindEngine()
+        bindAutoMixCoordinator()
         bindRemoteCommands()
         applyVolumeControlMode()
     }
@@ -281,9 +304,6 @@ final class PlayerStore {
             stopAtQueueEnd()
             return
         }
-        if recordingCurrentPlayback {
-            await fadeOutForAutoMixIfNeeded()
-        }
         guard playbackQueue.move(by: 1, wraps: repeatMode == .all) else {
             stopAtQueueEnd()
             return
@@ -303,7 +323,6 @@ final class PlayerStore {
             return
         }
         recordCurrentPlayback()
-        await fadeOutForAutoMixIfNeeded()
         guard playbackQueue.move(by: -1, wraps: repeatMode == .all) else { return }
         hasRecordedCurrentStart = false
         await loadCurrentSong(autoplay: true)
@@ -312,32 +331,36 @@ final class PlayerStore {
     func playFromQueue(at index: Int) async {
         guard queue.indices.contains(index) else { return }
         recordCurrentPlayback()
-        await fadeOutForAutoMixIfNeeded()
         guard playbackQueue.select(index: index) else { return }
         hasRecordedCurrentStart = false
         await loadCurrentSong(autoplay: true)
     }
 
     func addToPlaybackQueue(_ song: Song) {
+        cancelAutoMixPreparation()
         playbackQueue.append(song)
         persistSnapshot()
+        prepareAutoMixIfNeeded()
     }
 
     func moveUpcomingQueueItems(
         fromOffsets source: IndexSet,
         toOffset destination: Int
     ) {
+        cancelAutoMixPreparation()
         playbackQueue.moveUpcomingSongs(
             fromOffsets: source,
             toOffset: destination,
             wraps: repeatMode == .all
         )
         persistSnapshot()
+        prepareAutoMixIfNeeded()
     }
 
     func seek(to seconds: TimeInterval) {
         let maximum = duration > 0 ? duration : TimeInterval(currentSong?.durationMS ?? 0) / 1_000
         let clamped = max(0, min(seconds, maximum))
+        cancelAutoMixPreparation()
         engine.seek(to: clamped)
         progress = clamped
         seekRevision += 1
@@ -395,6 +418,7 @@ final class PlayerStore {
     }
 
     func cycleRepeatMode() {
+        cancelAutoMixPreparation()
         switch repeatMode {
         case .off:
             repeatMode = .all
@@ -410,6 +434,7 @@ final class PlayerStore {
     }
 
     func toggleShuffle() {
+        cancelAutoMixPreparation()
         playbackQueue.toggleShuffle()
         if isShuffled {
             queueModeIndicator = .shuffle
@@ -435,16 +460,29 @@ final class PlayerStore {
     }
 
     func toggleAutoMix() {
-        isAutoMixEnabled.toggle()
-        if isAutoMixEnabled {
+        setAutoMixEnabled(!isAutoMixEnabled)
+    }
+
+    func setAutoMixEnabled(_ isEnabled: Bool) {
+        guard isAutoMixEnabled != isEnabled else { return }
+        isAutoMixEnabled = isEnabled
+        if isEnabled {
             queueModeIndicator = .autoMix
         } else {
             updateQueueModeIndicator()
-        }
-        if !isAutoMixEnabled {
-            engine.resetTransitionGain()
+            cancelAutoMixPreparation()
         }
         persistSnapshot()
+        if isEnabled {
+            prepareAutoMixIfNeeded()
+        }
+    }
+
+    func applyAutoMixSettings() {
+        cancelAutoMixPreparation()
+        persistSnapshot()
+        guard isAutoMixEnabled else { return }
+        prepareAutoMixIfNeeded()
     }
 
     private func loadCurrentSong(
@@ -452,6 +490,7 @@ final class PlayerStore {
         startAt: TimeInterval = 0
     ) async {
         guard let song = playbackQueue.currentSong else { return }
+        cancelAutoMixPreparation()
         loadGeneration += 1
         let generation = loadGeneration
         currentSong = song
@@ -462,6 +501,7 @@ final class PlayerStore {
         isLoading = true
         isPlaying = false
         isUsingDownloadedSource = false
+        currentPlaybackSource = nil
         currentLoadShouldAutoplay = autoplay
         playbackIssue = nil
         if nowPlayingLyricsSongID != song.id {
@@ -490,11 +530,11 @@ final class PlayerStore {
             }
             guard generation == loadGeneration, currentSong?.id == song.id else { return }
             isResolvingSource = false
+            currentPlaybackSource = source
             await engine.load(
                 source,
                 startAt: startAt,
-                autoplay: autoplay,
-                fadeInDuration: isAutoMixEnabled && autoplay ? 0.65 : 0
+                autoplay: autoplay
             )
         } catch is CancellationError {
             return
@@ -551,7 +591,7 @@ final class PlayerStore {
     }
 
     private func stopAtQueueEnd() {
-        engine.resetTransitionGain()
+        cancelAutoMixPreparation()
         engine.pause()
         engine.seek(to: 0)
         progress = 0
@@ -588,6 +628,7 @@ final class PlayerStore {
                 self.currentLoadShouldAutoplay = true
                 self.playbackIssue = nil
                 self.recordCurrentPlaybackStartIfNeeded()
+                self.prepareAutoMixIfNeeded()
             }
             self.lastProgressUpdateDate = Date()
             self.updateNowPlayingState()
@@ -603,6 +644,7 @@ final class PlayerStore {
                 self.lastPersistedSecond = second
                 self.persistSnapshot()
             }
+            self.prepareAutoMixIfNeeded()
         }
         engine.onDurationChanged = { [weak self] value in
             guard let self else { return }
@@ -633,6 +675,35 @@ final class PlayerStore {
         }
         engine.onOutputDeviceDisconnected = { [weak self] in
             self?.shouldResumeAfterInterruption = false
+        }
+    }
+
+    private func bindAutoMixCoordinator() {
+        autoMixCoordinator.onTransitionBegan = {
+            [weak self] context, plan in
+            guard let self,
+                  context.outgoingSongID
+                    == self.currentSong?.id else {
+                return
+            }
+            self.autoMixTransitionKind = plan.kind
+            self.autoMixIncomingSongName =
+                context.incomingSong.name
+            self.autoMixTransitionProgress = 0
+        }
+        autoMixCoordinator.onTransitionProgress = {
+            [weak self] progress in
+            guard let self,
+                  self.autoMixTransitionProgress != nil else {
+                return
+            }
+            self.autoMixTransitionProgress = progress
+        }
+        autoMixCoordinator.onTransitionCompleted = {
+            [weak self] context in
+            self?.completeAutoMixTransition(
+                context: context
+            )
         }
     }
 
@@ -1022,8 +1093,91 @@ final class PlayerStore {
         }
     }
 
-    private func fadeOutForAutoMixIfNeeded() async {
-        guard isAutoMixEnabled, isPlaying else { return }
-        await engine.fadeOutForTransition(duration: 0.24)
+    private func prepareAutoMixIfNeeded() {
+        let nextSong = upcomingQueueIndices.first.flatMap {
+            queue.indices.contains($0)
+                ? queue[$0]
+                : nil
+        }
+        autoMixCoordinator.prepareIfNeeded(
+            isEnabled: isAutoMixEnabled,
+            isPlaying: isPlaying,
+            repeatsCurrentSong: repeatMode == .one,
+            outgoingSong: currentSong,
+            outgoingSource: currentPlaybackSource,
+            outgoingSourceIsDownloaded:
+                isUsingDownloadedSource,
+            outgoingDuration: duration,
+            outgoingProgress: estimatedProgress(),
+            incomingSong: nextSong,
+            configuration: settings.autoMix.configuration
+        )
+    }
+
+    private func cancelAutoMixPreparation() {
+        autoMixTransitionProgress = nil
+        autoMixTransitionKind = nil
+        autoMixIncomingSongName = nil
+        autoMixCoordinator.cancel()
+    }
+
+    private func completeAutoMixTransition(
+        context: PreparedAutoMixContext
+    ) {
+        guard context.outgoingSongID == currentSong?.id else {
+            cancelAutoMixPreparation()
+            return
+        }
+
+        recordCurrentPlayback(completed: true)
+        guard playbackQueue.move(
+            by: 1,
+            wraps: repeatMode == .all
+        ),
+              playbackQueue.currentSong?.id
+                == context.incomingSong.id else {
+            cancelAutoMixPreparation()
+            return
+        }
+
+        loadGeneration += 1
+        currentSong = context.incomingSong
+        currentPlaybackSource = context.source
+        isUsingDownloadedSource =
+            context.sourceIsDownloaded
+        currentLoadShouldAutoplay = true
+        isResolvingSource = false
+        isLoading = engine.state == .loading
+        isPlaying = engine.state == .playing
+        playbackIssue = nil
+        hasRecordedCurrentStart = false
+        lastProgressUpdateDate = Date()
+        lastPersistedSecond = Int(progress)
+        nowPlayingLyricsSongID = nil
+        nowPlayingLyrics = []
+        publishedNowPlayingLyricID = nil
+        publishedLyricsLiveActivity = nil
+
+        autoMixTransitionProgress = nil
+        autoMixTransitionKind = nil
+        autoMixIncomingSongName = nil
+
+        nowPlayingSession.setSong(
+            context.incomingSong,
+            duration: duration,
+            queueIndex: currentIndex,
+            queueCount: queue.count,
+            lyricsDisplaySettings:
+                nowPlayingLyricsDisplaySettings
+        )
+        if isPlaying {
+            recordCurrentPlaybackStartIfNeeded()
+        }
+        updateNowPlayingState(
+            forceNowPlayingLyrics: true,
+            forceLyricsLiveActivity: true
+        )
+        persistSnapshot()
+        prepareAutoMixIfNeeded()
     }
 }

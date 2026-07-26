@@ -856,6 +856,7 @@ final class AppSettings {
     let skylineLyrics: SkylineLyricsPreferences
     let textPV: TextPVPreferences
     let equalizer: AudioEqualizerPreferences
+    let autoMix: AutoMixPreferences
     let floatingLyrics: FloatingLyricsPreferences
 
     @ObservationIgnored
@@ -866,6 +867,7 @@ final class AppSettings {
         skylineLyrics = SkylineLyricsPreferences(defaults: defaults)
         textPV = TextPVPreferences(defaults: defaults)
         equalizer = AudioEqualizerPreferences(defaults: defaults)
+        autoMix = AutoMixPreferences(defaults: defaults)
         floatingLyrics = FloatingLyricsPreferences(defaults: defaults)
         hasCompletedOnboarding = defaults.bool(
             forKey: Key.hasCompletedOnboarding
@@ -1312,6 +1314,7 @@ final class AppSettings {
         lyricsLiveActivityScrollPause =
             Self.defaultLyricsLiveActivityScrollPause
         equalizer.reset()
+        autoMix.reset()
         playerBackgroundBlur = 90
         playerBackgroundSaturation = 0.82
         shrinksPausedArtwork = true

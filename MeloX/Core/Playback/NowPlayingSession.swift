@@ -24,8 +24,8 @@ final class NowPlayingSession {
         playbackSession.remoteCommandCenter
     }
 
-    init(player: AVPlayer) {
-        playbackSession = MPNowPlayingSession(players: [player])
+    init(players: [AVPlayer]) {
+        playbackSession = MPNowPlayingSession(players: players)
         playbackSession.automaticallyPublishesNowPlayingInfo = false
         installRemoteCommands()
     }

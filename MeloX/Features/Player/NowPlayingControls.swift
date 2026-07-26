@@ -28,7 +28,17 @@ struct NowPlayingProgressControl: View {
                 Text("−\(formatTime(max(player.duration - player.progress, 0)))")
             }
             .overlay {
-                NowPlayingQualityMenu()
+                Group {
+                    if player.isAutoMixTransitioning {
+                        NowPlayingAutoMixStatus()
+                    } else {
+                        NowPlayingQualityMenu()
+                    }
+                }
+                .animation(
+                    .smooth(duration: 0.25),
+                    value: player.isAutoMixTransitioning
+                )
             }
             .font(.caption2.monospacedDigit())
             .foregroundStyle(.white.opacity(0.5))
@@ -44,6 +54,62 @@ struct NowPlayingProgressControl: View {
         guard value.isFinite else { return "0:00" }
         let seconds = max(0, Int(value))
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct NowPlayingAutoMixStatus: View {
+    @Environment(\.accessibilityReduceMotion)
+    private var accessibilityReduceMotion
+    @Environment(PlayerStore.self) private var player
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "waveform")
+                .font(.system(size: 9, weight: .semibold))
+                .symbolEffect(
+                    .variableColor.iterative,
+                    options: .repeating.speed(1.2),
+                    isActive:
+                        !accessibilityReduceMotion
+                            && player.isAutoMixTransitioning
+                )
+
+            Text("混音中")
+                .fontWeight(.medium)
+
+            ProgressView(
+                value:
+                    player.autoMixTransitionProgress
+                        ?? 0
+            )
+            .progressViewStyle(.linear)
+            .tint(.white)
+            .frame(width: 24)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+            .white.opacity(0.16),
+            in: .rect(cornerRadius: 7)
+        )
+        .foregroundStyle(.white.opacity(0.86))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("自动混音中")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        let progress = Int(
+            (
+                player.autoMixTransitionProgress
+                    ?? 0
+            ) * 100
+        )
+        if let songName =
+            player.autoMixIncomingSongName {
+            return "正在过渡到\(songName)，\(progress)%"
+        }
+        return "\(progress)%"
     }
 }
 
