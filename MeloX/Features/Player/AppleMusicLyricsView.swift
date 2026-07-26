@@ -65,7 +65,7 @@ struct AppleMusicLyricsView: View {
         hasSyllableSyncedLyrics = lyrics.contains {
             $0.isSyllableSynced
         }
-        hasTranslations = lyrics.contains { $0.translation != nil }
+        hasTranslations = lyrics.contains { $0.hasTranslation }
         let interludes = LyricInterludeTimeline.interludes(in: lyrics)
         self.interludes = interludes
         interludeByID = Dictionary(
@@ -140,7 +140,8 @@ struct AppleMusicLyricsView: View {
                 retainedTopCascadeLyrics.map(\.id)
             )
             let reservesTranslationSpace =
-                settings.lyricsTranslationDisplayMode == .allLines
+                showsTranslations
+                && settings.lyricsTranslationDisplayMode == .allLines
             let lineSpacing = CGFloat(settings.lyricsLineSpacing)
             let activeInterlude = focusedInterlude
             let translationHeight = showsTranslations
@@ -589,7 +590,9 @@ struct AppleMusicLyricsView: View {
                                 isFocusedLine: isCascadeFocusLine
                             ),
                             reservesTranslationSpace:
-                                settings.lyricsTranslationDisplayMode
+                                settings.lyricsTranslationEnabled
+                                && hasTranslations
+                                && settings.lyricsTranslationDisplayMode
                                     == .allLines,
                             translationLayoutAnimation:
                                 lyricTranslationLayoutAnimation(),

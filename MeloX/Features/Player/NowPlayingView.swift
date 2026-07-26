@@ -237,6 +237,7 @@ struct NowPlayingView: View {
             page: pageSelection,
             showsLyricsUtilities:
                 usesExpandedAppleMusicLyricsLayout,
+            hasLyricsTranslations: hasLyricsTranslations,
             isInterfaceHidden: hidesLyricsControls
         )
     }
@@ -279,6 +280,10 @@ struct NowPlayingView: View {
 
     private var lyricError: String? {
         lyricsStore.errorMessage
+    }
+
+    private var hasLyricsTranslations: Bool {
+        lyrics.contains { $0.hasTranslation }
     }
 
     private var keepsPlayerScreenAwake: Bool {

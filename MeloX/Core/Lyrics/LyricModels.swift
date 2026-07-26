@@ -39,6 +39,13 @@ struct LyricLine: Identifiable, Hashable {
         !syllables.isEmpty
     }
 
+    var hasTranslation: Bool {
+        guard let translation else { return false }
+        return !translation
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
     func makePseudoSyllables() -> [LyricSyllable] {
         guard syllables.isEmpty,
               let duration,

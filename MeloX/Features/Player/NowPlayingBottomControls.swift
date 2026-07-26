@@ -11,6 +11,7 @@ struct NowPlayingBottomControls: View {
     let song: Song
     @Binding var page: NowPlayingPage
     let showsLyricsUtilities: Bool
+    let hasLyricsTranslations: Bool
     let isInterfaceHidden: Bool
 
     var body: some View {
@@ -18,7 +19,8 @@ struct NowPlayingBottomControls: View {
             NowPlayingLyricsUtilityControls(
                 isVisible:
                     showsLyricsUtilities
-                    && !isInterfaceHidden
+                    && !isInterfaceHidden,
+                hasTranslations: hasLyricsTranslations
             )
             .frame(height: Self.utilityHeight, alignment: .top)
 
@@ -86,20 +88,21 @@ private struct NowPlayingLyricsUtilityControls: View {
     private var accessibilityReduceMotion
 
     let isVisible: Bool
+    let hasTranslations: Bool
 
     var body: some View {
         HStack {
-            reservedButton(
-                systemImage: "translate",
-                accessibilityLabel: "翻译歌词"
-            )
+            if hasTranslations {
+                NowPlayingLyricsTranslationButton()
+                    .scaleEffect(
+                        isVisible
+                            ? 1
+                            : NowPlayingInterfaceTransition
+                                .utilityHiddenScale
+                    )
+            }
 
             Spacer()
-
-            reservedButton(
-                systemImage: "wand.and.sparkles",
-                accessibilityLabel: "歌词长按功能"
-            )
         }
         .offset(
             y: isVisible
@@ -117,27 +120,5 @@ private struct NowPlayingLyricsUtilityControls: View {
             ),
             value: isVisible
         )
-    }
-
-    private func reservedButton(
-        systemImage: String,
-        accessibilityLabel: String
-    ) -> some View {
-        Button(action: {}) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .background(.white.opacity(0.18), in: .circle)
-                .contentShape(.circle)
-        }
-        .scaleEffect(
-            isVisible
-                ? 1
-                : NowPlayingInterfaceTransition
-                    .utilityHiddenScale
-        )
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("功能入口已预留，暂未开放")
     }
 }
