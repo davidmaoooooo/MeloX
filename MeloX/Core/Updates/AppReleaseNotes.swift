@@ -1,7 +1,6 @@
 import Foundation
 
-struct AppReleaseNotes: Decodable, Equatable, Identifiable, Sendable {
-    let schemaVersion: Int
+struct AppReleaseNotes: Equatable, Identifiable, Sendable {
     let version: String
     let sourceRevision: String
     let previousVersion: String?
@@ -23,20 +22,57 @@ struct AppReleaseNotes: Decodable, Equatable, Identifiable, Sendable {
 
 enum AppReleaseNotesLoader {
     static func load(from bundle: Bundle = .main) -> AppReleaseNotes? {
-        guard let url = bundle.url(
+        guard let metadataURL = bundle.url(
             forResource: "ReleaseNotes",
             withExtension: "json"
         ),
-        let data = try? Data(contentsOf: url),
-        let releaseNotes = try? JSONDecoder().decode(
-            AppReleaseNotes.self,
-            from: data
+        let markdownURL = bundle.url(
+            forResource: "ReleaseNotes",
+            withExtension: "md"
         ),
-        releaseNotes.schemaVersion == 1,
-        !releaseNotes.version.isEmpty else {
+        let metadataData = try? Data(contentsOf: metadataURL),
+        let metadata = try? JSONDecoder().decode(
+            AppReleaseNotesMetadata.self,
+            from: metadataData
+        ),
+        let markdown = try? String(
+            contentsOf: markdownURL,
+            encoding: .utf8
+        ),
+        metadata.schemaVersion == 2,
+        !metadata.version.isEmpty else {
             return nil
         }
 
-        return releaseNotes
+        let entries = markdown
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> String? in
+                let normalizedLine = String(line).trimmingCharacters(
+                    in: .whitespaces
+                )
+                guard normalizedLine.hasPrefix("- ") else {
+                    return nil
+                }
+                let entry = String(normalizedLine.dropFirst(2))
+                    .trimmingCharacters(in: .whitespaces)
+                return entry.isEmpty ? nil : entry
+            }
+        guard !entries.isEmpty else {
+            return nil
+        }
+
+        return AppReleaseNotes(
+            version: metadata.version,
+            sourceRevision: metadata.sourceRevision,
+            previousVersion: metadata.previousVersion,
+            entries: entries
+        )
     }
+}
+
+private struct AppReleaseNotesMetadata: Decodable {
+    let schemaVersion: Int
+    let version: String
+    let sourceRevision: String
+    let previousVersion: String?
 }

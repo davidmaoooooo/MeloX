@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Generate the release notes metadata bundled with MeloX builds."""
+"""Generate metadata for the Markdown release notes bundled with MeloX."""
 
 from __future__ import annotations
 
@@ -9,10 +9,6 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-
-
-HIDDEN_COMMIT_PREFIX = "[X]"
-EMPTY_RELEASE_MESSAGE = "本次没有需要公开展示的提交记录。"
 
 
 def git(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -88,25 +84,6 @@ def infer_previous_version_tag(
     return result.stdout.strip() or None
 
 
-def read_public_commit_subjects(
-    previous_reference: str | None,
-    current_commit: str,
-) -> list[str]:
-    if previous_reference is None:
-        return []
-
-    result = git(
-        "log",
-        f"{previous_reference}..{current_commit}",
-        "--pretty=format:%s",
-    )
-    return [
-        subject
-        for subject in result.stdout.splitlines()
-        if not subject.lstrip().startswith(HIDDEN_COMMIT_PREFIX)
-    ]
-
-
 def version_label(reference: str | None) -> str | None:
     if reference is None:
         return None
@@ -116,15 +93,22 @@ def version_label(reference: str | None) -> str | None:
     return reference_name
 
 
-def release_commit_lines(
-    entries: list[str],
-    previous_reference: str | None,
-) -> list[str]:
-    if previous_reference is None:
-        return []
-    if not entries:
-        return [f"- {EMPTY_RELEASE_MESSAGE}"]
-    return [f"- {entry}" for entry in entries]
+def validate_release_notes(path: Path) -> int:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise ValueError(f"无法读取更新日志 {path}：{error}") from error
+
+    if not lines:
+        raise ValueError(f"更新日志不能为空：{path}")
+
+    for line_number, line in enumerate(lines, start=1):
+        stripped_line = line.strip()
+        if not stripped_line.startswith("- ") or not stripped_line[2:].strip():
+            raise ValueError(
+                f"更新日志第 {line_number} 行必须是单条 Markdown 列表项"
+            )
+    return len(lines)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -132,6 +116,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--current-ref", default="HEAD")
     parser.add_argument("--previous-ref")
     parser.add_argument("--version", required=True)
+    parser.add_argument("--notes", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
 
@@ -154,26 +139,18 @@ def main() -> int:
                     f"更新日志基线 {previous_reference} 不是当前 Commit 的祖先"
                 )
 
-        entries = read_public_commit_subjects(
-            previous_reference,
-            current_commit,
-        )
+        entry_count = validate_release_notes(arguments.notes)
     except (subprocess.CalledProcessError, ValueError) as error:
         print(f"生成更新日志失败：{error}", file=sys.stderr)
         return 1
 
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "version": arguments.version.removeprefix("v"),
         "sourceRevision": current_commit,
         "currentRef": current_tag or arguments.current_ref,
         "previousRef": previous_reference,
         "previousVersion": version_label(previous_reference),
-        "entries": entries,
-        "releaseCommitLines": release_commit_lines(
-            entries,
-            previous_reference,
-        ),
     }
 
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +170,7 @@ def main() -> int:
     )
     print(
         f"已生成 MeloX {payload['version']} 更新日志："
-        f"{range_description}，共 {len(entries)} 条"
+        f"{range_description}，从 {arguments.notes} 读取 {entry_count} 条"
     )
     return 0
 

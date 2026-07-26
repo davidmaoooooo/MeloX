@@ -249,15 +249,17 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/.github/scripts/generate_release_notes.py",
+				"$(SRCROOT)/RELEASE_NOTES.md",
 				"$(SRCROOT)/.git",
 			);
 			name = "Generate Release Notes";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ReleaseNotes.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ReleaseNotes.md",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nOUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\" --version \"${MARKETING_VERSION}\" --output \"${OUTPUT_PATH}\"\nelse\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --version \"${MARKETING_VERSION}\" --output \"${OUTPUT_PATH}\"\nfi\n";
+			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\" --version \"${MARKETING_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nelse\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --version \"${MARKETING_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nfi\n\n/bin/cp \"${RELEASE_NOTES_SOURCE}\" \"${MARKDOWN_OUTPUT_PATH}\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */

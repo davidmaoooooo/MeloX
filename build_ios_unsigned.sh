@@ -10,9 +10,10 @@ DERIVED_DATA="$BUILD/DerivedData-iOS"
 STAGING="$BUILD/IPA"
 IPA_PATH="$BUILD/MeloX-iOS-unsigned.ipa"
 RELEASE_NOTES_PATH="$BUILD/ReleaseNotes.json"
+RELEASE_NOTES_MARKDOWN_PATH="$BUILD/ReleaseNotes.md"
 
 rm -rf "$DERIVED_DATA" "$STAGING"
-rm -f "$IPA_PATH" "$RELEASE_NOTES_PATH"
+rm -f "$IPA_PATH" "$RELEASE_NOTES_PATH" "$RELEASE_NOTES_MARKDOWN_PATH"
 mkdir -p "$BUILD"
 
 echo "========== 构建 iOS Release =========="
@@ -42,12 +43,13 @@ if [[ -z "$APP_PATH" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$APP_PATH/ReleaseNotes.json" ]]; then
-  echo "构建产物中缺少自动生成的更新日志"
+if [[ ! -f "$APP_PATH/ReleaseNotes.json" || ! -f "$APP_PATH/ReleaseNotes.md" ]]; then
+  echo "构建产物中缺少更新日志元数据或 Markdown"
   exit 1
 fi
 
 ditto --norsrc "$APP_PATH/ReleaseNotes.json" "$RELEASE_NOTES_PATH"
+ditto --norsrc "$APP_PATH/ReleaseNotes.md" "$RELEASE_NOTES_MARKDOWN_PATH"
 
 echo "========== 生成未签名 IPA =========="
 

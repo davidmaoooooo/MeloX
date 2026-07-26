@@ -115,6 +115,7 @@ jobs:
           path: |
             build/MeloX-iOS-unsigned.ipa
             build/ReleaseNotes.json
+            build/ReleaseNotes.md
           if-no-files-found: error
           retention-days: 14
 
@@ -229,20 +230,29 @@ jobs:
           set -euo pipefail
 
           TAG_NAME="${GITHUB_REF_NAME}"
-          RELEASE_NOTES_PATH="release-assets/ReleaseNotes.json"
-          if [[ ! -f "${RELEASE_NOTES_PATH}" ]]; then
+          RELEASE_METADATA_PATH="release-assets/ReleaseNotes.json"
+          RELEASE_NOTES_PATH="RELEASE_NOTES.md"
+          BUNDLED_RELEASE_NOTES_PATH="release-assets/ReleaseNotes.md"
+          if [[ ! -f "${RELEASE_METADATA_PATH}" ]]; then
             echo "::error::构建产物中缺少 ReleaseNotes.json"
             exit 1
           fi
+          if [[ ! -s "${RELEASE_NOTES_PATH}" || ! -s "${BUNDLED_RELEASE_NOTES_PATH}" ]]; then
+            echo "::error::项目或构建产物中缺少 ReleaseNotes.md"
+            exit 1
+          fi
+          if ! cmp --silent "${RELEASE_NOTES_PATH}" "${BUNDLED_RELEASE_NOTES_PATH}"; then
+            echo "::error::构建产物中的更新日志与项目根目录不一致"
+            exit 1
+          fi
 
-          BUNDLED_VERSION="$(jq -r '.version' "${RELEASE_NOTES_PATH}")"
+          BUNDLED_VERSION="$(jq -r '.version' "${RELEASE_METADATA_PATH}")"
           if [[ "${TAG_NAME#v}" != "${BUNDLED_VERSION#v}" ]]; then
             echo "::error::标签 ${TAG_NAME} 与 App 版本 ${BUNDLED_VERSION} 不一致"
             exit 1
           fi
 
-          PREVIOUS_TAG="$(jq -r '.previousRef // empty' "${RELEASE_NOTES_PATH}")"
-          jq -r '.releaseCommitLines[]' "${RELEASE_NOTES_PATH}" > release_commits.txt
+          cp "${RELEASE_NOTES_PATH}" release_notes.md
 
           cat > release_body.md <<EOF
           这是由 GitHub Actions 自动构建的 MeloX iOS 发行版本。
@@ -260,16 +270,12 @@ jobs:
           - 版本：\`${TAG_NAME}\`
           - Commit：\`${GITHUB_SHA}\`
           - 构建编号：\`${GITHUB_RUN_NUMBER}\`
+
+          ## 更新内容
+
           EOF
 
-          if [[ -n "${PREVIOUS_TAG}" ]]; then
-            echo "" >> release_body.md
-            echo "## 更新内容" >> release_body.md
-            echo "" >> release_body.md
-            echo "从 \`${PREVIOUS_TAG}\` 到 \`${TAG_NAME}\` 的提交：" >> release_body.md
-            echo "" >> release_body.md
-            cat release_commits.txt >> release_body.md
-          fi
+          cat release_notes.md >> release_body.md
 
       - name: Create release
         uses: softprops/action-gh-release@v3
@@ -286,7 +292,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: MeloX-release-metadata-${{ github.run_number }}
-          path: release_commits.txt
+          path: release_notes.md
           if-no-files-found: error
           retention-days: 14
 
@@ -330,7 +336,7 @@ jobs:
           python3 .github/scripts/release_telegram_caption.py \
             --project "MeloX" \
             --version "${GITHUB_REF_NAME}" \
-            --details-file "release-metadata/release_commits.txt" \
+            --details-file "release-metadata/release_notes.md" \
             --release-url "${RELEASE_URL}" \
             --output "${RUNNER_TEMP}/telegram-release-caption.txt"
 

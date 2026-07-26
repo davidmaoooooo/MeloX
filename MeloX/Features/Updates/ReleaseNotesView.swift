@@ -57,7 +57,7 @@ struct ReleaseNotesView: View {
             } footer: {
                 if let previousVersion = releaseNotes?.displayPreviousVersion {
                     Text(
-                        "提交范围：MeloX \(previousVersion) 至 "
+                        "版本范围：MeloX \(previousVersion) 至 "
                             + "MeloX \(displayVersion)"
                     )
                 }
@@ -131,9 +131,9 @@ struct ReleaseNotesView: View {
 
     private var emptyStateDescription: String {
         if releaseNotes == nil {
-            return "此构建未包含自动生成的更新日志。"
+            return "此构建未包含有效的更新日志。"
         }
-        return "本次没有需要公开展示的提交记录。"
+        return "本次没有需要公开展示的更新内容。"
     }
 
     private func resetPlayerSettings() {
