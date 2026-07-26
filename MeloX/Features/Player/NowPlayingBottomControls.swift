@@ -38,6 +38,9 @@ struct NowPlayingBottomControls: View {
 }
 
 private struct NowPlayingLyricsUtilityControls: View {
+    @Environment(\.accessibilityReduceMotion)
+    private var accessibilityReduceMotion
+
     let isVisible: Bool
 
     var body: some View {
@@ -54,10 +57,21 @@ private struct NowPlayingLyricsUtilityControls: View {
                 accessibilityLabel: "歌词长按功能"
             )
         }
+        .offset(
+            y: isVisible
+                ? 0
+                : NowPlayingPageTransition.lyricsUtilityOffset
+        )
         .opacity(isVisible ? 1 : 0)
         .allowsHitTesting(isVisible)
         .accessibilityHidden(!isVisible)
-        .animation(.easeInOut(duration: 0.2), value: isVisible)
+        .animation(
+            NowPlayingPageTransition.lyricsUtilityAnimation(
+                isVisible: isVisible,
+                reducesMotion: accessibilityReduceMotion
+            ),
+            value: isVisible
+        )
     }
 
     private func reservedButton(
@@ -71,6 +85,12 @@ private struct NowPlayingLyricsUtilityControls: View {
                 .background(.white.opacity(0.18), in: .circle)
                 .contentShape(.circle)
         }
+        .scaleEffect(
+            isVisible
+                ? 1
+                : NowPlayingPageTransition
+                    .lyricsUtilityHiddenScale
+        )
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("功能入口已预留，暂未开放")

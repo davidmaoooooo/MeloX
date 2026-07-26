@@ -250,6 +250,8 @@ private struct SystemVolumeSlider: UIViewRepresentable {
 }
 
 struct NowPlayingPageSelector: View {
+    @Environment(\.accessibilityReduceMotion)
+    private var accessibilityReduceMotion
     @Environment(PlayerStore.self) private var player
 
     @Binding var page: NowPlayingPage
@@ -292,7 +294,11 @@ struct NowPlayingPageSelector: View {
         let isSelected = page == destination
 
         return Button {
-            withAnimation(.smooth(duration: 0.4)) {
+            withAnimation(
+                accessibilityReduceMotion
+                    ? nil
+                    : NowPlayingPageTransition.animation
+            ) {
                 page = isSelected ? .artwork : destination
             }
         } label: {

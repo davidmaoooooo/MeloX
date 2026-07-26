@@ -320,7 +320,9 @@ struct NowPlayingView: View {
                         artworkPageFrame = $0
                     }
                 )
-                .transition(pageContentTransition)
+                .transition(
+                    pageContentTransition(for: .artwork)
+                )
             case .lyrics:
                 NowPlayingLyricsPage(
                     song: song,
@@ -342,7 +344,9 @@ struct NowPlayingView: View {
                 ) {
                     handleLyricsInterfaceInteraction()
                 }
-                .transition(pageContentTransition)
+                .transition(
+                    pageContentTransition(for: .lyrics)
+                )
             case .queue:
                 NowPlayingQueuePage(
                     song: song,
@@ -358,13 +362,19 @@ struct NowPlayingView: View {
                         queueSongHeaderOffset = $0
                     }
                 )
-                .transition(pageContentTransition)
+                .transition(
+                    pageContentTransition(for: .queue)
+                )
             }
 
             if page != .artwork {
                 sharedPortraitSongHeader(for: song)
                     .offset(y: sharedPortraitSongHeaderOffset)
-                    .transition(.identity)
+                    .transition(
+                        NowPlayingPageTransition.songHeader(
+                            reducesMotion: accessibilityReduceMotion
+                        )
+                    )
             }
 
             if portraitArtworkFrame.width > 0 {
@@ -418,16 +428,13 @@ struct NowPlayingView: View {
         page == .queue ? queueSongHeaderOffset : 0
     }
 
-    private var pageContentTransition: AnyTransition {
-        let insertion: AnyTransition
-        if entersPageFromHiddenQueue, !accessibilityReduceMotion {
-            insertion = .move(edge: .top).combined(with: .opacity)
-        } else {
-            insertion = .opacity
-        }
-        return .asymmetric(
-            insertion: insertion,
-            removal: .opacity
+    private func pageContentTransition(
+        for destination: NowPlayingPage
+    ) -> AnyTransition {
+        NowPlayingPageTransition.content(
+            for: destination,
+            entersFromHiddenQueue: entersPageFromHiddenQueue,
+            reducesMotion: accessibilityReduceMotion
         )
     }
 
