@@ -264,7 +264,9 @@ struct SynchronizedLyricText: View {
             alignment: alignment.horizontalAlignment,
             spacing: 0
         ) {
-            if displaysTranslation,
+            // Keep the hidden translation mounted so its reveal starts from
+            // an already measured height instead of invalidating the row.
+            if hasIncludedTranslation,
                let translation = line.translation {
                 annotationText(
                     translation,

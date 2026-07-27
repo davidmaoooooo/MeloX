@@ -19,11 +19,12 @@ struct LyricAnnotationLayout: Layout {
         }
 
         let primarySize = primaryLyric.sizeThatFits(proposal)
-        guard subviews.count > 1,
-              clampedExpansion > 0 else {
+        guard subviews.count > 1 else {
             return primarySize
         }
 
+        // Measure the collapsed annotation as well so an animated expansion
+        // has a stable destination size on its first frame.
         let annotationSize = subviews[1].sizeThatFits(
             annotationProposal(from: proposal)
         )
@@ -54,8 +55,7 @@ struct LyricAnnotationLayout: Layout {
             proposal: childProposal
         )
 
-        guard subviews.count > 1,
-              clampedExpansion > 0 else { return }
+        guard subviews.count > 1 else { return }
         subviews[1].place(
             at: CGPoint(
                 x: bounds.minX,
