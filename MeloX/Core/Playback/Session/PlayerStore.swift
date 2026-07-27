@@ -46,6 +46,9 @@ final class PlayerStore {
     var queue: [Song] { playbackQueue.songs }
     var currentIndex: Int { playbackQueue.currentIndex }
     var isShuffled: Bool { playbackQueue.isShuffled }
+    var unplayedQueueIndices: [Int] {
+        playbackQueue.upcomingIndices(wraps: false)
+    }
     var upcomingQueueIndices: [Int] {
         playbackQueue.upcomingIndices(
             wraps: repeatMode == .all

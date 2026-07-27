@@ -161,7 +161,7 @@ struct NowPlayingQueuePage: View {
 
     private var upcomingEntries: [UpcomingQueueEntry] {
         var occurrences: [Int: Int] = [:]
-        return player.upcomingQueueIndices.compactMap { index in
+        return player.unplayedQueueIndices.compactMap { index in
             guard player.queue.indices.contains(index) else {
                 return nil
             }
