@@ -547,7 +547,11 @@ struct AppleMusicLyricsView: View {
                 .onChange(of: settings.lyricsCurrentLineScale) { _, _ in
                     resetMovementOffsets()
                 }
-                .onChange(of: player.seekRevision) { _, _ in
+                .onChange(of: player.seekRevision) { _, newRevision in
+                    guard seekFeedback?.playerSeekRevision
+                            != newRevision else {
+                        return
+                    }
                     requestPlaybackFocus()
                 }
                 .onChange(of: player.isPlaying) { wasPlaying, isPlaying in
@@ -559,7 +563,7 @@ struct AppleMusicLyricsView: View {
                 }
                 .task(id: focusMovementTrigger) {
                     await cascadeMoveFocus(
-                        to: highlightedLyricID,
+                        to: requestedFocusLyricID,
                         viewportHeight: proxy.size.height,
                         visibleViewportHeight: visibleViewportHeight,
                         preloadLineCount: Self.bottomPreloadLineCount
@@ -744,6 +748,7 @@ struct AppleMusicLyricsView: View {
     }
 
     private var focusedInterlude: LyricInterlude? {
+        guard seekFeedback == nil else { return nil }
         guard let interlude = coordinatedInterlude,
               highlightedLyricID != interlude.followingLyricID else {
             return nil
@@ -1011,11 +1016,15 @@ struct AppleMusicLyricsView: View {
 
     private var focusMovementTrigger: LyricFocusMovementTrigger {
         LyricFocusMovementTrigger(
-            highlightedLyricID: highlightedLyricID,
+            highlightedLyricID: requestedFocusLyricID,
             interludeID: focusedInterlude?.id,
             isBrowsingLyrics: isBrowsingLyrics,
             playbackFocusRequestGeneration: playbackFocusRequestGeneration
         )
+    }
+
+    private var requestedFocusLyricID: LyricLine.ID? {
+        seekFeedback?.lyricID ?? highlightedLyricID
     }
 
     private func lyricFocusEffectAnimation(
@@ -1144,10 +1153,13 @@ struct AppleMusicLyricsView: View {
             )
             return
         }
-        guard isAdjacentFocusTransition(
-            from: movementFocusLyricID,
-            to: highlightedLyricID
-        ) else {
+        let isManualSeekTransition =
+            seekFeedback?.lyricID == highlightedLyricID
+        guard isManualSeekTransition
+                || isAdjacentFocusTransition(
+                    from: movementFocusLyricID,
+                    to: highlightedLyricID
+                ) else {
             await moveFocusWithoutCascade(
                 to: highlightedLyricID,
                 viewportHeight: viewportHeight
@@ -1883,6 +1895,7 @@ struct AppleMusicLyricsView: View {
         seekFeedback = LyricSeekFeedback(
             lyricID: line.id,
             previousFocusLyricID: visualCascadeFocusLyricID,
+            playerSeekRevision: player.seekRevision + 1,
             startedAt: .now,
             minimumHoldDuration:
                 accessibilityReduceMotion
@@ -1894,8 +1907,6 @@ struct AppleMusicLyricsView: View {
         )
         browsingGeneration += 1
         isBrowsingLyrics = false
-        resetMovementOffsets()
-        moveFocus(to: line.id, animated: true)
         player.seek(to: line.time)
     }
 
@@ -1938,7 +1949,8 @@ struct AppleMusicLyricsView: View {
         viewportHeight: CGFloat
     ) -> Bool {
         let id = feedback.lyricID
-        guard visualCascadeFocusLyricID == id,
+        guard highlightedLyricID == id,
+              visualCascadeFocusLyricID == id,
               Date.now.timeIntervalSince(feedback.startedAt)
                 >= feedback.minimumHoldDuration,
               visualHighlightedLyricID == id,
@@ -2091,6 +2103,7 @@ private struct LyricSeekFeedback: Hashable {
     let token = UUID()
     let lyricID: LyricLine.ID
     let previousFocusLyricID: LyricLine.ID?
+    let playerSeekRevision: Int
     let startedAt: Date
     let minimumHoldDuration: TimeInterval
 }
