@@ -18,6 +18,13 @@ enum SynchronizedLyricTextAlignment: Equatable {
         }
     }
 
+    var horizontalAlignment: HorizontalAlignment {
+        switch self {
+        case .leading: .leading
+        case .center: .center
+        }
+    }
+
     var scaleAnchor: UnitPoint {
         switch self {
         case .leading: .topLeading
@@ -27,6 +34,10 @@ enum SynchronizedLyricTextAlignment: Equatable {
 }
 
 struct SynchronizedLyricText: View {
+    static let interactionBackgroundVisualOverflow: CGFloat = 16
+
+    private static let interactionBackgroundCornerRadius: CGFloat = 16
+
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.effectiveLyricsRefreshRate) private var effectiveLyricsRefreshRate
     @Environment(PlayerStore.self) private var player
@@ -36,15 +47,20 @@ struct SynchronizedLyricText: View {
     let isPlaybackLine: Bool
     let usesPseudoTiming: Bool
     let fontSize: CGFloat
+    let romanizationFontSize: CGFloat
     let fontWeight: LyricsFontWeight
     let alignment: SynchronizedLyricTextAlignment
     let fontScale: CGFloat
     let primaryColor: Color
     let showsTranslation: Bool
-    let reservesTranslationSpace: Bool
-    let onTranslationHeightChange: ((CGFloat) -> Void)?
-    let translationLayoutAnimation: Animation?
-    let translationVisibilityAnimation: Animation?
+    let showsRomanization: Bool
+    let includesTranslation: Bool
+    let includesRomanization: Bool
+    let reservesAnnotationSpace: Bool
+    let onAnnotationHeightChange: ((CGFloat) -> Void)?
+    let annotationLayoutAnimation: Animation?
+    let annotationVisibilityAnimation: Animation?
+    let interactionBackgroundOpacity: Double
     let visualScale: CGFloat
     let visualScaleAnimation: Animation?
     let promotedLayoutScale: CGFloat
@@ -56,21 +72,27 @@ struct SynchronizedLyricText: View {
     private let layoutStableText: Text
     private let hasPseudoSyllables: Bool
     private let timedPlaybackRange: ClosedRange<TimeInterval>?
+    private let romanizationRows: [LyricRubyRow]
 
     init(
         line: LyricLine,
         isPlaybackLine: Bool,
         usesPseudoTiming: Bool,
         fontSize: CGFloat,
+        romanizationFontSize: CGFloat? = nil,
         fontWeight: LyricsFontWeight = .bold,
         alignment: SynchronizedLyricTextAlignment = .leading,
         fontScale: CGFloat = 1,
         primaryColor: Color = .white,
         showsTranslation: Bool = true,
-        reservesTranslationSpace: Bool = true,
-        onTranslationHeightChange: ((CGFloat) -> Void)? = nil,
-        translationLayoutAnimation: Animation? = nil,
-        translationVisibilityAnimation: Animation? = nil,
+        showsRomanization: Bool = true,
+        includesTranslation: Bool = true,
+        includesRomanization: Bool = false,
+        reservesAnnotationSpace: Bool = true,
+        onAnnotationHeightChange: ((CGFloat) -> Void)? = nil,
+        annotationLayoutAnimation: Animation? = nil,
+        annotationVisibilityAnimation: Animation? = nil,
+        interactionBackgroundOpacity: Double = 0,
         visualScale: CGFloat = 1,
         visualScaleAnimation: Animation? = nil,
         promotedLayoutScale: CGFloat = 1,
@@ -82,15 +104,22 @@ struct SynchronizedLyricText: View {
         self.isPlaybackLine = isPlaybackLine
         self.usesPseudoTiming = usesPseudoTiming
         self.fontSize = fontSize
+        self.romanizationFontSize = romanizationFontSize
+            ?? max(fontSize * 0.55, 13 * fontScale)
         self.fontWeight = fontWeight
         self.alignment = alignment
         self.fontScale = fontScale
         self.primaryColor = primaryColor
         self.showsTranslation = showsTranslation
-        self.reservesTranslationSpace = reservesTranslationSpace
-        self.onTranslationHeightChange = onTranslationHeightChange
-        self.translationLayoutAnimation = translationLayoutAnimation
-        self.translationVisibilityAnimation = translationVisibilityAnimation
+        self.showsRomanization = showsRomanization
+        self.includesTranslation = includesTranslation
+        self.includesRomanization = includesRomanization
+        self.reservesAnnotationSpace = reservesAnnotationSpace
+        self.onAnnotationHeightChange = onAnnotationHeightChange
+        self.annotationLayoutAnimation = annotationLayoutAnimation
+        self.annotationVisibilityAnimation = annotationVisibilityAnimation
+        self.interactionBackgroundOpacity =
+            interactionBackgroundOpacity
         self.visualScale = visualScale
         self.visualScaleAnimation = visualScaleAnimation
         self.promotedLayoutScale = promotedLayoutScale
@@ -110,6 +139,9 @@ struct SynchronizedLyricText: View {
         let calculationScale = promotedLayoutScale.isFinite
             ? max(promotedLayoutScale, 1)
             : 1
+        let rubyLayoutWidth = timedLayoutWidth.map {
+            $0 / calculationScale
+        }
         synchronizedText = TimedLyricTextBuilder.text(
             from: line.syllables,
             constrainedWidth: timedLayoutWidth,
@@ -129,6 +161,21 @@ struct SynchronizedLyricText: View {
             fontWeight: fontWeight
         )
         hasPseudoSyllables = !pseudoSyllables.isEmpty
+        let romanizationUnits =
+            includesRomanization && showsRomanization
+                ? LyricRomanizationAligner.units(
+                    for: line,
+                    activeSyllables: activeSyllables
+                )
+                : []
+        romanizationRows = LyricRubyLayoutPlanner.rows(
+            for: romanizationUnits,
+            fontSize: fontSize,
+            romanizationFontSize:
+                self.romanizationFontSize,
+            fontWeight: fontWeight,
+            availableWidth: rubyLayoutWidth
+        )
         if let firstSyllable = activeSyllables.first,
            let lastSyllable = activeSyllables.last,
            lastSyllable.endTime > firstSyllable.startTime {
@@ -139,12 +186,12 @@ struct SynchronizedLyricText: View {
     }
 
     var body: some View {
-        LyricTranslationLayout(
+        LyricAnnotationLayout(
             expansion:
-                reservesTranslationSpace && displaysTranslation
+                reservesAnnotationSpace && displaysTranslation
                     ? 1
                     : 0,
-            spacing: 2
+            spacing: LyricAnnotationMetrics.verticalSpacing
         ) {
             primaryLyric
                 .animation(
@@ -152,37 +199,24 @@ struct SynchronizedLyricText: View {
                     value: usesTimedLyrics
                 )
 
-            if let translation = line.translation {
-                Text(verbatim: translation)
-                    .font(
-                        .system(
-                            size: translationFontSize,
-                            weight: fontWeight.swiftUIWeight
-                        )
-                    )
-                    .foregroundStyle(.white.opacity(settings.lyricsTranslationOpacity))
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: alignment.frameAlignment
-                    )
-                    .onGeometryChange(for: CGFloat.self) { geometry in
-                        geometry.size.height
-                    } action: { height in
-                        onTranslationHeightChange?(height)
-                    }
-                    .opacity(displaysTranslation ? 1 : 0)
-                    .animation(
-                        accessibilityReduceMotion
-                            ? nil
-                            : translationVisibilityAnimation,
-                        value: displaysTranslation
-                    )
-            }
+            annotationStack
         }
         .animation(
-            accessibilityReduceMotion ? nil : translationLayoutAnimation,
+            accessibilityReduceMotion ? nil : annotationLayoutAnimation,
+            value: displaysAnnotations
+        )
+        .animation(
+            accessibilityReduceMotion ? nil : annotationLayoutAnimation,
+            value: displaysRomanization
+        )
+        .animation(
+            accessibilityReduceMotion
+                ? nil
+                : annotationVisibilityAnimation,
+            value: displaysRomanization
+        )
+        .animation(
+            accessibilityReduceMotion ? nil : annotationLayoutAnimation,
             value: displaysTranslation
         )
         .multilineTextAlignment(alignment.textAlignment)
@@ -190,6 +224,30 @@ struct SynchronizedLyricText: View {
             width: normalizedLayoutWidth,
             alignment: alignment.frameAlignment
         )
+        .background(alignment: .topLeading) {
+            if interactionBackgroundOpacity > 0 {
+                RoundedRectangle(
+                    cornerRadius:
+                        Self.interactionBackgroundCornerRadius
+                            / effectiveVisualScale,
+                    style: .continuous
+                )
+                .fill(
+                    .white.opacity(
+                        min(
+                            max(interactionBackgroundOpacity, 0),
+                            1
+                        )
+                    )
+                )
+                .padding(
+                    -Self.interactionBackgroundVisualOverflow
+                        / effectiveVisualScale
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
         .scaleEffect(
             visualScale,
             anchor: alignment.scaleAnchor
@@ -201,32 +259,89 @@ struct SynchronizedLyricText: View {
         .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
     }
 
-    private var primaryLyric: some View {
-        stablePrimaryLyric
-            .opacity(usesTimedLyrics ? 0 : 1)
-            .overlay(alignment: alignment.frameAlignment) {
-                if usesTimedLyrics {
-                    synchronizedPrimaryLyric
-                }
+    private var annotationStack: some View {
+        VStack(
+            alignment: alignment.horizontalAlignment,
+            spacing: 0
+        ) {
+            if displaysTranslation,
+               let translation = line.translation {
+                annotationText(
+                    translation,
+                    fontSize: translationFontSize,
+                    opacity: settings.lyricsTranslationOpacity
+                )
             }
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.height
+        } action: { height in
+            onAnnotationHeightChange?(height)
+        }
+        .opacity(displaysTranslation ? 1 : 0)
+        .animation(
+            accessibilityReduceMotion
+                ? nil
+                : annotationVisibilityAnimation,
+            value: displaysTranslation
+        )
+    }
+
+    private func annotationText(
+        _ text: String,
+        fontSize: CGFloat,
+        opacity: Double
+    ) -> some View {
+        Text(verbatim: text)
+            .font(
+                .system(
+                    size: fontSize,
+                    weight: fontWeight.swiftUIWeight
+                )
+            )
+            .foregroundStyle(.white.opacity(opacity))
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(
+                maxWidth: .infinity,
+                alignment: alignment.frameAlignment
+            )
+    }
+
+    @ViewBuilder
+    private var primaryLyric: some View {
+        if usesTimedLyrics {
+            synchronizedPrimaryLyric
+        } else {
+            stablePrimaryLyric
+        }
     }
 
     private var stablePrimaryLyric: some View {
-        stablePrimaryContent
-            .font(primaryFont)
-            .foregroundStyle(primaryColor)
-            .multilineTextAlignment(alignment.textAlignment)
-            .lineLimit(nil)
-            .fixedSize(
-                horizontal: primaryLayoutWidth != nil,
-                vertical: true
-            )
-            .textRenderer(
-                lyricTextRenderer(
+        Group {
+            if usesRubyLayout {
+                rubyText(
                     at: timedPlaybackRange?.lowerBound ?? 0,
                     appliesTimingEffects: false
                 )
-            )
+            } else {
+                stablePrimaryContent
+                    .font(primaryFont)
+                    .foregroundStyle(primaryColor)
+                    .multilineTextAlignment(alignment.textAlignment)
+                    .lineLimit(nil)
+                    .fixedSize(
+                        horizontal: primaryLayoutWidth != nil,
+                        vertical: true
+                    )
+                    .textRenderer(
+                        lyricTextRenderer(
+                            at: timedPlaybackRange?.lowerBound ?? 0,
+                            appliesTimingEffects: false
+                        )
+                    )
+            }
+        }
             .frame(
                 width: primaryLayoutWidth,
                 alignment: alignment.frameAlignment
@@ -247,15 +362,24 @@ struct SynchronizedLyricText: View {
             let playbackTime = player.estimatedProgress(at: context.date)
                 + settings.lyricsAdvanceTime
 
-            activeSynchronizedText
-                .font(primaryFont)
-                .foregroundStyle(primaryColor)
-                .multilineTextAlignment(alignment.textAlignment)
-                .lineLimit(nil)
-                .fixedSize(horizontal: true, vertical: true)
-                .textRenderer(
-                    lyricTextRenderer(at: playbackTime)
-                )
+            Group {
+                if usesRubyLayout {
+                    rubyText(
+                        at: playbackTime,
+                        appliesTimingEffects: true
+                    )
+                } else {
+                    activeSynchronizedText
+                        .font(primaryFont)
+                        .foregroundStyle(primaryColor)
+                        .multilineTextAlignment(alignment.textAlignment)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: true, vertical: true)
+                        .textRenderer(
+                            lyricTextRenderer(at: playbackTime)
+                        )
+                }
+            }
                 .frame(
                     width: timedLayoutWidth,
                     alignment: alignment.frameAlignment
@@ -283,32 +407,57 @@ struct SynchronizedLyricText: View {
     ) -> LyricGlowTextRenderer {
         LyricGlowTextRenderer(
             playbackTime: playbackTime,
-            style: .init(
-                glowRadius: glowRadius,
-                glowOpacity: glowOpacity,
-                glowsLongSyllablesOnly:
-                    settings.lyricsGlowLongSyllablesOnly,
-                longSyllableDetectionMode:
-                    settings.lyricsLongSyllableDetectionMode,
-                longSyllableDurationThreshold:
-                    settings.lyricsLongSyllableDurationThreshold,
-                unplayedOpacity: 0.3,
-                maximumUnplayedBlurRadius: maximumUnplayedBlurRadius,
-                playedRise: playedRise,
-                maximumLongSyllableScale: maximumLongSyllableScale,
-                longSyllableExpansionPadding: longSyllableExpansionPadding,
-                highlightGradientWidth: CGFloat(
-                    settings.lyricsHighlightGradientWidth
-                ),
-                highlightGradientReduction: CGFloat(
-                    settings.lyricsHighlightGradientReduction
-                ),
-                liftMode: settings.lyricsLiftMode
-            ),
+            style: lyricRendererStyle,
             layoutConfiguration: .init(
                 width: rendererLayoutWidth,
                 centersLines: alignment == .center
             ),
+            appliesTimingEffects: appliesTimingEffects
+        )
+    }
+
+    private var lyricRendererStyle: LyricGlowTextRenderer.Style {
+        .init(
+            glowRadius: glowRadius,
+            glowOpacity: glowOpacity,
+            glowsLongSyllablesOnly:
+                settings.lyricsGlowLongSyllablesOnly,
+            longSyllableDetectionMode:
+                settings.lyricsLongSyllableDetectionMode,
+            longSyllableDurationThreshold:
+                settings.lyricsLongSyllableDurationThreshold,
+            unplayedOpacity: 0.3,
+            maximumUnplayedBlurRadius: maximumUnplayedBlurRadius,
+            playedRise: playedRise,
+            maximumLongSyllableScale: maximumLongSyllableScale,
+            longSyllableExpansionPadding: longSyllableExpansionPadding,
+            highlightGradientWidth: CGFloat(
+                settings.lyricsHighlightGradientWidth
+            ),
+            highlightGradientReduction: CGFloat(
+                settings.lyricsHighlightGradientReduction
+            ),
+            liftMode: settings.lyricsLiftMode
+        )
+    }
+
+    private func rubyText(
+        at playbackTime: TimeInterval,
+        appliesTimingEffects: Bool
+    ) -> some View {
+        LyricRubyText(
+            rows: romanizationRows,
+            fontSize: fontSize,
+            romanizationFontSize: romanizationFontSize,
+            fontWeight: fontWeight,
+            primaryColor: primaryColor,
+            romanizationOpacity:
+                settings.lyricsRomanizationOpacity,
+            alignment: alignment,
+            annotationExpansion:
+                displaysRomanization ? 1 : 0,
+            playbackTime: playbackTime,
+            rendererStyle: lyricRendererStyle,
             appliesTimingEffects: appliesTimingEffects
         )
     }
@@ -347,10 +496,32 @@ struct SynchronizedLyricText: View {
         )
     }
 
-    private var displaysTranslation: Bool {
-        showsTranslation
+    private var hasIncludedTranslation: Bool {
+        includesTranslation
             && settings.lyricsTranslationEnabled
             && line.translation != nil
+    }
+
+    private var hasIncludedRomanization: Bool {
+        includesRomanization
+            && settings.lyricsRomanizationEnabled
+            && line.romanization != nil
+    }
+
+    private var displaysTranslation: Bool {
+        showsTranslation && hasIncludedTranslation
+    }
+
+    private var displaysRomanization: Bool {
+        showsRomanization && hasIncludedRomanization
+    }
+
+    private var displaysAnnotations: Bool {
+        displaysRomanization || displaysTranslation
+    }
+
+    private var usesRubyLayout: Bool {
+        displaysRomanization && !romanizationRows.isEmpty
     }
 
     private var glowRadius: CGFloat {
@@ -391,6 +562,11 @@ struct SynchronizedLyricText: View {
     private var effectivePromotedLayoutScale: CGFloat {
         guard promotedLayoutScale.isFinite else { return 1 }
         return max(promotedLayoutScale, 1)
+    }
+
+    private var effectiveVisualScale: CGFloat {
+        guard visualScale.isFinite else { return 1 }
+        return max(visualScale, 1)
     }
 
     private var timedLayoutWidth: CGFloat? {

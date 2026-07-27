@@ -108,6 +108,8 @@ struct LyricResponse: Decodable {
     let yrc: LyricContent?
     let tlyric: LyricContent?
     let ytlrc: LyricContent?
+    let romalrc: LyricContent?
+    let yromalrc: LyricContent?
 }
 
 struct LyricContent: Decodable {

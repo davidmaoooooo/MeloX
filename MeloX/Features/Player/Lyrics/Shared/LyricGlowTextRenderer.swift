@@ -46,6 +46,17 @@ struct LyricGlowTextRenderer: TextRenderer {
     struct LayoutConfiguration: Equatable, Sendable {
         let width: CGFloat?
         let centersLines: Bool
+        let trailingVisualOverflow: CGFloat
+
+        init(
+            width: CGFloat?,
+            centersLines: Bool,
+            trailingVisualOverflow: CGFloat = 0
+        ) {
+            self.width = width
+            self.centersLines = centersLines
+            self.trailingVisualOverflow = trailingVisualOverflow
+        }
 
         fileprivate var constrainedWidth: CGFloat? {
             guard let width, width.isFinite, width > 0 else { return nil }
@@ -72,14 +83,19 @@ struct LyricGlowTextRenderer: TextRenderer {
             top: padding + max(style.playedRise, 0) + expansionPadding,
             leading: padding + expansionPadding,
             bottom: padding + expansionPadding,
-            trailing: padding + expansionPadding
+            trailing:
+                padding
+                + expansionPadding
+                + max(layoutConfiguration.trailingVisualOverflow, 0)
         )
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             var lineContext = context
-            let revealMask = lineRevealMask(for: line)
+            let revealMask = appliesTimingEffects
+                ? lineRevealMask(for: line)
+                : nil
             if let transform = LyricLineFitting.drawingTransform(
                 for: line,
                 constrainedWidth: layoutConfiguration.constrainedWidth,
@@ -92,14 +108,27 @@ struct LyricGlowTextRenderer: TextRenderer {
             }
 
             for run in line {
+                let horizontalOffset =
+                    run[LyricRubyPlacementTextAttribute.self]?
+                        .horizontalOffset ?? 0
+                var runContext = lineContext
+                if horizontalOffset != 0 {
+                    runContext.translateBy(
+                        x: horizontalOffset,
+                        y: 0
+                    )
+                }
                 if appliesTimingEffects {
                     draw(
                         run,
-                        revealMask: revealMask,
-                        in: &lineContext
+                        revealMask:
+                            revealMask?.offsetBy(
+                                dx: -horizontalOffset
+                            ),
+                        in: &runContext
                     )
                 } else {
-                    lineContext.draw(run)
+                    runContext.draw(run)
                 }
             }
         }
@@ -113,7 +142,13 @@ struct LyricGlowTextRenderer: TextRenderer {
                   !timing.isWhitespace else {
                 return nil
             }
-            let bounds = run.typographicBounds.rect
+            let horizontalOffset =
+                run[LyricRubyPlacementTextAttribute.self]?
+                    .horizontalOffset ?? 0
+            let bounds = run.typographicBounds.rect.offsetBy(
+                dx: horizontalOffset,
+                dy: 0
+            )
             guard bounds.width.isFinite,
                   bounds.width > 0 else {
                 return nil
@@ -577,6 +612,15 @@ private extension LyricGlowTextRenderer {
         let featherWidth: CGFloat
         let gradient: Gradient
         let layoutDirection: LayoutDirection
+
+        func offsetBy(dx: CGFloat) -> Self {
+            Self(
+                frontX: frontX + dx,
+                featherWidth: featherWidth,
+                gradient: gradient,
+                layoutDirection: layoutDirection
+            )
+        }
     }
 
     struct RunVisualState {

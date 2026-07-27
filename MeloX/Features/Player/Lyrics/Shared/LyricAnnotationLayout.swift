@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct LyricTranslationLayout: Layout {
+struct LyricAnnotationLayout: Layout {
     var expansion: CGFloat
     let spacing: CGFloat
 
@@ -19,17 +19,19 @@ struct LyricTranslationLayout: Layout {
         }
 
         let primarySize = primaryLyric.sizeThatFits(proposal)
-        guard subviews.count > 1 else {
+        guard subviews.count > 1,
+              clampedExpansion > 0 else {
             return primarySize
         }
 
-        let translationSize = subviews[1].sizeThatFits(
-            translationProposal(from: proposal)
+        let annotationSize = subviews[1].sizeThatFits(
+            annotationProposal(from: proposal)
         )
         return CGSize(
-            width: proposal.width ?? max(primarySize.width, translationSize.width),
+            width: proposal.width
+                ?? max(primarySize.width, annotationSize.width),
             height: primarySize.height
-                + clampedExpansion * (spacing + translationSize.height)
+                + clampedExpansion * (spacing + annotationSize.height)
         )
     }
 
@@ -52,7 +54,8 @@ struct LyricTranslationLayout: Layout {
             proposal: childProposal
         )
 
-        guard subviews.count > 1 else { return }
+        guard subviews.count > 1,
+              clampedExpansion > 0 else { return }
         subviews[1].place(
             at: CGPoint(
                 x: bounds.minX,
@@ -67,7 +70,7 @@ struct LyricTranslationLayout: Layout {
         min(max(expansion, 0), 1)
     }
 
-    private func translationProposal(
+    private func annotationProposal(
         from proposal: ProposedViewSize
     ) -> ProposedViewSize {
         ProposedViewSize(

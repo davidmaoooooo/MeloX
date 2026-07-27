@@ -15,6 +15,8 @@ struct LyricLine: Identifiable, Hashable {
     let duration: TimeInterval?
     let text: String
     let syllables: [LyricSyllable]
+    let romanization: String?
+    let romanizationSyllables: [LyricSyllable]
     let translation: String?
 
     init(
@@ -22,12 +24,16 @@ struct LyricLine: Identifiable, Hashable {
         duration: TimeInterval? = nil,
         text: String,
         syllables: [LyricSyllable] = [],
+        romanization: String? = nil,
+        romanizationSyllables: [LyricSyllable] = [],
         translation: String? = nil
     ) {
         self.time = time
         self.duration = duration
         self.text = text
         self.syllables = syllables
+        self.romanization = romanization
+        self.romanizationSyllables = romanizationSyllables
         self.translation = translation
     }
 
@@ -42,6 +48,13 @@ struct LyricLine: Identifiable, Hashable {
     var hasTranslation: Bool {
         guard let translation else { return false }
         return !translation
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    var hasRomanization: Bool {
+        guard let romanization else { return false }
+        return !romanization
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
     }
@@ -71,12 +84,40 @@ struct LyricLine: Identifiable, Hashable {
             duration: duration,
             text: text,
             syllables: syllables,
+            romanization: romanization,
+            romanizationSyllables: romanizationSyllables,
             translation: translation
         )
     }
 
-    func accessibilityText(includingTranslation: Bool) -> String {
-        guard includingTranslation, let translation else { return text }
-        return "\(text)，翻译：\(translation)"
+    func attachingRomanization(
+        _ romanization: String?,
+        romanizationSyllables: [LyricSyllable] = []
+    ) -> LyricLine {
+        LyricLine(
+            time: time,
+            duration: duration,
+            text: text,
+            syllables: syllables,
+            romanization: romanization,
+            romanizationSyllables: romanizationSyllables,
+            translation: translation
+        )
+    }
+
+    func accessibilityText(
+        includingTranslation: Bool,
+        includingRomanization: Bool = false
+    ) -> String {
+        var components = [text]
+        if includingRomanization, hasRomanization,
+           let romanization {
+            components.append("发音：\(romanization)")
+        }
+        if includingTranslation, hasTranslation,
+           let translation {
+            components.append("翻译：\(translation)")
+        }
+        return components.joined(separator: "，")
     }
 }

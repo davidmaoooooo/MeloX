@@ -392,7 +392,9 @@ final class NeteaseAPI {
                 yrc: response.yrc?.lyric ?? "",
                 lrc: response.lrc?.lyric ?? "",
                 translatedYRC: response.ytlrc?.lyric ?? "",
-                translatedLRC: response.tlyric?.lyric ?? ""
+                translatedLRC: response.tlyric?.lyric ?? "",
+                romanizedYRC: response.yromalrc?.lyric ?? "",
+                romanizedLRC: response.romalrc?.lyric ?? ""
             )
         } catch is CancellationError {
             throw CancellationError()
@@ -406,7 +408,8 @@ final class NeteaseAPI {
             return LyricParser.parse(
                 yrc: "",
                 lrc: response.lrc?.lyric ?? "",
-                translatedLRC: response.tlyric?.lyric ?? ""
+                translatedLRC: response.tlyric?.lyric ?? "",
+                romanizedLRC: response.romalrc?.lyric ?? ""
             )
         }
     }

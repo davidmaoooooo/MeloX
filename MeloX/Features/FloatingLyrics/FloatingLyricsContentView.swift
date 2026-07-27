@@ -169,6 +169,7 @@ struct FloatingLyricsContentView: View {
                 fontScale: presentation.fontScale,
                 primaryColor: .white,
                 showsTranslation: presentation.showsTranslation,
+                showsRomanization: false,
                 layoutWidth: 648,
                 playbackScaleRange: 1...1.035,
                 playbackScaleStartDelay: 0.08

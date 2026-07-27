@@ -12,6 +12,7 @@ struct NowPlayingBottomControls: View {
     @Binding var page: NowPlayingPage
     let showsLyricsUtilities: Bool
     let hasLyricsTranslations: Bool
+    let hasLyricsRomanizations: Bool
     let isInterfaceHidden: Bool
 
     var body: some View {
@@ -20,7 +21,8 @@ struct NowPlayingBottomControls: View {
                 isVisible:
                     showsLyricsUtilities
                     && !isInterfaceHidden,
-                hasTranslations: hasLyricsTranslations
+                hasTranslations: hasLyricsTranslations,
+                hasRomanizations: hasLyricsRomanizations
             )
             .frame(height: Self.utilityHeight, alignment: .top)
 
@@ -94,11 +96,15 @@ private struct NowPlayingLyricsUtilityControls: View {
 
     let isVisible: Bool
     let hasTranslations: Bool
+    let hasRomanizations: Bool
 
     var body: some View {
         HStack {
-            if hasTranslations {
-                NowPlayingLyricsTranslationButton()
+            if hasTranslations || hasRomanizations {
+                NowPlayingLyricsLanguageButton(
+                    hasTranslations: hasTranslations,
+                    hasRomanizations: hasRomanizations
+                )
                     .scaleEffect(
                         isVisible
                             ? 1

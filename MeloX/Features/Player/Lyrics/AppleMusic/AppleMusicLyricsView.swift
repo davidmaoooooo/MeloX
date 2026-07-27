@@ -3,7 +3,8 @@ import SwiftUI
 struct AppleMusicLyricsView: View {
     private static let bottomPreloadLineCount = 2
     private static let futureCascadeSafetyLineCount = 6
-    private static let translationSpacing: CGFloat = 2
+    private static let annotationSpacing =
+        LyricAnnotationMetrics.verticalSpacing
     private static let cascadeSettlementGraceDuration: TimeInterval =
         1.0 / 60.0
     private static let interludeExpansionDuration: TimeInterval = 0.5
@@ -25,6 +26,7 @@ struct AppleMusicLyricsView: View {
     private let lyricIndexByID: [LyricLine.ID: Int]
     private let hasSyllableSyncedLyrics: Bool
     private let hasTranslations: Bool
+    private let hasRomanizations: Bool
     private let interludes: [LyricInterlude]
     private let interludeByID: [LyricInterlude.ID: LyricInterlude]
     private let displayItems: [AppleMusicLyricsDisplayItem]
@@ -38,7 +40,7 @@ struct AppleMusicLyricsView: View {
     @State private var visualCascadeFocusLyricID: LyricLine.ID?
     @State private var lyricFrameByID: [LyricLine.ID: CGRect] = [:]
     @State private var lyricLayoutHeightByID: [LyricLine.ID: CGFloat] = [:]
-    @State private var lyricTranslationHeightByID: [
+    @State private var lyricAnnotationHeightByID: [
         LyricLine.ID: CGFloat
     ] = [:]
     @State private var lyricMovementOffsetByID: [LyricLine.ID: CGFloat] = [:]
@@ -82,6 +84,7 @@ struct AppleMusicLyricsView: View {
             $0.isSyllableSynced
         }
         hasTranslations = lyrics.contains { $0.hasTranslation }
+        hasRomanizations = lyrics.contains { $0.hasRomanization }
         let interludes = LyricInterludeTimeline.interludes(in: lyrics)
         self.interludes = interludes
         interludeByID = Dictionary(
@@ -193,10 +196,15 @@ struct AppleMusicLyricsView: View {
                 && !hasSyllableSyncedLyrics
             let showsTranslations = settings.lyricsTranslationEnabled
                 && hasTranslations
+            let showsRomanizations =
+                settings.lyricsRomanizationEnabled
+                && hasRomanizations
+            let showsAnnotations =
+                showsRomanizations || showsTranslations
             let retainedTopCascadeLyricIDs = Set(
                 retainedTopCascadeLyrics.map(\.id)
             )
-            let reservesTranslationSpace = showsTranslations
+            let reservesAnnotationSpace = showsAnnotations
             let lineSpacing = CGFloat(settings.lyricsLineSpacing)
             let activeInterlude = playbackInterlude
             // Once an interlude has expanded, keep its spacing after playback
@@ -207,16 +215,39 @@ struct AppleMusicLyricsView: View {
             let layoutDisplayItems = visibleDisplayItems(
                 interludeID: layoutInterludeID
             )
+            let romanizationFontSize = max(
+                CGFloat(
+                    settings.lyricsFontSize
+                        * settings.lyricsRomanizationFontScale
+                ),
+                13
+            )
+            let romanizationHeight = showsRomanizations
+                ? romanizationFontSize * 1.2
+                : 0
             let translationHeight = showsTranslations
                 ? CGFloat(
                     settings.lyricsFontSize
                         * settings.lyricsTranslationFontScale
                         * 1.2
-                ) + 2
+                )
                 : 0
+            let annotationHeight =
+                romanizationHeight
+                + translationHeight
+                + (
+                    showsRomanizations
+                        ? Self.annotationSpacing
+                        : 0
+                )
+                + (
+                    showsTranslations
+                        ? Self.annotationSpacing
+                        : 0
+                )
             let lyricStride = max(
                 CGFloat(settings.lyricsFontSize) * 1.2
-                    + translationHeight
+                    + annotationHeight
                     + lineSpacing,
                 1
             )
@@ -252,7 +283,8 @@ struct AppleMusicLyricsView: View {
             )
             let horizontalVisualOverflow = max(
                 glowOverflow,
-                AppleMusicLyricInteractionBackground.visualOverflow
+                SynchronizedLyricText
+                    .interactionBackgroundVisualOverflow
             )
 
             GeometryReader { proxy in
@@ -335,24 +367,33 @@ struct AppleMusicLyricsView: View {
                                         isPlaybackLine: isPlaybackLine,
                                         usesPseudoTiming: usesPseudoTiming,
                                         fontSize: CGFloat(settings.lyricsFontSize),
+                                        romanizationFontSize:
+                                            romanizationFontSize,
                                         fontWeight: settings.lyricsFontWeight,
                                         showsTranslation: showsLyricTranslation(
                                             isFocusedLine: isCascadeFocusLine
                                         ),
-                                        reservesTranslationSpace:
-                                            reservesTranslationSpace,
-                                        onTranslationHeightChange: { height in
-                                            recordTranslationHeight(
+                                        showsRomanization: showsLyricRomanization(
+                                            isFocusedLine: isCascadeFocusLine
+                                        ),
+                                        includesRomanization: true,
+                                        reservesAnnotationSpace:
+                                            reservesAnnotationSpace,
+                                        onAnnotationHeightChange: { height in
+                                            recordAnnotationHeight(
                                                 height,
                                                 for: line.id
                                             )
                                         },
-                                        translationLayoutAnimation:
-                                            lyricTranslationLayoutAnimation(),
-                                        translationVisibilityAnimation:
-                                            lyricTranslationVisibilityAnimation(
+                                        annotationLayoutAnimation:
+                                            lyricAnnotationLayoutAnimation(),
+                                        annotationVisibilityAnimation:
+                                            lyricAnnotationVisibilityAnimation(
                                                 focusScaleAnimation: focusScaleAnimation
                                             ),
+                                        interactionBackgroundOpacity:
+                                            0.12
+                                                * interactionBackgroundProgress,
                                         visualScale:
                                             isVisualScaleFocusLine
                                                 ? currentLineScale
@@ -361,34 +402,6 @@ struct AppleMusicLyricsView: View {
                                         promotedLayoutScale: currentLineScale,
                                         layoutWidth: lyricLayoutWidth
                                     )
-                                    .background(alignment: .topLeading) {
-                                        AppleMusicLyricInteractionBackground(
-                                            line: line,
-                                            fontSize: CGFloat(
-                                                settings.lyricsFontSize
-                                            ),
-                                            fontWeight:
-                                                settings.lyricsFontWeight,
-                                            showsTranslation:
-                                                showsLyricTranslation(
-                                                    isFocusedLine:
-                                                        isCascadeFocusLine
-                                                ),
-                                            contentWidth:
-                                                lyricLayoutWidth
-                                                / max(
-                                                    currentLineScale,
-                                                    1
-                                                ),
-                                            visualScale:
-                                                isVisualScaleFocusLine
-                                                    ? currentLineScale
-                                                    : 1,
-                                            opacity:
-                                                0.12
-                                                * interactionBackgroundProgress
-                                        )
-                                    }
                                 }
                                 .opacity(
                                     isRetainedTopCascadeLine
@@ -466,7 +479,7 @@ struct AppleMusicLyricsView: View {
                                     lyricLayoutHeightByID.removeValue(
                                         forKey: line.id
                                     )
-                                    lyricTranslationHeightByID.removeValue(
+                                    lyricAnnotationHeightByID.removeValue(
                                         forKey: line.id
                                     )
                                 }
@@ -475,6 +488,12 @@ struct AppleMusicLyricsView: View {
                                         includingTranslation:
                                             settings.lyricsTranslationEnabled
                                                 && showsLyricTranslation(
+                                                    isFocusedLine:
+                                                        isActualPlaybackLine
+                                                ),
+                                        includingRomanization:
+                                            settings.lyricsRomanizationEnabled
+                                                && showsLyricRomanization(
                                                     isFocusedLine:
                                                         isActualPlaybackLine
                                                 )
@@ -629,10 +648,21 @@ struct AppleMusicLyricsView: View {
                     _, _ in
                     resetMovementOffsets()
                 }
+                .onChange(of: settings.lyricsRomanizationDisplayMode) {
+                    _, _ in
+                    resetMovementOffsets()
+                }
                 .onChange(of: settings.lyricsTranslationEnabled) { _, _ in
                     resetMovementOffsets()
                 }
+                .onChange(of: settings.lyricsRomanizationEnabled) { _, _ in
+                    resetMovementOffsets()
+                }
                 .onChange(of: settings.lyricsTranslationFontScale) {
+                    _, _ in
+                    resetMovementOffsets()
+                }
+                .onChange(of: settings.lyricsRomanizationFontScale) {
                     _, _ in
                     resetMovementOffsets()
                 }
@@ -683,7 +713,7 @@ struct AppleMusicLyricsView: View {
                     seekFeedback = nil
                     lyricFrameByID.removeAll()
                     lyricLayoutHeightByID.removeAll()
-                    lyricTranslationHeightByID.removeAll()
+                    lyricAnnotationHeightByID.removeAll()
                     lyricMovementOffsetByID.removeAll()
                     lyricMovementTransition = nil
                     retainedTopCascadeLyrics.removeAll()
@@ -791,17 +821,28 @@ struct AppleMusicLyricsView: View {
                             isPlaybackLine: isPlaybackLine,
                             usesPseudoTiming: usesPseudoTiming,
                             fontSize: CGFloat(settings.lyricsFontSize),
+                            romanizationFontSize:
+                                lyricRomanizationFontSize,
                             fontWeight: settings.lyricsFontWeight,
                             showsTranslation: showsLyricTranslation(
                                 isFocusedLine: isCascadeFocusLine
                             ),
-                            reservesTranslationSpace:
-                                settings.lyricsTranslationEnabled
-                                && hasTranslations,
-                            translationLayoutAnimation:
-                                lyricTranslationLayoutAnimation(),
-                            translationVisibilityAnimation:
-                                lyricTranslationVisibilityAnimation(
+                            showsRomanization: showsLyricRomanization(
+                                isFocusedLine: isCascadeFocusLine
+                            ),
+                            includesRomanization: true,
+                            reservesAnnotationSpace:
+                                (
+                                    settings.lyricsRomanizationEnabled
+                                        && hasRomanizations
+                                ) || (
+                                    settings.lyricsTranslationEnabled
+                                        && hasTranslations
+                                ),
+                            annotationLayoutAnimation:
+                                lyricAnnotationLayoutAnimation(),
+                            annotationVisibilityAnimation:
+                                lyricAnnotationVisibilityAnimation(
                                     focusScaleAnimation: focusScaleAnimation
                                 ),
                             visualScale:
@@ -1004,13 +1045,36 @@ struct AppleMusicLyricsView: View {
         )
     }
 
-    private func showsLyricTranslation(isFocusedLine: Bool) -> Bool {
+    private func showsLyricTranslation(
+        isFocusedLine: Bool
+    ) -> Bool {
         switch settings.lyricsTranslationDisplayMode {
         case .focusedLine:
             isFocusedLine
         case .allLines:
             true
         }
+    }
+
+    private func showsLyricRomanization(
+        isFocusedLine: Bool
+    ) -> Bool {
+        switch settings.lyricsRomanizationDisplayMode {
+        case .focusedLine:
+            isFocusedLine
+        case .allLines:
+            true
+        }
+    }
+
+    private var lyricRomanizationFontSize: CGFloat {
+        max(
+            CGFloat(
+                settings.lyricsFontSize
+                    * settings.lyricsRomanizationFontScale
+            ),
+            13
+        )
     }
 
     private func recordLyricGeometry(
@@ -1054,19 +1118,19 @@ struct AppleMusicLyricsView: View {
         synchronizeStationaryFollowingOffsets()
     }
 
-    private func recordTranslationHeight(
+    private func recordAnnotationHeight(
         _ height: CGFloat,
         for id: LyricLine.ID
     ) {
-        guard height.isFinite else { return }
+        guard height.isFinite, height > 0 else { return }
         let normalizedHeight = max(height, 0)
-        let previousHeight = lyricTranslationHeightByID[id]
+        let previousHeight = lyricAnnotationHeightByID[id]
         guard previousHeight == nil
                 || abs((previousHeight ?? 0) - normalizedHeight) > 0.5 else {
             return
         }
 
-        lyricTranslationHeightByID[id] = normalizedHeight
+        lyricAnnotationHeightByID[id] = normalizedHeight
         guard id == visualCascadeFocusLyricID,
               lyricMovementTransition == nil else {
             return
@@ -1112,21 +1176,53 @@ struct AppleMusicLyricsView: View {
         var focusedLayoutHeight = lyricLayoutHeightByID[focusedLyricID]
             ?? fallbackPrimaryHeight
         let focusedLine = lyrics[focusedIndex]
-        if settings.lyricsTranslationEnabled,
-           settings.lyricsTranslationDisplayMode == .focusedLine,
-           focusedLine.translation != nil,
+        let hasFocusedRomanization =
+            settings.lyricsRomanizationEnabled
+            && focusedLine.hasRomanization
+        let hasFocusedTranslation =
+            settings.lyricsTranslationEnabled
+            && focusedLine.hasTranslation
+        let expandsFocusedRomanization =
+            hasFocusedRomanization
+            && settings.lyricsRomanizationDisplayMode == .focusedLine
+        let expandsFocusedTranslation =
+            hasFocusedTranslation
+            && settings.lyricsTranslationDisplayMode == .focusedLine
+        if expandsFocusedRomanization || expandsFocusedTranslation,
            focusedLyricID != visualCascadeFocusLyricID {
-            let fallbackTranslationHeight = max(
-                CGFloat(
-                    settings.lyricsFontSize
-                        * settings.lyricsTranslationFontScale
-                ),
-                13
-            ) * 1.2
+            let fallbackRomanizationHeight = expandsFocusedRomanization
+                ? max(
+                    CGFloat(
+                        settings.lyricsFontSize
+                            * settings.lyricsRomanizationFontScale
+                    ),
+                    13
+                ) * 1.2
+                : 0
+            let fallbackTranslationHeight = expandsFocusedTranslation
+                ? max(
+                    CGFloat(
+                        settings.lyricsFontSize
+                            * settings.lyricsTranslationFontScale
+                    ),
+                    13
+                ) * 1.2
+                : 0
             focusedLayoutHeight +=
-                (lyricTranslationHeightByID[focusedLyricID]
-                    ?? fallbackTranslationHeight)
-                + Self.translationSpacing
+                fallbackRomanizationHeight
+                + (
+                    expandsFocusedRomanization
+                        ? Self.annotationSpacing
+                        : 0
+                )
+                + (
+                    expandsFocusedTranslation
+                        ? (
+                            lyricAnnotationHeightByID[focusedLyricID]
+                                ?? fallbackTranslationHeight
+                        ) + Self.annotationSpacing
+                        : 0
+                )
         }
         let scaleOverflow = max(
             focusedLayoutHeight * (scale - 1),
@@ -1143,11 +1239,11 @@ struct AppleMusicLyricsView: View {
         )
     }
 
-    private func lyricTranslationVisibilityAnimation(
+    private func lyricAnnotationVisibilityAnimation(
         focusScaleAnimation: Animation?
     ) -> Animation? {
         guard !accessibilityReduceMotion else { return nil }
-        if settings.lyricsTranslationDisplayMode == .focusedLine {
+        if usesFocusedLineAnnotationMode {
             return focusScaleAnimation
         }
         let duration = min(
@@ -1157,10 +1253,10 @@ struct AppleMusicLyricsView: View {
         return .smooth(duration: duration)
     }
 
-    private func lyricTranslationLayoutAnimation() -> Animation? {
+    private func lyricAnnotationLayoutAnimation() -> Animation? {
         guard !accessibilityReduceMotion else { return nil }
         let duration: TimeInterval
-        if settings.lyricsTranslationDisplayMode == .focusedLine {
+        if usesFocusedLineAnnotationMode {
             duration = lyricFocusScaleDuration()
         } else {
             duration = min(
@@ -1169,6 +1265,18 @@ struct AppleMusicLyricsView: View {
             )
         }
         return .smooth(duration: duration)
+    }
+
+    private var usesFocusedLineAnnotationMode: Bool {
+        (
+            settings.lyricsRomanizationEnabled
+                && settings.lyricsRomanizationDisplayMode
+                    == .focusedLine
+        ) || (
+            settings.lyricsTranslationEnabled
+                && settings.lyricsTranslationDisplayMode
+                    == .focusedLine
+        )
     }
 
     private func lyricFocusScaleDuration() -> TimeInterval {

@@ -41,6 +41,7 @@ struct SkylineCentralLyricsView: View {
                     fontScale: fontScale,
                     primaryColor: currentLyricColor,
                     showsTranslation: false,
+                    showsRomanization: false,
                     layoutWidth: width,
                     playbackScaleRange: 1...max(maximumPlaybackScale, 1),
                     playbackScaleStartDelay: lyricEntranceDuration

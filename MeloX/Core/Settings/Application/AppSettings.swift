@@ -97,6 +97,8 @@ final class AppSettings {
     static let lyricsFocusScaleBounceDurationRange = 0.15...0.8
     static let defaultLyricsFocusColorLeadTime = 0.0
     static let lyricsFocusColorLeadTimeRange = -0.3...0.3
+    static let defaultLyricsRomanizationFontScale = 0.65
+    static let defaultLyricsRomanizationOpacity = 0.9
     static let defaultLyricsTranslationFontScale = 0.65
     static let defaultLyricsTranslationOpacity = 0.9
     static let defaultLyricsLiftMode: LyricsLiftMode = .character
@@ -192,6 +194,13 @@ final class AppSettings {
         static let lyricsLongToneExpansionAmount =
             "lyricsLongToneExpansionAmount"
         static let lyricsGlowIntensity = "lyricsGlowIntensity"
+        static let lyricsRomanizationEnabled = "lyricsRomanizationEnabled"
+        static let lyricsRomanizationFontScale =
+            "lyricsRomanizationFontScale"
+        static let lyricsRomanizationOpacity =
+            "lyricsRomanizationOpacity"
+        static let lyricsRomanizationDisplayMode =
+            "lyricsRomanizationDisplayMode"
         static let lyricsTranslationEnabled = "lyricsTranslationEnabled"
         static let lyricsTranslationDisplayMode = "lyricsTranslationDisplayMode"
         static let lyricsTranslationFontScale = "lyricsTranslationFontScale"
@@ -647,6 +656,42 @@ final class AppSettings {
 
     var lyricsGlowIntensity: Double {
         didSet { defaults.set(lyricsGlowIntensity, forKey: Key.lyricsGlowIntensity) }
+    }
+
+    var lyricsRomanizationEnabled: Bool {
+        didSet {
+            defaults.set(
+                lyricsRomanizationEnabled,
+                forKey: Key.lyricsRomanizationEnabled
+            )
+        }
+    }
+
+    var lyricsRomanizationFontScale: Double {
+        didSet {
+            defaults.set(
+                lyricsRomanizationFontScale,
+                forKey: Key.lyricsRomanizationFontScale
+            )
+        }
+    }
+
+    var lyricsRomanizationOpacity: Double {
+        didSet {
+            defaults.set(
+                lyricsRomanizationOpacity,
+                forKey: Key.lyricsRomanizationOpacity
+            )
+        }
+    }
+
+    var lyricsRomanizationDisplayMode: LyricsTranslationDisplayMode {
+        didSet {
+            defaults.set(
+                lyricsRomanizationDisplayMode.rawValue,
+                forKey: Key.lyricsRomanizationDisplayMode
+            )
+        }
     }
 
     var lyricsTranslationEnabled: Bool {
@@ -1116,6 +1161,20 @@ final class AppSettings {
             Self.lyricsLongToneExpansionAmountRange.upperBound
         )
         lyricsGlowIntensity = defaults.object(forKey: Key.lyricsGlowIntensity) as? Double ?? 1
+        lyricsRomanizationEnabled = defaults.object(
+            forKey: Key.lyricsRomanizationEnabled
+        ) as? Bool ?? true
+        lyricsRomanizationFontScale = defaults.object(
+            forKey: Key.lyricsRomanizationFontScale
+        ) as? Double ?? Self.defaultLyricsRomanizationFontScale
+        lyricsRomanizationOpacity = defaults.object(
+            forKey: Key.lyricsRomanizationOpacity
+        ) as? Double ?? Self.defaultLyricsRomanizationOpacity
+        lyricsRomanizationDisplayMode = LyricsTranslationDisplayMode(
+            rawValue: defaults.string(
+                forKey: Key.lyricsRomanizationDisplayMode
+            ) ?? ""
+        ) ?? .allLines
         lyricsTranslationEnabled = defaults.object(forKey: Key.lyricsTranslationEnabled) as? Bool ?? true
         lyricsTranslationDisplayMode = LyricsTranslationDisplayMode(
             rawValue: defaults.string(forKey: Key.lyricsTranslationDisplayMode) ?? ""
@@ -1384,6 +1443,12 @@ final class AppSettings {
         lyricsLongToneExpansionAmount =
             Self.defaultLyricsLongToneExpansionAmount
         lyricsGlowIntensity = 1
+        lyricsRomanizationEnabled = true
+        lyricsRomanizationFontScale =
+            Self.defaultLyricsRomanizationFontScale
+        lyricsRomanizationOpacity =
+            Self.defaultLyricsRomanizationOpacity
+        lyricsRomanizationDisplayMode = .allLines
         lyricsTranslationEnabled = true
         lyricsTranslationDisplayMode = .focusedLine
         lyricsTranslationFontScale = Self.defaultLyricsTranslationFontScale

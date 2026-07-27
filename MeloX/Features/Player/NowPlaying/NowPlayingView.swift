@@ -258,6 +258,7 @@ struct NowPlayingView: View {
             showsLyricsUtilities:
                 usesExpandedAppleMusicLyricsLayout,
             hasLyricsTranslations: hasLyricsTranslations,
+            hasLyricsRomanizations: hasLyricsRomanizations,
             isInterfaceHidden: hidesLyricsControls
         )
     }
@@ -325,6 +326,10 @@ struct NowPlayingView: View {
 
     private var hasLyricsTranslations: Bool {
         lyrics.contains { $0.hasTranslation }
+    }
+
+    private var hasLyricsRomanizations: Bool {
+        lyrics.contains { $0.hasRomanization }
     }
 
     private var keepsPlayerScreenAwake: Bool {

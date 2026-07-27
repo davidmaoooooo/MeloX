@@ -13,26 +13,78 @@ struct LyricsContentSettingsView: View {
         Form {
             Section {
                 Toggle(
+                    "显示发音（罗马音）",
+                    isOn: $settings.lyricsRomanizationEnabled
+                )
+
+                Toggle(
                     "显示歌词翻译",
                     isOn: $settings.lyricsTranslationEnabled
                 )
 
-                if settings.lyricsTranslationEnabled {
-                    if settings.lyricsStyle == .appleMusic {
-                        Picker(
-                            "翻译显示方式",
-                            selection:
-                                $settings
-                                    .lyricsTranslationDisplayMode
-                        ) {
-                            ForEach(
-                                LyricsTranslationDisplayMode.allCases
-                            ) { mode in
-                                Text(mode.title).tag(mode)
-                            }
+                if settings.lyricsStyle == .appleMusic,
+                   settings.lyricsRomanizationEnabled {
+                    Picker(
+                        "罗马音显示范围",
+                        selection:
+                            $settings
+                                .lyricsRomanizationDisplayMode
+                    ) {
+                        ForEach(
+                            LyricsTranslationDisplayMode.allCases
+                        ) { mode in
+                            Text(mode.title).tag(mode)
                         }
                     }
+                }
 
+                if settings.lyricsStyle == .appleMusic,
+                   settings.lyricsTranslationEnabled {
+                    Picker(
+                        "翻译显示范围",
+                        selection:
+                            $settings
+                                .lyricsTranslationDisplayMode
+                    ) {
+                        ForEach(
+                            LyricsTranslationDisplayMode.allCases
+                        ) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                }
+            } header: {
+                Text("翻译与发音")
+            } footer: {
+                Text("使用网易云提供的 yromalrc/romalrc 与 ytlrc/tlyric；Apple Music 样式会将小号罗马音对齐在对应原文下方，翻译显示在整行下方。")
+            }
+
+            if settings.lyricsRomanizationEnabled {
+                Section {
+                    valueSlider(
+                        title: "罗马音大小",
+                        value: $settings.lyricsRomanizationFontScale,
+                        range: 0.5...0.8,
+                        step: 0.05,
+                        valueText:
+                            "\(Int(settings.lyricsRomanizationFontScale * 100))%"
+                    )
+
+                    valueSlider(
+                        title: "罗马音亮度",
+                        value: $settings.lyricsRomanizationOpacity,
+                        range: 0.4...0.9,
+                        step: 0.05,
+                        valueText:
+                            "\(Int(settings.lyricsRomanizationOpacity * 100))%"
+                    )
+                } header: {
+                    Text("罗马音样式")
+                }
+            }
+
+            if settings.lyricsTranslationEnabled {
+                Section {
                     valueSlider(
                         title: "翻译歌词大小",
                         value: $settings.lyricsTranslationFontScale,
@@ -50,11 +102,9 @@ struct LyricsContentSettingsView: View {
                         valueText:
                             "\(Int(settings.lyricsTranslationOpacity * 100))%"
                     )
+                } header: {
+                    Text("翻译样式")
                 }
-            } header: {
-                Text("翻译")
-            } footer: {
-                Text("使用网易云提供的 ytlrc 或 tlyric；Apple Music 样式可选择仅显示当前行或显示全部翻译。")
             }
 
             Section {
@@ -192,7 +242,7 @@ struct LyricsContentSettingsView: View {
                 } header: {
                     Text("长音与光效")
                 } footer: {
-                    Text("达到阈值的字或词会依次膨胀；光效开关只控制辉光，不影响高光、抬升和膨胀。")
+                    Text("达到阈值的原文字或词会依次膨胀；罗马音只同步逐字白色渐变，不参与辉光、模糊、抬升或长音膨胀。")
                 }
             }
         }
