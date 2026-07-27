@@ -54,13 +54,13 @@ struct MiniPlayerView: View {
                                     ? .identity
                                     : .symbolEffect(
                                         .replace.downUp.wholeSymbol,
-                                        options: .speed(1.25)
+                                        options: .speed(1.6)
                                     )
                             )
                             .animation(
                                 accessibilityReduceMotion
                                     ? nil
-                                    : .snappy(duration: 0.28, extraBounce: 0),
+                                    : .snappy(duration: 0.2, extraBounce: 0),
                                 value: player.isPlaying
                             )
                             .frame(width: 36, height: 36)
