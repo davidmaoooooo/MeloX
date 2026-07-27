@@ -44,6 +44,7 @@
 <p align="center">
   <img src="docs/screenshots/4.png" alt="歌曲详情" width="20%">
   <img src="docs/screenshots/5.png" alt="歌词页" width="20%">
+  <img src="docs/screenshots/14.png" alt="播放列表" width="20%">
 </p>
 
 ### 横屏播放器
