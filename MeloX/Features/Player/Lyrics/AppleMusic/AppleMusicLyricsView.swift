@@ -1949,8 +1949,7 @@ struct AppleMusicLyricsView: View {
         viewportHeight: CGFloat
     ) -> Bool {
         let id = feedback.lyricID
-        guard highlightedLyricID == id,
-              visualCascadeFocusLyricID == id,
+        guard visualCascadeFocusLyricID == id,
               Date.now.timeIntervalSince(feedback.startedAt)
                 >= feedback.minimumHoldDuration,
               visualHighlightedLyricID == id,
