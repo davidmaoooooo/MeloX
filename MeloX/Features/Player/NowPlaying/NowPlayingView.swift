@@ -405,6 +405,7 @@ struct NowPlayingView: View {
             if page != .artwork {
                 sharedPortraitSongHeader(for: song)
                     .offset(y: sharedPortraitSongHeaderOffset)
+                    .clipped()
                     .transition(
                         NowPlayingPageTransition.songHeader(
                             reducesMotion: accessibilityReduceMotion
@@ -437,6 +438,7 @@ struct NowPlayingView: View {
                     .allowsHitTesting(false)
                 }
             }
+            .clipped()
         }
         .coordinateSpace(
             name: NowPlayingPortraitCoordinateSpace.name
