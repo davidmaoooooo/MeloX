@@ -199,6 +199,14 @@ struct AppleMusicLyricsView: View {
             let reservesTranslationSpace = showsTranslations
             let lineSpacing = CGFloat(settings.lyricsLineSpacing)
             let activeInterlude = playbackInterlude
+            // Once an interlude has expanded, keep its spacing after playback
+            // moves on. Collapsing it would shift lyrics on either side.
+            let layoutInterludeID =
+                activeInterlude?.id
+                ?? positionedInterludeID
+            let layoutDisplayItems = visibleDisplayItems(
+                interludeID: layoutInterludeID
+            )
             let translationHeight = showsTranslations
                 ? CGFloat(
                     settings.lyricsFontSize
@@ -269,9 +277,8 @@ struct AppleMusicLyricsView: View {
                         alignment: .leading,
                         spacing: lineSpacing
                     ) {
-                        ForEach(displayItems) { item in
-                            if case let .interlude(interlude) = item,
-                               activeInterlude?.id == interlude.id {
+                        ForEach(layoutDisplayItems) { item in
+                            if case let .interlude(interlude) = item {
                                 AppleMusicLyricInterludeView(
                                     interlude: interlude,
                                     fontSize: CGFloat(
@@ -495,7 +502,7 @@ struct AppleMusicLyricsView: View {
                             : .smooth(
                                 duration: Self.interludeExpansionDuration
                             ),
-                        value: activeInterlude?.id
+                        value: layoutInterludeID
                     )
                     .scrollTargetLayout()
                     .padding(.top, max(proxy.size.height * focusPosition, 40))
@@ -598,7 +605,6 @@ struct AppleMusicLyricsView: View {
                         }
                         browsingGeneration += 1
                         resetMovementOffsets()
-                        positionedInterludeID = nil
                         isBrowsingLyrics = true
                     case .idle:
                         isManuallyScrolling = false
@@ -885,6 +891,17 @@ struct AppleMusicLyricsView: View {
     private var focusedInterlude: LyricInterlude? {
         guard seekFeedback == nil else { return nil }
         return playbackInterlude
+    }
+
+    private func visibleDisplayItems(
+        interludeID: LyricInterlude.ID?
+    ) -> [AppleMusicLyricsDisplayItem] {
+        displayItems.filter { item in
+            guard case let .interlude(interlude) = item else {
+                return true
+            }
+            return interlude.id == interludeID
+        }
     }
 
     private func lyricsFocusPosition(for viewportHeight: CGFloat) -> CGFloat {
@@ -1812,7 +1829,6 @@ struct AppleMusicLyricsView: View {
         viewportHeight: CGFloat
     ) async {
         resetMovementOffsets()
-        positionedInterludeID = nil
         await ensureFocusAlignment(
             to: id,
             viewportHeight: viewportHeight,
@@ -1874,7 +1890,6 @@ struct AppleMusicLyricsView: View {
             lyricMovementOffsetByID = focusedLineFollowingOffsets(for: id)
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
-            positionedInterludeID = nil
         }
         completeSeekFeedbackIfNeeded(for: id)
     }
