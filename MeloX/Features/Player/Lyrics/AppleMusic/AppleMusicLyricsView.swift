@@ -2000,8 +2000,8 @@ struct AppleMusicLyricsView: View {
         isPrecedingFocusLine: Bool,
         isFollowingFocusLine: Bool
     ) -> CGFloat {
-        let precedingLineRadius: CGFloat = isPrecedingFocusLine ? 0.9 : 0
-        let followingLineRadius: CGFloat = isFollowingFocusLine ? 0.55 : 0
+        let precedingLineRadius: CGFloat = isPrecedingFocusLine ? 2.4 : 0
+        let followingLineRadius: CGFloat = isFollowingFocusLine ? 0.7 : 0
         return (precedingLineRadius + followingLineRadius) * intensity
     }
 
