@@ -4,6 +4,7 @@ struct PlaylistTrackList: View {
     let tracks: [Song]
     let sourceID: Int
     let showsArtwork: Bool
+    var downloadSelection: PlaylistDownloadCoordinator?
 
     var body: some View {
         if tracks.isEmpty {
@@ -18,18 +19,27 @@ struct PlaylistTrackList: View {
                         tracks: tracks,
                         sourceID: sourceID,
                         index: index,
-                        showsArtwork: showsArtwork
+                        showsArtwork: showsArtwork,
+                        downloadSelection: downloadSelection
                     )
 
                     if song.id != tracks.last?.id {
                         Divider()
                             .overlay(Color.primary.opacity(0.12))
-                            .padding(.leading, showsArtwork ? 80 : 66)
+                            .padding(
+                                .leading,
+                                (showsArtwork ? 80 : 66)
+                                    + (isSelectingDownloads ? 36 : 0)
+                            )
                             .padding(.trailing, 20)
                     }
                 }
             }
         }
+    }
+
+    private var isSelectingDownloads: Bool {
+        downloadSelection?.isSelecting == true
     }
 }
 
@@ -39,6 +49,7 @@ private struct PlaylistTrackRow: View {
     let sourceID: Int
     let index: Int
     let showsArtwork: Bool
+    let downloadSelection: PlaylistDownloadCoordinator?
 
     @Environment(\.openMusicRoute) private var openMusicRoute
     @Environment(PlayerStore.self) private var player
@@ -51,10 +62,39 @@ private struct PlaylistTrackRow: View {
         player.currentSong?.id == song.id
     }
 
+    private var isSelectingDownloads: Bool {
+        downloadSelection?.isSelecting == true
+    }
+
+    private var isSelectedForDownload: Bool {
+        downloadSelection?.selectedSongIDs.contains(song.id) == true
+    }
+
+    private var canSelectForDownload: Bool {
+        !downloads.contains(songID: song.id)
+            && !downloads.isDownloading(songID: song.id)
+    }
+
     var body: some View {
         HStack(spacing: 4) {
-            Button(action: playOrPause) {
+            Button(action: primaryAction) {
                 HStack(spacing: 12) {
+                    if isSelectingDownloads {
+                        Image(
+                            systemName: isSelectedForDownload
+                                ? "checkmark.circle.fill"
+                                : "circle"
+                        )
+                        .font(.title3)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(
+                            canSelectForDownload ? .primary : .tertiary
+                        )
+                        .frame(width: 24)
+                        .contentTransition(.symbolEffect(.replace))
+                        .accessibilityHidden(true)
+                    }
+
                     leadingContent
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -74,6 +114,9 @@ private struct PlaylistTrackRow: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .disabled(isSelectingDownloads && !canSelectForDownload)
+            .accessibilityLabel(primaryActionAccessibilityLabel)
+            .accessibilityValue(primaryActionAccessibilityValue)
 
             if downloads.isDownloading(songID: song.id) {
                 ProgressView()
@@ -86,70 +129,72 @@ private struct PlaylistTrackRow: View {
                     .accessibilityLabel("已下载")
             }
 
-            Menu {
-                if downloads.isDownloading(songID: song.id) {
-                    Button {
-                        downloads.cancel(songID: song.id)
-                    } label: {
-                        Label("取消下载", systemImage: "xmark.circle")
-                    }
-                } else if downloads.contains(songID: song.id) {
-                    Button(role: .destructive) {
-                        downloads.remove(songID: song.id)
-                    } label: {
-                        Label("删除下载", systemImage: "trash")
-                    }
-                } else {
-                    Menu {
-                        ForEach(MusicQuality.allCases) { quality in
-                            Button(quality.title) {
-                                downloads.start(song, quality: quality)
-                            }
-                        }
-                    } label: {
-                        Label("下载歌曲", systemImage: "arrow.down.circle")
-                    }
-                }
-
-                Button {
-                    openMusicRoute(.song(song))
-                } label: {
-                    Label("歌曲资料", systemImage: "info.circle")
-                }
-
-                Button {
-                    library.toggle(song: song)
-                } label: {
-                    Label(
-                        library.contains(song: song) ? "取消收藏" : "收藏歌曲",
-                        systemImage: library.contains(song: song) ? "heart.slash" : "heart"
-                    )
-                }
-
-                Button {
-                    presentedSheet = .comments(song)
-                } label: {
-                    Label("评论", systemImage: "bubble.left.and.bubble.right")
-                }
-
-                Button {
-                    presentedSheet = .addToPlaylist(song)
-                } label: {
-                    Label("添加到歌单", systemImage: "text.badge.plus")
-                }
-
+            if !isSelectingDownloads {
                 Menu {
-                    NeteaseShareMenuContent(resource: .song(song))
+                    if downloads.isDownloading(songID: song.id) {
+                        Button {
+                            downloads.cancel(songID: song.id)
+                        } label: {
+                            Label("取消下载", systemImage: "xmark.circle")
+                        }
+                    } else if downloads.contains(songID: song.id) {
+                        Button(role: .destructive) {
+                            downloads.remove(songID: song.id)
+                        } label: {
+                            Label("删除下载", systemImage: "trash")
+                        }
+                    } else {
+                        Menu {
+                            ForEach(MusicQuality.allCases) { quality in
+                                Button(quality.title) {
+                                    downloads.start(song, quality: quality)
+                                }
+                            }
+                        } label: {
+                            Label("下载歌曲", systemImage: "arrow.down.circle")
+                        }
+                    }
+
+                    Button {
+                        openMusicRoute(.song(song))
+                    } label: {
+                        Label("歌曲资料", systemImage: "info.circle")
+                    }
+
+                    Button {
+                        library.toggle(song: song)
+                    } label: {
+                        Label(
+                            library.contains(song: song) ? "取消收藏" : "收藏歌曲",
+                            systemImage: library.contains(song: song) ? "heart.slash" : "heart"
+                        )
+                    }
+
+                    Button {
+                        presentedSheet = .comments(song)
+                    } label: {
+                        Label("评论", systemImage: "bubble.left.and.bubble.right")
+                    }
+
+                    Button {
+                        presentedSheet = .addToPlaylist(song)
+                    } label: {
+                        Label("添加到歌单", systemImage: "text.badge.plus")
+                    }
+
+                    Menu {
+                        NeteaseShareMenuContent(resource: .song(song))
+                    } label: {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
                 } label: {
-                    Label("分享", systemImage: "square.and.arrow.up")
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 42, height: 44)
+                        .contentShape(.rect)
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 42, height: 44)
-                    .contentShape(.rect)
+                .accessibilityLabel("\(song.name)的更多操作")
             }
-            .accessibilityLabel("\(song.name)的更多操作")
         }
         .padding(.leading, 20)
         .padding(.trailing, 8)
@@ -174,7 +219,7 @@ private struct PlaylistTrackRow: View {
         if showsArtwork {
             ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
                 .frame(width: 48, height: 48)
-        } else if isCurrentSong {
+        } else if isCurrentSong && !isSelectingDownloads {
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.60), lineWidth: 1.5)
@@ -197,6 +242,33 @@ private struct PlaylistTrackRow: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(width: 40, alignment: .center)
+        }
+    }
+
+    private var primaryActionAccessibilityLabel: String {
+        "\(song.name)，\(song.artistText)"
+    }
+
+    private var primaryActionAccessibilityValue: String {
+        guard isSelectingDownloads else {
+            return isCurrentSong ? "正在播放" : ""
+        }
+        if !canSelectForDownload {
+            return downloads.contains(songID: song.id)
+                ? "已下载"
+                : "正在下载"
+        }
+        return isSelectedForDownload ? "已选择" : "未选择"
+    }
+
+    private func primaryAction() {
+        if isSelectingDownloads {
+            guard canSelectForDownload else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                downloadSelection?.toggleSelection(songID: song.id)
+            }
+        } else {
+            playOrPause()
         }
     }
 

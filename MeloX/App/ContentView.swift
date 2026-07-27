@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var neteaseSharePresentation: NeteaseSharePresentation?
     @State private var nowPlayingSharePresentation: NeteaseSharePresentation?
     @State private var pendingMusicRoute: MusicRoute?
+    @State private var isTabViewBottomAccessorySuppressed = false
     @Namespace private var playerTransitionNamespace
     @Namespace private var musicNavigationNamespace
 
@@ -47,6 +48,12 @@ struct ContentView: View {
             .environment(
                 \.openNeteaseShare,
                 OpenNeteaseShareAction(action: openNeteaseShare)
+            )
+            .environment(
+                \.setTabViewBottomAccessorySuppressed,
+                SetTabViewBottomAccessorySuppressedAction {
+                    isTabViewBottomAccessorySuppressed = $0
+                }
             )
             .fullScreenCover(
                 item: $playerPresentation,
@@ -203,18 +210,33 @@ struct ContentView: View {
     @ViewBuilder
     private var playerAwareTabView: some View {
         if player.currentSong != nil {
-            tabs
-                .tabViewBottomAccessory {
-                    MiniPlayerView(
-                        artworkTransitionID: playerTransitionID,
-                        artworkTransitionNamespace:
-                            playerTransitionNamespace
+            if #available(iOS 26.1, *) {
+                tabs
+                    .tabViewBottomAccessory(
+                        isEnabled: !isTabViewBottomAccessorySuppressed
                     ) {
-                        playerPresentation = .nowPlaying
+                        miniPlayer
                     }
-                }
+            } else {
+                tabs
+                    .tabViewBottomAccessory {
+                        if !isTabViewBottomAccessorySuppressed {
+                            miniPlayer
+                        }
+                    }
+            }
         } else {
             tabs
+        }
+    }
+
+    private var miniPlayer: some View {
+        MiniPlayerView(
+            artworkTransitionID: playerTransitionID,
+            artworkTransitionNamespace:
+                playerTransitionNamespace
+        ) {
+            playerPresentation = .nowPlaying
         }
     }
 

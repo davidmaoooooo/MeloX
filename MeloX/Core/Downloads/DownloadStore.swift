@@ -4,6 +4,12 @@ import Observation
 @MainActor
 @Observable
 final class DownloadStore {
+    private struct QueuedDownload {
+        let requestID: UUID
+        let song: Song
+        let quality: MusicQuality
+    }
+
     private(set) var downloads: [DownloadedSong]
     private(set) var activeDownloads: [Int: ActiveSongDownload] = [:]
     private(set) var errorMessage: String?
@@ -37,6 +43,15 @@ final class DownloadStore {
 
     @ObservationIgnored
     private var tasks: [Int: Task<Void, Never>] = [:]
+
+    @ObservationIgnored
+    private var requestIDs: [Int: UUID] = [:]
+
+    @ObservationIgnored
+    private var queuedDownloads: [QueuedDownload] = []
+
+    @ObservationIgnored
+    private let maximumConcurrentDownloadCount = 3
 
     init(
         api: NeteaseAPI,
@@ -105,21 +120,42 @@ final class DownloadStore {
     }
 
     func start(_ song: Song, quality: MusicQuality) {
+        start([song], quality: quality)
+    }
+
+    func start(_ songs: [Song], quality: MusicQuality) {
         guard database != nil else {
             errorMessage = DownloadDatabaseError.unavailable.localizedDescription
             return
         }
-        guard !contains(songID: song.id), !isDownloading(songID: song.id) else { return }
+
         errorMessage = nil
-        activeDownloads[song.id] = ActiveSongDownload(
-            song: song,
-            quality: quality,
-            receivedByteCount: 0,
-            expectedByteCount: nil
-        )
-        tasks[song.id] = Task { [weak self] in
-            await self?.download(song, quality: quality)
+
+        var enqueuedSongIDs: Set<Int> = []
+        for song in songs where enqueuedSongIDs.insert(song.id).inserted {
+            guard !contains(songID: song.id),
+                  !isDownloading(songID: song.id) else {
+                continue
+            }
+
+            let requestID = UUID()
+            requestIDs[song.id] = requestID
+            activeDownloads[song.id] = ActiveSongDownload(
+                song: song,
+                quality: quality,
+                receivedByteCount: 0,
+                expectedByteCount: nil
+            )
+            queuedDownloads.append(
+                QueuedDownload(
+                    requestID: requestID,
+                    song: song,
+                    quality: quality
+                )
+            )
         }
+
+        startQueuedDownloadsIfNeeded()
     }
 
     func recordPlayback(_ song: Song) {
@@ -139,9 +175,16 @@ final class DownloadStore {
     }
 
     func cancel(songID: Int) {
-        tasks[songID]?.cancel()
-        tasks[songID] = nil
+        queuedDownloads.removeAll { $0.song.id == songID }
+        let task = tasks[songID]
+        if let task {
+            task.cancel()
+            return
+        }
+
+        requestIDs[songID] = nil
         activeDownloads[songID] = nil
+        startQueuedDownloadsIfNeeded()
     }
 
     func remove(songID: Int) {
@@ -182,8 +225,10 @@ final class DownloadStore {
     }
 
     func removeAll() {
+        queuedDownloads.removeAll()
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
+        requestIDs.removeAll()
         activeDownloads.removeAll()
         do {
             guard let database else { throw DownloadDatabaseError.unavailable }
@@ -199,17 +244,29 @@ final class DownloadStore {
         errorMessage = nil
     }
 
-    private func download(_ song: Song, quality: MusicQuality) async {
+    private func download(
+        _ song: Song,
+        quality: MusicQuality,
+        requestID: UUID
+    ) async {
         defer {
-            tasks[song.id] = nil
-            activeDownloads[song.id] = nil
+            if requestIDs[song.id] == requestID {
+                tasks[song.id] = nil
+                requestIDs[song.id] = nil
+                activeDownloads[song.id] = nil
+            }
+            startQueuedDownloadsIfNeeded()
         }
 
         do {
             let source = try await api.downloadSource(id: song.id, quality: quality)
             try Task.checkCancellation()
             let transfer = try await transferClient.download(from: source.url) { [weak self] progress in
-                self?.updateProgress(progress, songID: song.id)
+                self?.updateProgress(
+                    progress,
+                    songID: song.id,
+                    requestID: requestID
+                )
             }
             let temporaryURL = transfer.temporaryURL
             defer { try? FileManager.default.removeItem(at: temporaryURL) }
@@ -249,6 +306,7 @@ final class DownloadStore {
         } catch let error as URLError where error.code == .cancelled {
             return
         } catch {
+            guard requestIDs[song.id] == requestID else { return }
             errorMessage = "《\(song.name)》下载失败：\(error.localizedDescription)"
         }
     }
@@ -265,11 +323,40 @@ final class DownloadStore {
 
     private func updateProgress(
         _ progress: DownloadTransferProgress,
-        songID: Int
+        songID: Int,
+        requestID: UUID
     ) {
-        guard var download = activeDownloads[songID] else { return }
+        guard requestIDs[songID] == requestID,
+              var download = activeDownloads[songID] else {
+            return
+        }
         download.receivedByteCount = progress.receivedByteCount
         download.expectedByteCount = progress.expectedByteCount
         activeDownloads[songID] = download
+    }
+
+    private func startQueuedDownloadsIfNeeded() {
+        while tasks.count < maximumConcurrentDownloadCount,
+              !queuedDownloads.isEmpty {
+            let queuedDownload = queuedDownloads.removeFirst()
+            let songID = queuedDownload.song.id
+            guard requestIDs[songID] == queuedDownload.requestID,
+                  activeDownloads[songID] != nil,
+                  !contains(songID: songID) else {
+                if requestIDs[songID] == queuedDownload.requestID {
+                    requestIDs[songID] = nil
+                    activeDownloads[songID] = nil
+                }
+                continue
+            }
+
+            tasks[songID] = Task { [weak self] in
+                await self?.download(
+                    queuedDownload.song,
+                    quality: queuedDownload.quality,
+                    requestID: queuedDownload.requestID
+                )
+            }
+        }
     }
 }

@@ -177,6 +177,37 @@ extension EnvironmentValues {
     }
 }
 
+struct SetTabViewBottomAccessorySuppressedAction {
+    private let action: (Bool) -> Void
+
+    init(action: @escaping (Bool) -> Void = { _ in }) {
+        self.action = action
+    }
+
+    func callAsFunction(_ isSuppressed: Bool) {
+        action(isSuppressed)
+    }
+}
+
+private struct SetTabViewBottomAccessorySuppressedActionKey:
+    EnvironmentKey {
+    static let defaultValue =
+        SetTabViewBottomAccessorySuppressedAction()
+}
+
+extension EnvironmentValues {
+    var setTabViewBottomAccessorySuppressed:
+        SetTabViewBottomAccessorySuppressedAction {
+        get {
+            self[SetTabViewBottomAccessorySuppressedActionKey.self]
+        }
+        set {
+            self[SetTabViewBottomAccessorySuppressedActionKey.self] =
+                newValue
+        }
+    }
+}
+
 enum PlayerPresentation: String, Identifiable {
     case nowPlaying
 
