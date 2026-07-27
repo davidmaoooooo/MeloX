@@ -1,17 +1,33 @@
-import CryptoKit
 import Foundation
+import OSLog
 import UserNotifications
 
 @MainActor
 final class LyricsNotificationArtworkStore {
+    private static let failedRequestRetryInterval: TimeInterval = 15
+    nonisolated private static let preferredPixelSize = 256
+    private static let logger = Logger(
+        subsystem: "moye.MeloX",
+        category: "LyricsNotificationArtwork"
+    )
+
     private struct Request: Equatable {
         let songID: Int
         let url: URL
     }
 
+    private struct CachedArtwork {
+        let request: Request
+        let data: Data
+    }
+
     private var request: Request?
     private var failedRequest: Request?
+    private var failedRequestDate: Date?
+    private var cachedArtwork: CachedArtwork?
     private var task: Task<Void, Never>?
+    private let attachmentStager =
+        LyricsNotificationAttachmentStager()
 
     deinit {
         task?.cancel()
@@ -24,76 +40,77 @@ final class LyricsNotificationArtworkStore {
         }
 
         let newRequest = Request(songID: songID, url: url)
-        if cachedURL(songID: songID, url: url) != nil {
+        if cachedArtwork?.request == newRequest {
             if request != newRequest {
-                cancelPreparation()
+                task?.cancel()
+                task = nil
+                request = nil
             }
             failedRequest = nil
+            failedRequestDate = nil
             return
         }
-        guard newRequest != failedRequest,
+        guard canAttempt(newRequest),
               request != newRequest || task == nil else {
             return
         }
 
         task?.cancel()
+        cachedArtwork = nil
+        failedRequest = nil
+        failedRequestDate = nil
         request = newRequest
         task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let (data, response) =
-                    try await URLSession.shared.data(from: url)
+                let sourceData = try await ArtworkDataLoader.data(
+                    from: url,
+                    preferredPixelSize:
+                        Self.preferredPixelSize
+                )
                 try Task.checkCancellation()
-                if let response = response as? HTTPURLResponse {
-                    guard (200..<300).contains(
-                        response.statusCode
-                    ) else {
-                        throw URLError(.badServerResponse)
-                    }
-                }
 
                 let jpegData = await Task.detached(
                     priority: .utility
                 ) {
                     ArtworkThumbnailEncoder.jpegData(
-                        from: data
+                        from: sourceData,
+                        maximumPixelSize:
+                            Self.preferredPixelSize
                     )
                 }.value
                 try Task.checkCancellation()
-                guard let jpegData,
-                      let destination = destinationURL(
-                        songID: songID,
-                        url: url
-                      )
-                else {
+                guard let jpegData else {
                     throw URLError(
                         .cannotDecodeContentData
                     )
                 }
-
-                try jpegData.write(
-                    to: destination,
-                    options: .atomic
-                )
-                try Task.checkCancellation()
                 guard request == newRequest else { return }
 
-                cleanArtworkDirectory(
-                    keeping: destination
+                cachedArtwork = CachedArtwork(
+                    request: newRequest,
+                    data: jpegData
                 )
                 failedRequest = nil
+                failedRequestDate = nil
                 request = nil
                 task = nil
+                Self.logger.notice(
+                    "Prepared notification artwork (\(jpegData.count, privacy: .public) bytes)"
+                )
             } catch is CancellationError {
                 guard request == newRequest else { return }
                 request = nil
                 task = nil
-                return
             } catch {
                 guard request == newRequest else { return }
                 failedRequest = newRequest
+                failedRequestDate = .now
                 request = nil
                 task = nil
+                Self.logger.error(
+                    "Failed to prepare notification artwork: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
     }
@@ -117,107 +134,47 @@ final class LyricsNotificationArtworkStore {
             await task.value
         }
         guard !Task.isCancelled,
-              let fileURL = cachedURL(
-                songID: songID,
-                url: url
-              )
-        else {
+              let cachedArtwork,
+              cachedArtwork.request == expectedRequest else {
             return nil
         }
-        return try? UNNotificationAttachment(
-            identifier:
-                LyricsNotificationConstants
-                    .artworkAttachmentID,
-            url: fileURL
-        )
+
+        do {
+            return try attachmentStager.makeAttachment(
+                from: cachedArtwork.data
+            )
+        } catch {
+            if self.cachedArtwork?.request
+                == expectedRequest {
+                self.cachedArtwork = nil
+            }
+            failedRequest = expectedRequest
+            failedRequestDate = .now
+            Self.logger.error(
+                "Failed to create notification attachment: \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
     }
 
     func cancelPreparation() {
         task?.cancel()
         task = nil
         request = nil
+        failedRequest = nil
+        failedRequestDate = nil
+        cachedArtwork = nil
     }
 
-    private func cachedURL(
-        songID: Int,
-        url: URL
-    ) -> URL? {
-        guard let destination = destinationURL(
-            songID: songID,
-            url: url
-        ),
-            FileManager.default.fileExists(
-                atPath: destination.path
-            )
-        else {
-            return nil
+    private func canAttempt(
+        _ newRequest: Request,
+        at date: Date = .now
+    ) -> Bool {
+        guard failedRequest == newRequest,
+              let failedRequestDate else {
+            return true
         }
-        return destination
-    }
-
-    private func destinationURL(
-        songID: Int,
-        url: URL
-    ) -> URL? {
-        guard let cacheDirectory =
-            FileManager.default.urls(
-                for: .cachesDirectory,
-                in: .userDomainMask
-            ).first
-        else {
-            return nil
-        }
-
-        let directory = cacheDirectory.appending(
-            path: "LyricsNotificationArtwork",
-            directoryHint: .isDirectory
-        )
-        do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
-            )
-            return directory.appending(
-                path: fileName(
-                    songID: songID,
-                    url: url
-                ),
-                directoryHint: .notDirectory
-            )
-        } catch {
-            return nil
-        }
-    }
-
-    private func fileName(
-        songID: Int,
-        url: URL
-    ) -> String {
-        let digest = SHA256.hash(
-            data: Data(url.absoluteString.utf8)
-        )
-        let suffix = digest.prefix(8).map {
-            String(format: "%02x", $0)
-        }
-        .joined()
-        return "\(songID)-\(suffix).jpg"
-    }
-
-    private func cleanArtworkDirectory(
-        keeping retainedURL: URL
-    ) {
-        let directory =
-            retainedURL.deletingLastPathComponent()
-        guard let files =
-            try? FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            )
-        else {
-            return
-        }
-        for file in files where file != retainedURL {
-            try? FileManager.default.removeItem(at: file)
-        }
+        return date.timeIntervalSince(failedRequestDate)
+            >= Self.failedRequestRetryInterval
     }
 }

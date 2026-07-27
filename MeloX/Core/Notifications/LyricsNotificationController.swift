@@ -269,6 +269,8 @@ final class LyricsNotificationController {
     private func request(
         for publication: LyricsNotificationPublication
     ) async -> UNNotificationRequest {
+        removeCurrentNotification()
+
         let content = UNMutableNotificationContent()
         content.title = publication.text.title
         content.subtitle = publication.text.subtitle
@@ -291,7 +293,6 @@ final class LyricsNotificationController {
             content.attachments = [attachment]
         }
 
-        removeCurrentNotification()
         return UNNotificationRequest(
             identifier:
                 LyricsNotificationConstants.notificationID,

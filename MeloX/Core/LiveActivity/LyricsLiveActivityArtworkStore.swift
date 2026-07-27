@@ -1,135 +1,179 @@
-import CryptoKit
 import Foundation
+import OSLog
 
 @MainActor
 final class LyricsLiveActivityArtworkStore {
+    private static let failedRequestRetryInterval: TimeInterval = 15
+    private static let legacyAppGroupIdentifier =
+        "group.moye.MeloX"
+    private static let legacyArtworkDirectoryName =
+        "LyricsLiveActivityArtwork"
+    private static let logger = Logger(
+        subsystem: "moye.MeloX",
+        category: "LyricsLiveActivityArtwork"
+    )
+
     private struct Request: Equatable {
         let songID: Int
         let url: URL
     }
 
+    private struct CachedArtwork {
+        let request: Request
+        let data: Data
+    }
+
     private var request: Request?
     private var failedRequest: Request?
+    private var failedRequestDate: Date?
+    private var cachedArtwork: CachedArtwork?
     private var task: Task<Void, Never>?
 
-    func cachedFileName(songID: Int, url: URL?) -> String? {
-        guard let url else { return nil }
-        let fileName = fileName(songID: songID, url: url)
-        guard let fileURL =
-            LyricsLiveActivitySharedStorage.artworkURL(
-                for: fileName
-            ),
-            FileManager.default.fileExists(atPath: fileURL.path)
-        else {
+    init() {
+        removeLegacyDiskCache()
+    }
+
+    deinit {
+        task?.cancel()
+    }
+
+    func cachedData(songID: Int, url: URL?) -> Data? {
+        guard let url,
+              let cachedArtwork,
+              cachedArtwork.request
+                == Request(songID: songID, url: url) else {
             return nil
         }
-        return fileName
+        return cachedArtwork.data
     }
 
     func prepare(
         songID: Int,
         url: URL?,
-        completion: @escaping @MainActor (String) -> Void
+        completion: @escaping @MainActor (Data) -> Void
     ) {
         guard let url else { return }
         let newRequest = Request(songID: songID, url: url)
-        guard newRequest != failedRequest else { return }
+        guard canAttempt(newRequest) else { return }
 
-        if cachedFileName(songID: songID, url: url) != nil {
+        if let data = cachedData(songID: songID, url: url) {
+            failedRequest = nil
+            failedRequestDate = nil
+            completion(data)
             return
         }
         guard request != newRequest || task == nil else { return }
 
         task?.cancel()
+        cachedArtwork = nil
+        failedRequest = nil
+        failedRequestDate = nil
         request = newRequest
         task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let (data, response) =
-                    try await URLSession.shared.data(from: url)
+                let sourceData = try await ArtworkDataLoader.data(
+                    from: url,
+                    preferredPixelSize:
+                        LyricsLiveActivityArtworkPolicy
+                            .maximumPixelSize
+                )
                 try Task.checkCancellation()
-                if let response = response as? HTTPURLResponse {
-                    guard (200..<300).contains(response.statusCode) else {
-                        throw URLError(.badServerResponse)
-                    }
-                }
+
                 let jpegData = await Task.detached(
                     priority: .utility
                 ) {
                     ArtworkThumbnailEncoder.jpegData(
-                        from: data
+                        from: sourceData,
+                        maximumPixelSize:
+                            LyricsLiveActivityArtworkPolicy
+                                .maximumPixelSize,
+                        compressionQuality: 0.64,
+                        maximumByteCount:
+                            LyricsLiveActivityArtworkPolicy
+                                .maximumJPEGByteCount
                     )
                 }.value
-                guard let jpegData,
-                      let destination = destinationURL(
-                        songID: songID,
-                        url: url
-                      )
-                else {
+                try Task.checkCancellation()
+                guard let jpegData else {
                     throw URLError(.cannotDecodeContentData)
                 }
+                guard request == newRequest else { return }
 
-                try jpegData.write(
-                    to: destination,
-                    options: .atomic
+                cachedArtwork = CachedArtwork(
+                    request: newRequest,
+                    data: jpegData
                 )
-                try Task.checkCancellation()
-                cleanArtworkDirectory(keeping: destination)
+                failedRequest = nil
+                failedRequestDate = nil
                 request = nil
                 task = nil
-                completion(destination.lastPathComponent)
+                Self.logger.notice(
+                    "Prepared embedded Live Activity artwork (\(jpegData.count, privacy: .public) bytes)"
+                )
+                completion(jpegData)
             } catch is CancellationError {
-                return
-            } catch {
-                failedRequest = newRequest
+                guard request == newRequest else { return }
                 request = nil
                 task = nil
+            } catch {
+                guard request == newRequest else { return }
+                failedRequest = newRequest
+                failedRequestDate = .now
+                request = nil
+                task = nil
+                Self.logger.error(
+                    "Failed to prepare Live Activity artwork: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
     }
 
-    private func destinationURL(
-        songID: Int,
-        url: URL
-    ) -> URL? {
-        let fileName = fileName(songID: songID, url: url)
-        guard let destination =
-            LyricsLiveActivitySharedStorage.artworkURL(
-                for: fileName
+    func clear() {
+        task?.cancel()
+        task = nil
+        request = nil
+        failedRequest = nil
+        failedRequestDate = nil
+        cachedArtwork = nil
+    }
+
+    private func canAttempt(
+        _ newRequest: Request,
+        at date: Date = .now
+    ) -> Bool {
+        guard failedRequest == newRequest,
+              let failedRequestDate else {
+            return true
+        }
+        return date.timeIntervalSince(failedRequestDate)
+            >= Self.failedRequestRetryInterval
+    }
+
+    private func removeLegacyDiskCache() {
+        guard let containerURL =
+            FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier:
+                    Self.legacyAppGroupIdentifier
             )
         else {
-            return nil
+            return
         }
-        do {
-            try FileManager.default.createDirectory(
-                at: destination.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            return destination
-        } catch {
-            return nil
-        }
-    }
-
-    private func fileName(songID: Int, url: URL) -> String {
-        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
-        let suffix = digest.prefix(8).map {
-            String(format: "%02x", $0)
-        }
-        .joined()
-        return "\(songID)-\(suffix).jpg"
-    }
-
-    private func cleanArtworkDirectory(keeping retainedURL: URL) {
-        let directory = retainedURL.deletingLastPathComponent()
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
+        let directory = containerURL.appending(
+            path: Self.legacyArtworkDirectoryName,
+            directoryHint: .isDirectory
+        )
+        guard FileManager.default.fileExists(
+            atPath: directory.path
         ) else {
             return
         }
-        for file in files where file != retainedURL {
-            try? FileManager.default.removeItem(at: file)
+        do {
+            try FileManager.default.removeItem(at: directory)
+        } catch {
+            Self.logger.error(
+                "Failed to remove legacy Live Activity artwork cache: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 }

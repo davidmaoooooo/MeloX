@@ -33,6 +33,8 @@ struct LyricsLiveActivityPresentation: Codable, Hashable {
 }
 
 struct LyricsLiveActivityAttributes: ActivityAttributes {
+    static let currentSchemaVersion = 2
+
     struct ContentState: Codable, Hashable {
         let title: String
         let subtitle: String
@@ -40,8 +42,7 @@ struct LyricsLiveActivityAttributes: ActivityAttributes {
         let compactScrollOffset: Int
         let compactScrollDistance: Double?
         let nextLyric: String?
-        let artworkFileName: String?
-        let artworkURL: URL?
+        let artworkData: Data?
         let presentation: LyricsLiveActivityPresentation
         let isPlaying: Bool
         let playbackPosition: TimeInterval
@@ -61,4 +62,5 @@ struct LyricsLiveActivityAttributes: ActivityAttributes {
     }
 
     let sessionID: UUID
+    let schemaVersion: Int?
 }

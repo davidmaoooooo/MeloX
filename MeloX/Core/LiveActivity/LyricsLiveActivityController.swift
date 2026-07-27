@@ -17,27 +17,36 @@ struct LyricsLiveActivitySnapshot: Equatable {
     let staleDate: Date?
 
     func contentState(
-        artworkFileName: String?
+        artworkData: Data?
     ) -> LyricsLiveActivityAttributes.ContentState {
         let safeDuration = max(duration, 0)
         let safePosition = safeDuration > 0
             ? min(max(playbackPosition, 0), safeDuration)
             : max(playbackPosition, 0)
+        let safeCompactText = limited(compactText)
+        let safeCompactScrollDistance = min(
+            max(compactScrollDistance, 0),
+            LyricsLiveActivityCompactLayout
+                .scrollDistanceToRevealEnd(
+                    text: safeCompactText,
+                    pointSize:
+                        presentation.compactTextSize.pointSize
+                )
+        )
         return LyricsLiveActivityAttributes.ContentState(
             title: limited(title),
             subtitle: limited(subtitle),
-            compactText: limited(compactText),
+            compactText: safeCompactText,
             compactScrollOffset:
                 LyricsLiveActivityCompactLayout.characterOffset(
-                    text: compactText,
+                    text: safeCompactText,
                     pointSize:
                         presentation.compactTextSize.pointSize,
-                    travelDistance: compactScrollDistance
+                    travelDistance: safeCompactScrollDistance
                 ),
-            compactScrollDistance: compactScrollDistance,
+            compactScrollDistance: safeCompactScrollDistance,
             nextLyric: nextLyric.map(limited),
-            artworkFileName: artworkFileName,
-            artworkURL: artworkURL,
+            artworkData: artworkData,
             presentation: presentation,
             isPlaying: isPlaying,
             playbackPosition: safePosition,
@@ -47,7 +56,12 @@ struct LyricsLiveActivitySnapshot: Equatable {
     }
 
     private func limited(_ value: String) -> String {
-        String(value.prefix(280))
+        String(
+            value.prefix(
+                LyricsLiveActivityArtworkPolicy
+                    .maximumTextCharacterCount
+            )
+        )
     }
 }
 
@@ -112,22 +126,30 @@ final class LyricsLiveActivityController {
             return
         }
 
-        let artworkFileName = snapshot.presentation.showsArtwork
-            ? artworkStore.cachedFileName(
+        let artworkData = snapshot.presentation.showsArtwork
+            ? artworkStore.cachedData(
                 songID: snapshot.songID,
                 url: snapshot.artworkURL
             )
             : nil
         let content = ActivityContent(
             state: snapshot.contentState(
-                artworkFileName: artworkFileName
+                artworkData: artworkData
             ),
             staleDate: snapshot.staleDate,
             relevanceScore: 100
         )
-        let activities = Activity<
+        let allActivities = Activity<
             LyricsLiveActivityAttributes
-        >.activities.filter(isUsable)
+        >.activities
+        let activities = allActivities.filter(isUsable)
+        for obsoleteActivity in allActivities
+        where !isUsable(obsoleteActivity) {
+            await obsoleteActivity.end(
+                nil,
+                dismissalPolicy: .immediate
+            )
+        }
 
         if let activity = activities.first
             ?? usableCurrentActivity {
@@ -139,7 +161,7 @@ final class LyricsLiveActivityController {
                 await requestActivity(
                     content: content,
                     snapshot: snapshot,
-                    artworkFileName: artworkFileName
+                    artworkData: artworkData
                 )
                 return
             }
@@ -152,7 +174,7 @@ final class LyricsLiveActivityController {
             }
             prepareArtworkIfNeeded(
                 for: snapshot,
-                currentFileName: artworkFileName
+                currentData: artworkData
             )
             return
         }
@@ -161,7 +183,7 @@ final class LyricsLiveActivityController {
         await requestActivity(
             content: content,
             snapshot: snapshot,
-            artworkFileName: artworkFileName
+            artworkData: artworkData
         )
     }
 
@@ -170,14 +192,17 @@ final class LyricsLiveActivityController {
             LyricsLiveActivityAttributes.ContentState
         >,
         snapshot: LyricsLiveActivitySnapshot,
-        artworkFileName: String?
+        artworkData: Data?
     ) async {
         guard canAttemptActivityRequest() else { return }
 
         do {
             let activity = try Activity.request(
                 attributes: LyricsLiveActivityAttributes(
-                    sessionID: UUID()
+                    sessionID: UUID(),
+                    schemaVersion:
+                        LyricsLiveActivityAttributes
+                            .currentSchemaVersion
                 ),
                 content: content,
                 pushType: nil,
@@ -190,7 +215,7 @@ final class LyricsLiveActivityController {
             )
             prepareArtworkIfNeeded(
                 for: snapshot,
-                currentFileName: artworkFileName
+                currentData: artworkData
             )
         } catch {
             currentActivity = nil
@@ -203,10 +228,10 @@ final class LyricsLiveActivityController {
 
     private func prepareArtworkIfNeeded(
         for snapshot: LyricsLiveActivitySnapshot,
-        currentFileName: String?
+        currentData: Data?
     ) {
         guard snapshot.presentation.showsArtwork,
-              currentFileName == nil else { return }
+              currentData == nil else { return }
         artworkStore.prepare(
             songID: snapshot.songID,
             url: snapshot.artworkURL
@@ -230,6 +255,7 @@ final class LyricsLiveActivityController {
         }
         currentActivity = nil
         lastFailedRequestDate = nil
+        artworkStore.clear()
     }
 
     private func canAttemptActivityRequest(
@@ -251,6 +277,11 @@ final class LyricsLiveActivityController {
     private func isUsable(
         _ activity: Activity<LyricsLiveActivityAttributes>
     ) -> Bool {
+        guard activity.attributes.schemaVersion
+                == LyricsLiveActivityAttributes
+                    .currentSchemaVersion else {
+            return false
+        }
         switch activity.activityState {
         case .pending, .active, .stale:
             return true

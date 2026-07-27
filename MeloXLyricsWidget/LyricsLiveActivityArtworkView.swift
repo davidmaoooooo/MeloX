@@ -1,5 +1,5 @@
+import ImageIO
 import SwiftUI
-import UIKit
 
 struct LyricsLiveActivityArtworkView: View {
     let state: LyricsLiveActivityAttributes.ContentState
@@ -20,36 +20,38 @@ struct LyricsLiveActivityArtworkView: View {
 
     @ViewBuilder
     private var artwork: some View {
-        if let image = localImage {
-            Image(uiImage: image)
-                .resizable()
+        if let image = decodedImage {
+            image.resizable()
                 .scaledToFill()
-        } else if let url = state.artworkURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                default:
-                    placeholder
-                }
-            }
         } else {
             placeholder
         }
     }
 
-    private var localImage: UIImage? {
-        guard let fileName = state.artworkFileName,
-              let url =
-                LyricsLiveActivitySharedStorage.artworkURL(
-                    for: fileName
-                )
+    private var decodedImage: Image? {
+        guard let data = state.artworkData,
+              let source = CGImageSourceCreateWithData(
+                data as CFData,
+                nil
+              ),
+              let image = CGImageSourceCreateImageAtIndex(
+                source,
+                0,
+                [
+                    kCGImageSourceShouldCacheImmediately: true
+                ] as CFDictionary
+              )
         else {
             return nil
         }
-        return UIImage(contentsOfFile: url.path)
+        return Image(
+            decorative: image,
+            scale: CGFloat(
+                LyricsLiveActivityArtworkPolicy
+                    .imageScale
+            ),
+            orientation: .up
+        )
     }
 
     private var placeholder: some View {
