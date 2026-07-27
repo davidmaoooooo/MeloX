@@ -1343,12 +1343,22 @@ struct AppleMusicLyricsView: View {
         )
         let prefersCascadeBounce = settings.lyricsFocusCascadeBounceEnabled
         let focusColorLeadTime = lyricsFocusColorLeadTime
+        let destinationOffsets = focusedLineFollowingOffsets(
+            for: highlightedLyricID
+        )
         let retainedTopLyrics: [RetainedCascadeLyric] = initialVisibleIDs.compactMap { id in
             guard movementDistance > 0,
-                  let frame = lyricFrameByID[id],
-                  frame.minY < movementDistance else {
+                  let frame = lyricFrameByID[id] else {
                 return nil
             }
+            let destinationMaxY =
+                frame.maxY
+                - movementDistance
+                + destinationOffsets[id, default: 0]
+            // Keep partially visible destination rows in LazyVStack. Hiding
+            // one behind a retained copy makes the copy-to-row handoff look
+            // like a spacing snap when the focused lyric spans multiple lines.
+            guard destinationMaxY <= 0 else { return nil }
             return RetainedCascadeLyric(
                 id: id,
                 frame: frame,
@@ -1363,9 +1373,6 @@ struct AppleMusicLyricsView: View {
                         + carriedMovementOffsets[line.id, default: 0]
                 )
             }
-        )
-        let destinationOffsets = focusedLineFollowingOffsets(
-            for: highlightedLyricID
         )
         let preparedMovementTransition = LyricMovementTransition(
             focusID: highlightedLyricID,
