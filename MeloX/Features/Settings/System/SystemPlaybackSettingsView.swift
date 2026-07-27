@@ -41,7 +41,7 @@ struct SystemPlaybackSettingsView: View {
 
             Section {
                 Toggle(
-                    "实时活动歌词",
+                    "实时活动歌词（实验性）",
                     isOn: $settings.lyricsLiveActivityEnabled
                 )
 
@@ -58,7 +58,15 @@ struct SystemPlaybackSettingsView: View {
             } header: {
                 Text("实时活动")
             } footer: {
-                Text("播放时在锁定屏幕和灵动岛显示歌词；它与系统播放信息可以独立开启。")
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(
+                        "实验性功能，当前版本仍不稳定。",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
+
+                    Text("可能出现歌词更新延迟、显示异常，或被系统提前结束；它与系统播放信息可以独立开启。")
+                }
             }
 
             Section {

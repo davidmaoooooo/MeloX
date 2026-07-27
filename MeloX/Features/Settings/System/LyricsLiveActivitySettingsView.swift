@@ -12,6 +12,21 @@ struct LyricsLiveActivitySettingsView: View {
 
         Form {
             Section {
+                Label(
+                    "实验性功能，当前版本仍不稳定",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+                Text("可能出现歌词更新延迟、显示异常，或被系统提前结束。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("功能状态")
+            }
+
+            Section {
                 LabeledContent("主标题格式") {
                     formatField(
                         "主标题格式",

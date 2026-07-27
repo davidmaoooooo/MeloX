@@ -104,8 +104,15 @@ struct ContentView: View {
                 FloatingLyricsPictureInPictureSource(
                     controller: floatingLyrics
                 )
-                .frame(width: 2, height: 2)
-                .opacity(0.01)
+                .frame(
+                    width:
+                        FloatingLyricsPictureInPictureSource
+                            .sourceSize.width,
+                    height:
+                        FloatingLyricsPictureInPictureSource
+                            .sourceSize.height
+                )
+                .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
             .onChange(of: selectedTab) { _, tab in

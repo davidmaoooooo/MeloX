@@ -49,6 +49,9 @@ final class FloatingLyricsController: NSObject {
     @ObservationIgnored
     private var restorationCompletion: ((Bool) -> Void)?
 
+    @ObservationIgnored
+    private var pictureInPictureStartTask: Task<Void, Never>?
+
     init(
         player: PlayerStore,
         settings: AppSettings,
@@ -85,6 +88,7 @@ final class FloatingLyricsController: NSObject {
 
     func monitor() async {
         refreshArtworkIfNeeded()
+        synchronizePlaybackState(force: true)
         refreshFrame(force: true)
 
         while !Task.isCancelled {
@@ -114,26 +118,31 @@ final class FloatingLyricsController: NSObject {
         }
 
         if pictureInPictureController.isPictureInPictureActive {
+            pictureInPictureStartTask?.cancel()
+            pictureInPictureStartTask = nil
             pictureInPictureController.stopPictureInPicture()
             return
         }
-
-        refreshArtworkIfNeeded()
-        refreshFrame(force: true)
-        synchronizePlaybackState(force: true)
-        isPossible = pictureInPictureController
-            .isPictureInPicturePossible
 
         guard player.currentSong != nil else {
             errorMessage = "请先播放一首歌曲。"
             return
         }
+
+        refreshArtworkIfNeeded()
+        synchronizePlaybackState(force: true)
+        refreshFrame(force: true)
+        isPossible = pictureInPictureController
+            .isPictureInPicturePossible
+
         guard isPossible else {
             errorMessage = "系统画中画暂时不可用，请稍后再试。"
             return
         }
 
-        pictureInPictureController.startPictureInPicture()
+        startPictureInPictureWhenReady(
+            using: pictureInPictureController
+        )
     }
 
     func attachDisplayLayer(to hostLayer: CALayer, bounds: CGRect) {
@@ -142,17 +151,26 @@ final class FloatingLyricsController: NSObject {
             hostLayer.addSublayer(displayLayer)
         }
         sourceHostLayer = hostLayer
-        displayLayer.frame = bounds
+        displayLayer.contentsScale = hostLayer.contentsScale
+        updateDisplayLayerFrame(bounds)
         refreshArtworkIfNeeded()
+        synchronizePlaybackState(force: true)
         refreshFrame(force: true)
     }
 
     func updateDisplayLayerFrame(_ bounds: CGRect) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         displayLayer.frame = bounds
+        CATransaction.commit()
     }
 
     func detachDisplayLayer(from hostLayer: CALayer) {
         guard sourceHostLayer === hostLayer else { return }
+        pictureInPictureStartTask?.cancel()
+        pictureInPictureStartTask = nil
         displayLayer.removeFromSuperlayer()
         sourceHostLayer = nil
         isPossible = false
@@ -192,6 +210,15 @@ final class FloatingLyricsController: NSObject {
         let stateChanged = state != lastPlaybackState
         guard force || stateChanged else { return }
 
+        let timelineChanged = lastPlaybackState.map {
+            $0.songID != state.songID
+                || $0.isPlaying != state.isPlaying
+                || $0.seekRevision != state.seekRevision
+        } ?? true
+        if timelineChanged {
+            resetSampleBufferRenderer()
+        }
+
         if let playbackTimebase {
             let currentTime = CMTime(
                 seconds: player.estimatedProgress(),
@@ -213,9 +240,20 @@ final class FloatingLyricsController: NSObject {
         let presentation = makePresentation()
         guard force || presentation != lastPresentation else { return }
 
-        let presentationTime = playbackTimebase.map {
+        let sampleBufferRenderer = prepareSampleBufferRenderer()
+        guard sampleBufferRenderer.isReadyForMoreMediaData else {
+            return
+        }
+
+        let currentTime = playbackTimebase.map {
             CMTimebaseGetTime($0)
         } ?? CMClockGetTime(CMClockGetHostTimeClock())
+        let presentationTime = player.isPlaying
+            ? CMTimeAdd(
+                currentTime,
+                FloatingLyricsFrameRenderer.presentationLeadTime
+            )
+            : currentTime
         guard let sampleBuffer = frameRenderer.makeSampleBuffer(
             presentation: presentation,
             artworkImage: artworkLoader.image,
@@ -224,8 +262,59 @@ final class FloatingLyricsController: NSObject {
             return
         }
 
-        displayLayer.sampleBufferRenderer.enqueue(sampleBuffer)
+        sampleBufferRenderer.enqueue(sampleBuffer)
         lastPresentation = presentation
+    }
+
+    private func startPictureInPictureWhenReady(
+        using controller: AVPictureInPictureController
+    ) {
+        pictureInPictureStartTask?.cancel()
+        pictureInPictureStartTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for _ in 0..<16 {
+                guard !Task.isCancelled else { return }
+
+                self.refreshFrame(force: true)
+                if self.displayLayer.isReadyForDisplay,
+                   controller.isPictureInPicturePossible {
+                    self.pictureInPictureStartTask = nil
+                    self.errorMessage = nil
+                    controller.startPictureInPicture()
+                    return
+                }
+
+                do {
+                    try await Task.sleep(for: .milliseconds(50))
+                } catch {
+                    return
+                }
+            }
+
+            self.pictureInPictureStartTask = nil
+            self.errorMessage = self.displayLayer
+                .sampleBufferRenderer
+                .error?
+                .localizedDescription
+                ?? "画中画画面尚未准备好，请稍后再试。"
+        }
+    }
+
+    private func prepareSampleBufferRenderer()
+        -> AVSampleBufferVideoRenderer {
+        let renderer = displayLayer.sampleBufferRenderer
+        if renderer.status == .failed
+            || renderer.requiresFlushToResumeDecoding {
+            renderer.flush()
+            lastPresentation = nil
+        }
+        return renderer
+    }
+
+    private func resetSampleBufferRenderer() {
+        displayLayer.sampleBufferRenderer.flush()
+        lastPresentation = nil
     }
 
     private var frameUpdateInterval: TimeInterval {
@@ -324,12 +413,14 @@ extension FloatingLyricsController: AVPictureInPictureControllerDelegate {
     func pictureInPictureControllerWillStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        synchronizePlaybackState(force: true)
         refreshFrame(force: true)
     }
 
     func pictureInPictureControllerDidStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        pictureInPictureStartTask = nil
         isActive = true
         isPossible = true
     }
@@ -338,6 +429,7 @@ extension FloatingLyricsController: AVPictureInPictureControllerDelegate {
         _ pictureInPictureController: AVPictureInPictureController,
         failedToStartPictureInPictureWithError error: any Error
     ) {
+        pictureInPictureStartTask = nil
         isActive = false
         errorMessage = error.localizedDescription
     }
@@ -345,6 +437,7 @@ extension FloatingLyricsController: AVPictureInPictureControllerDelegate {
     func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        pictureInPictureStartTask = nil
         isActive = false
         isPossible = pictureInPictureController
             .isPictureInPicturePossible
