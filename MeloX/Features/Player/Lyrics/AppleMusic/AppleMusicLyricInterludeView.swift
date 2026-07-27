@@ -156,53 +156,19 @@ struct AppleMusicLyricInterludeView: View {
         HStack(spacing: dotSpacing) {
             ForEach(presentation.dotOpacities.indices, id: \.self) {
                 index in
-                ZStack {
-                    Circle()
-                        .fill(
-                            .white.opacity(
-                                presentation.dotGlowOpacities[index]
-                                    * 0.24
-                            )
+                Circle()
+                    .fill(
+                        .white.opacity(
+                            presentation.dotOpacities[index]
                         )
-                        .frame(
-                            width: dotDiameter * 2.5,
-                            height: dotDiameter * 2.5
-                        )
-                        .blur(radius: dotDiameter * 0.8)
-                        .blendMode(.plusLighter)
-
-                    Circle()
-                        .fill(
-                            .white.opacity(
-                                presentation.dotGlowOpacities[index]
-                                    * 0.52
-                            )
-                        )
-                        .frame(
-                            width: dotDiameter * 1.65,
-                            height: dotDiameter * 1.65
-                        )
-                        .blur(radius: dotDiameter * 0.38)
-                        .blendMode(.plusLighter)
-
-                    Circle()
-                        .fill(
-                            .white.opacity(
-                                presentation.dotOpacities[index]
-                            )
-                        )
-                        .frame(
-                            width: dotDiameter,
-                            height: dotDiameter
-                        )
-                }
-                .frame(
-                    width: dotDiameter,
-                    height: dotDiameter
-                )
-                .scaleEffect(
-                    presentation.dotScales[index]
-                )
+                    )
+                    .frame(
+                        width: dotDiameter,
+                        height: dotDiameter
+                    )
+                    .scaleEffect(
+                        presentation.dotScales[index]
+                    )
             }
         }
         .scaleEffect(
@@ -246,7 +212,6 @@ private struct AppleMusicInterludeDotsPresentation {
 
     let dotOpacities: [Double]
     let dotScales: [CGFloat]
-    let dotGlowOpacities: [Double]
     let scale: CGFloat
     let opacity: Double
 
@@ -269,10 +234,6 @@ private struct AppleMusicInterludeDotsPresentation {
             return AppleMusicInterludeDotsPresentation(
                 dotOpacities: Array(repeating: 0, count: dotCount),
                 dotScales: Array(repeating: 1, count: dotCount),
-                dotGlowOpacities: Array(
-                    repeating: 0,
-                    count: dotCount
-                ),
                 scale: 0,
                 opacity: 0
             )
@@ -307,12 +268,6 @@ private struct AppleMusicInterludeDotsPresentation {
             }
             return CGFloat(1 + thirdDotProgress * 0.26)
         }
-        let dotGlowOpacities = (0..<dotCount).map { index in
-            index == dotCount - 1
-                ? thirdDotProgress
-                : 0
-        }
-
         var globalOpacity: Double
         switch elapsed {
         case ..<entryDelay:
@@ -370,7 +325,6 @@ private struct AppleMusicInterludeDotsPresentation {
         return AppleMusicInterludeDotsPresentation(
             dotOpacities: dotOpacities,
             dotScales: dotScales,
-            dotGlowOpacities: dotGlowOpacities,
             scale: CGFloat(scale),
             opacity: clamped(
                 globalOpacity,

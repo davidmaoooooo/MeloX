@@ -174,7 +174,11 @@ struct NowPlayingTransportControls: View {
                     .frame(width: 64, height: 64)
                     .contentShape(.circle)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(
+                NowPlayingTransportButtonStyle(
+                    reducesMotion: accessibilityReduceMotion
+                )
+            )
             .accessibilityLabel("上一首")
 
             Spacer()
@@ -209,7 +213,11 @@ struct NowPlayingTransportControls: View {
                 .frame(width: 64, height: 64)
                 .contentShape(.circle)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(
+                NowPlayingTransportButtonStyle(
+                    reducesMotion: accessibilityReduceMotion
+                )
+            )
             .accessibilityLabel(player.isPlaying ? "暂停" : "播放")
 
             Spacer()
@@ -222,7 +230,11 @@ struct NowPlayingTransportControls: View {
                     .frame(width: 64, height: 64)
                     .contentShape(.circle)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(
+                NowPlayingTransportButtonStyle(
+                    reducesMotion: accessibilityReduceMotion
+                )
+            )
             .accessibilityLabel("下一首")
 
             Spacer()
