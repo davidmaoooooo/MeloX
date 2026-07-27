@@ -84,7 +84,6 @@ struct NowPlayingLandscapeView: View {
         .frame(height: 28)
         .accessibilityLabel("收起播放器")
         .accessibilityHint("轻点收起，或向下拖动播放器")
-        .gesture(dismissalDragGesture)
     }
 
     private func artwork(side: CGFloat) -> some View {
@@ -236,14 +235,4 @@ struct NowPlayingLandscapeView: View {
         showsSkylineLyrics = false
     }
 
-    private var dismissalDragGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onEnded { value in
-                guard value.translation.height > 60,
-                      abs(value.translation.height) > abs(value.translation.width) else {
-                    return
-                }
-                onDismiss()
-            }
-    }
 }

@@ -102,6 +102,6 @@ struct TextPVFullScreenPlayerView: View {
         .buttonStyle(.plain)
         .frame(height: 52)
         .accessibilityLabel("收起播放器")
-        .accessibilityHint("轻点收起播放器")
+        .accessibilityHint("轻点收起，或向下拖动播放器")
     }
 }

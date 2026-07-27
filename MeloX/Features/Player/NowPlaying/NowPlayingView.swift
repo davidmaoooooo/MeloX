@@ -33,7 +33,6 @@ struct NowPlayingView: View {
     @State private var lyricsExitInterruptionDeadline:
         ContinuousClock.Instant?
     @State private var interruptsLyricsExit = false
-    @GestureState private var isInteractingWithPlayer = false
     @Namespace private var pageArtworkNamespace
 
     init(initialPage: NowPlayingPage = .artwork) {
@@ -112,14 +111,6 @@ struct NowPlayingView: View {
                 lyrics: lyrics,
                 highlightedLyricID: $highlightedLyricID
             )
-        }
-        .simultaneousGesture(
-            playerActivityGesture,
-            including: acceptsPlayerActivityGesture ? .all : .none
-        )
-        .onChange(of: isInteractingWithPlayer) { _, isInteracting in
-            guard isInteracting else { return }
-            registerAppleMusicControlsActivity()
         }
         .keepsScreenAwake(keepsPlayerScreenAwake)
         .preferredColorScheme(.dark)
@@ -372,7 +363,6 @@ struct NowPlayingView: View {
         .onTapGesture {
             dismiss()
         }
-        .gesture(dismissalDragGesture)
         .accessibilityElement()
         .accessibilityLabel("收起播放器")
         .accessibilityHint("轻点收起，或向下拖动播放器")
@@ -858,24 +848,6 @@ struct NowPlayingView: View {
         preparedLyricsSongID = songID
     }
 
-    private var dismissalDragGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onEnded { value in
-                guard value.translation.height > 60,
-                      abs(value.translation.height) > abs(value.translation.width) else {
-                    return
-                }
-                dismiss()
-            }
-    }
-
-    private var playerActivityGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .updating($isInteractingWithPlayer) { _, isInteracting, _ in
-                isInteracting = true
-            }
-    }
-
     private var lyricsInterfaceAccessibilityActionName: String {
         if settings.lyricsStyle == .appleMusic {
             return "显示播放器控制"
@@ -945,9 +917,6 @@ struct NowPlayingView: View {
         appleMusicControlsActivityGeneration &+= 1
     }
 
-    private var acceptsPlayerActivityGesture: Bool {
-        usesAutoHidingAppleMusicInterface && showsLyricsControls
-    }
 }
 
 private enum NowPlayingLyricsEntranceState: Hashable {

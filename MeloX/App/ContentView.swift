@@ -73,6 +73,7 @@ struct ContentView: View {
                             NeteaseShareSheet(presentation: presentation)
                         }
                         .presentationBackground(.clear)
+                        .presentationContentInteraction(.resizes)
                         .navigationTransition(
                             .zoom(
                                 sourceID: playerTransitionID,
