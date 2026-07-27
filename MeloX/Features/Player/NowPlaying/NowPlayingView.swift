@@ -226,13 +226,35 @@ struct NowPlayingView: View {
             pageContent(for: song)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottom) {
-                    portraitPlayerControls(for: song)
-                        .allowsHitTesting(!hidesLyricsControls)
-                        .accessibilityHidden(hidesLyricsControls)
+                    portraitPlayerControlsLayer(for: song)
                 }
         }
         .padding(.horizontal, 32)
         .safeAreaPadding(.bottom, 3)
+    }
+
+    private func portraitPlayerControlsLayer(
+        for song: Song
+    ) -> some View {
+        ZStack(alignment: .bottom) {
+            portraitPlayerControls(for: song)
+                .allowsHitTesting(!hidesLyricsControls)
+                .accessibilityHidden(hidesLyricsControls)
+
+            if hidesLyricsControls {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(
+                        height: NowPlayingBottomControls.overlayHeight
+                    )
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        handleLyricsInterfaceInteraction()
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(height: NowPlayingBottomControls.overlayHeight)
     }
 
     private func portraitPlayerControls(for song: Song) -> some View {

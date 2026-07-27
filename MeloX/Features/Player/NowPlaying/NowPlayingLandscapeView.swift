@@ -123,10 +123,24 @@ struct NowPlayingLandscapeView: View {
     }
 
     private var pageSelector: some View {
-        NowPlayingPageSelector(page: $page)
-            .opacity(hidesLyricsControls ? 0 : 1)
-            .allowsHitTesting(!hidesLyricsControls)
-            .accessibilityHidden(hidesLyricsControls)
+        ZStack {
+            NowPlayingPageSelector(page: $page)
+                .opacity(hidesLyricsControls ? 0 : 1)
+                .allowsHitTesting(!hidesLyricsControls)
+                .accessibilityHidden(hidesLyricsControls)
+
+            if hidesLyricsControls {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        onInterfaceInteraction()
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(height: 50)
     }
 
     private var hidesLyricsControls: Bool {
