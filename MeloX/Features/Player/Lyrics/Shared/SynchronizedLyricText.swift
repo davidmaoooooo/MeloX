@@ -310,13 +310,14 @@ struct SynchronizedLyricText: View {
             )
     }
 
-    @ViewBuilder
     private var primaryLyric: some View {
-        if usesTimedLyrics {
-            synchronizedPrimaryLyric
-        } else {
-            stablePrimaryLyric
-        }
+        stablePrimaryLyric
+            .opacity(usesTimedLyrics ? 0 : 1)
+            .overlay(alignment: alignment.frameAlignment) {
+                if usesTimedLyrics {
+                    synchronizedPrimaryLyric
+                }
+            }
     }
 
     private var stablePrimaryLyric: some View {
@@ -333,7 +334,9 @@ struct SynchronizedLyricText: View {
                     .multilineTextAlignment(alignment.textAlignment)
                     .lineLimit(nil)
                     .fixedSize(
-                        horizontal: primaryLayoutWidth != nil,
+                        horizontal:
+                            primaryLayoutWidth != nil
+                                && alignment == .leading,
                         vertical: true
                     )
                     .textRenderer(
@@ -376,7 +379,10 @@ struct SynchronizedLyricText: View {
                         .foregroundStyle(primaryColor)
                         .multilineTextAlignment(alignment.textAlignment)
                         .lineLimit(nil)
-                        .fixedSize(horizontal: true, vertical: true)
+                        .fixedSize(
+                            horizontal: alignment == .leading,
+                            vertical: true
+                        )
                         .textRenderer(
                             lyricTextRenderer(at: playbackTime)
                         )

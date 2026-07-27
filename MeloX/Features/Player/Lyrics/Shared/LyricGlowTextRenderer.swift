@@ -91,6 +91,14 @@ struct LyricGlowTextRenderer: TextRenderer {
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        if layoutConfiguration.centersLines {
+            // TextRenderer offsets drawing by its leading display padding.
+            // Left-aligned lyrics have their own inset, but centered Skyline
+            // lyrics need that rasterization-only padding removed so the
+            // visible glyph bounds stay on the SwiftUI layout center.
+            context.translateBy(x: -displayPadding.leading, y: 0)
+        }
+
         for line in layout {
             var lineContext = context
             let revealMask = appliesTimingEffects

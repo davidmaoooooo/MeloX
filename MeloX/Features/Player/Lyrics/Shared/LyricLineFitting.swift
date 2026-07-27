@@ -34,11 +34,17 @@ enum LyricLineFitting {
             max(availableWidth / bounds.width, 0),
             1
         )
-        let scaledWidth = bounds.width * scale
-        let targetMinX = centersLine
-            ? (width - scaledWidth) * 0.5
-            : 0
-        let translationX = targetMinX - bounds.minX * scale
+        let translationX: CGFloat
+        if centersLine {
+            // SwiftUI has already positioned centered lines. Re-centering
+            // them against the renderer width applies the alignment twice
+            // and shifts the whole lyric to the right. Preserve that native
+            // center and only scale around it when the line is too wide.
+            guard scale < 1 else { return nil }
+            translationX = bounds.midX * (1 - scale)
+        } else {
+            translationX = -bounds.minX * scale
+        }
         let translationY = bounds.midY * (1 - scale)
 
         guard scale < 1
