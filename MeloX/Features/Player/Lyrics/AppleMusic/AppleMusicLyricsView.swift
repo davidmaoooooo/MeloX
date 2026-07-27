@@ -6,6 +6,7 @@ struct AppleMusicLyricsView: View {
     private static let translationSpacing: CGFloat = 2
     private static let cascadeSettlementGraceDuration: TimeInterval =
         1.0 / 60.0
+    private static let interludeExpansionDuration: TimeInterval = 0.5
     nonisolated private static let expandedBottomDistanceScale: CGFloat = 0.68
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -269,12 +270,10 @@ struct AppleMusicLyricsView: View {
                         spacing: lineSpacing
                     ) {
                         ForEach(displayItems) { item in
-                            if case let .interlude(interlude) = item {
+                            if case let .interlude(interlude) = item,
+                               activeInterlude?.id == interlude.id {
                                 AppleMusicLyricInterludeView(
                                     interlude: interlude,
-                                    isActive:
-                                        activeInterlude?.id
-                                        == interlude.id,
                                     fontSize: CGFloat(
                                         settings.lyricsFontSize
                                     ),
@@ -490,6 +489,14 @@ struct AppleMusicLyricsView: View {
                             }
                         }
                     }
+                    .animation(
+                        accessibilityReduceMotion
+                            ? nil
+                            : .smooth(
+                                duration: Self.interludeExpansionDuration
+                            ),
+                        value: activeInterlude?.id
+                    )
                     .scrollTargetLayout()
                     .padding(.top, max(proxy.size.height * focusPosition, 40))
                     .padding(.bottom, bottomContentPadding)

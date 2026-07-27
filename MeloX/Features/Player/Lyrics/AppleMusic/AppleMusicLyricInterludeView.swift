@@ -162,7 +162,6 @@ struct AppleMusicLyricInterludeView: View {
     @Environment(AppSettings.self) private var settings
 
     let interlude: LyricInterlude
-    let isActive: Bool
     let fontSize: CGFloat
     let onInterfaceInteraction: (() -> Void)?
 
@@ -180,7 +179,7 @@ struct AppleMusicLyricInterludeView: View {
                     .animation(
                         minimumInterval:
                             effectiveLyricsRefreshRate.minimumInterval,
-                        paused: !player.isPlaying || !isActive
+                        paused: !player.isPlaying
                     )
                 ) { timeline in
                     dots(
@@ -244,7 +243,6 @@ struct AppleMusicLyricInterludeView: View {
     private func presentation(
         at playbackTime: TimeInterval
     ) -> AppleMusicInterludeDotsPresentation {
-        guard isActive else { return .hidden }
         return AppleMusicInterludeDotsPresentation.make(
             playbackTime: playbackTime,
             interlude: interlude,
@@ -286,13 +284,6 @@ private struct AppleMusicInterludeDotsPresentation {
     let dotScales: [CGFloat]
     let scale: CGFloat
     let opacity: Double
-
-    static let hidden = AppleMusicInterludeDotsPresentation(
-        dotOpacities: Array(repeating: 0, count: dotCount),
-        dotScales: Array(repeating: 1, count: dotCount),
-        scale: 1,
-        opacity: 0
-    )
 
     static func make(
         playbackTime: TimeInterval,
