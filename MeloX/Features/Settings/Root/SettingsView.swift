@@ -25,6 +25,7 @@ struct SettingsView: View {
     private var systemPlaybackSummary: String {
         let enabledCount = [
             settings.systemNowPlayingLyricsEnabled,
+            settings.lyricsNotifications.isEnabled,
             settings.lyricsLiveActivityEnabled,
         ]
         .filter { $0 }

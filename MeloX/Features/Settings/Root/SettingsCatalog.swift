@@ -91,14 +91,19 @@ enum SettingsCatalog {
             items: [
                 SettingsCatalogItem(
                     route: .systemPlayback,
-                    title: "锁定屏幕与实时活动",
-                    subtitle: "系统播放信息、锁定屏幕与灵动岛歌词",
+                    title: "系统歌词显示",
+                    subtitle: "播放信息、通知横幅、锁定屏幕与灵动岛歌词",
                     systemImage: "lock.display",
                     keywords: [
                         "控制中心",
                         "系统歌词",
+                        "通知歌词",
+                        "静音通知",
+                        "横幅",
+                        "Notification",
                         "Live Activity",
                         "标题格式",
+                        "副标题",
                         "封面",
                         "播放进度",
                     ]

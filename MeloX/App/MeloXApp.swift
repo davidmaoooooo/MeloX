@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct MeloXApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var settings: AppSettings
     @State private var api: NeteaseAPI
     @State private var library: LibraryStore
@@ -11,6 +13,8 @@ struct MeloXApp: App {
     @State private var player: PlayerStore
     @State private var lyrics: LyricsStore
     @State private var floatingLyrics: FloatingLyricsController
+    @State private var lyricsNotifications:
+        LyricsNotificationController
     @State private var screenAwakeCoordinator: ScreenAwakeCoordinator
     @State private var releaseNotes: AppReleaseNotesStore
     @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -26,10 +30,14 @@ struct MeloXApp: App {
         let library = LibraryStore(api: api, settings: settings)
         let cloud = CloudMusicStore(api: api, settings: settings)
         let downloads = DownloadStore(api: api, settings: settings)
+        let lyricsNotifications = LyricsNotificationController(
+            preferences: settings.lyricsNotifications
+        )
         let player = PlayerStore(
             api: api,
             settings: settings,
             downloads: downloads,
+            lyricsNotificationController: lyricsNotifications,
             onPlaybackRecorded: { song in
                 library.recordRecentlyPlayed(song)
             }
@@ -48,6 +56,9 @@ struct MeloXApp: App {
         _player = State(initialValue: player)
         _lyrics = State(initialValue: lyrics)
         _floatingLyrics = State(initialValue: floatingLyrics)
+        _lyricsNotifications = State(
+            initialValue: lyricsNotifications
+        )
         _screenAwakeCoordinator = State(initialValue: ScreenAwakeCoordinator())
         _releaseNotes = State(initialValue: releaseNotes)
     }
@@ -63,6 +74,7 @@ struct MeloXApp: App {
                 .environment(player)
                 .environment(lyrics)
                 .environment(floatingLyrics)
+                .environment(lyricsNotifications)
                 .environment(screenAwakeCoordinator)
                 .environment(releaseNotes)
                 .environment(\.effectiveLyricsRefreshRate, effectiveLyricsRefreshRate)
@@ -76,6 +88,17 @@ struct MeloXApp: App {
                     )
                 ) { _ in
                     isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+                }
+                .task {
+                    await lyricsNotifications
+                        .refreshAuthorizationStatus()
+                }
+                .onChange(of: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    Task {
+                        await lyricsNotifications
+                            .refreshAuthorizationStatus()
+                    }
                 }
         }
     }

@@ -58,9 +58,9 @@ final class AppSettings {
     static let appleMusicLyricsInterfaceAutoHideDelayRange = 3.0...15.0
     static let defaultAppleMusicLyricsScrollHideThreshold = 200.0
     static let appleMusicLyricsScrollHideThresholdRange = 40.0...240.0
-    static let defaultLyricsFontSize = 31.0
+    static let defaultLyricsFontSize = 34.0
     static let defaultLyricsFontWeight: LyricsFontWeight = .heavy
-    static let defaultLyricsCurrentLineScale = 1.08
+    static let defaultLyricsCurrentLineScale = 1.02
     static let defaultLyricsLineSpacing = 28.0
     static let defaultLyricsBlurIntensity = 0.8
     static let defaultLyricsUsesUniformDimmingWhileBrowsing = true
@@ -71,17 +71,17 @@ final class AppSettings {
     static let defaultLyricsDistanceBlurScale = 0.65
     static let defaultLyricsHiddenInterfaceBlurScale = 0.6
     static let lyricsDistanceBlurScaleRange = 0.0...1.5
-    static let defaultLyricsFocusCascadeDelay = 0.026
+    static let defaultLyricsFocusCascadeDelay = 0.028
     static let lyricsFocusCascadeDelayRange = 0.0...0.1
-    static let defaultLyricsFocusCascadeDelayIncrease = 0.004
+    static let defaultLyricsFocusCascadeDelayIncrease = 0.005
     static let lyricsFocusCascadeDelayIncreaseRange = 0.0...0.1
-    static let defaultLyricsFocusCascadeFollowingDelay = 0.04
+    static let defaultLyricsFocusCascadeFollowingDelay = 0.06
     static let lyricsFocusCascadeFollowingDelayRange = 0.0...0.2
-    static let defaultLyricsFocusCascadeCatchUpRatio = 0.95
+    static let defaultLyricsFocusCascadeCatchUpRatio = 0.97
     static let lyricsFocusCascadeCatchUpRatioRange = 0.5...1.0
-    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.68
+    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.70
     static let lyricsFocusCascadeChaseSpeedGradientRange = 0.0...1.0
-    static let defaultLyricsFocusCascadeDuration = 0.68
+    static let defaultLyricsFocusCascadeDuration = 0.74
     static let lyricsFocusCascadeDurationRange = 0.2...1.2
     static let defaultLyricsFocusSnapThreshold = 0.26
     static let lyricsFocusSnapThresholdRange = 0.05...0.5
@@ -878,6 +878,7 @@ final class AppSettings {
     let equalizer: AudioEqualizerPreferences
     let autoMix: AutoMixPreferences
     let floatingLyrics: FloatingLyricsPreferences
+    let lyricsNotifications: LyricsNotificationPreferences
 
     @ObservationIgnored
     private let defaults: UserDefaults
@@ -889,6 +890,9 @@ final class AppSettings {
         equalizer = AudioEqualizerPreferences(defaults: defaults)
         autoMix = AutoMixPreferences(defaults: defaults)
         floatingLyrics = FloatingLyricsPreferences(defaults: defaults)
+        lyricsNotifications = LyricsNotificationPreferences(
+            defaults: defaults
+        )
         hasCompletedOnboarding = defaults.bool(
             forKey: Key.hasCompletedOnboarding
         )
@@ -1411,6 +1415,7 @@ final class AppSettings {
         lyricsRefreshRate = .defaultValue
         textPV.reset()
         floatingLyrics.reset()
+        lyricsNotifications.reset()
         playerScreenAwakeMode = .lyrics
         rememberNowPlayingPage = false
         rememberedNowPlayingPage = "artwork"

@@ -95,6 +95,10 @@ final class PlayerStore {
         LyricsLiveActivityController
 
     @ObservationIgnored
+    private let lyricsNotificationController:
+        LyricsNotificationController
+
+    @ObservationIgnored
     private let persistence: PlaybackPersistence
 
     @ObservationIgnored
@@ -153,6 +157,8 @@ final class PlayerStore {
         api: NeteaseAPI,
         settings: AppSettings,
         downloads: DownloadStore,
+        lyricsNotificationController:
+            LyricsNotificationController,
         persistence: PlaybackPersistence? = nil,
         onPlaybackRecorded: @escaping (Song) -> Void = { _ in }
     ) {
@@ -178,6 +184,8 @@ final class PlayerStore {
             players: engine.nowPlayingPlayers
         )
         lyricsLiveActivityController = LyricsLiveActivityController()
+        self.lyricsNotificationController =
+            lyricsNotificationController
         bindEngine()
         bindAutoMixCoordinator()
         bindRemoteCommands()
@@ -189,6 +197,7 @@ final class PlayerStore {
         hasRestoredPlayback = true
         guard let snapshot = persistence.load(), !snapshot.queue.isEmpty else {
             lyricsLiveActivityController.synchronize(with: nil)
+            lyricsNotificationController.clear()
             return
         }
 
@@ -381,6 +390,7 @@ final class PlayerStore {
         nowPlayingLyrics = lyrics
         updateNowPlayingLyricMetadata()
         updateLyricsLiveActivity()
+        updateLyricsNotification()
     }
 
     func applySystemNowPlayingLyricsPreference() {
@@ -389,6 +399,25 @@ final class PlayerStore {
 
     func applyLyricsLiveActivityPreference() {
         updateLyricsLiveActivity(force: true)
+    }
+
+    func applyLyricsNotificationPreference() {
+        updateLyricsNotification(force: true)
+    }
+
+    func refreshLyricsNotification() {
+        updateLyricsNotification()
+    }
+
+    func presentLyricsNotificationPreview() {
+        let song = currentSong
+        lyricsNotificationController.presentPreview(
+            song: song,
+            lyrics: currentSongLyrics,
+            playbackTime:
+                estimatedProgress()
+                    + settings.lyricsAdvanceTime
+        )
     }
 
     func refreshLyricsLiveActivity() {
@@ -642,6 +671,7 @@ final class PlayerStore {
             self.lastProgressUpdateDate = Date()
             self.updateNowPlayingLyricMetadata()
             self.updateLyricsLiveActivity()
+            self.updateLyricsNotification()
             let second = Int(value)
             if second != self.lastPersistedSecond {
                 self.lastPersistedSecond = second
@@ -741,6 +771,7 @@ final class PlayerStore {
             force: forceNowPlayingLyrics
         )
         updateLyricsLiveActivity(force: forceLyricsLiveActivity)
+        updateLyricsNotification()
         nowPlayingSession.updatePlayback(
             position: progress,
             duration: duration,
@@ -752,9 +783,7 @@ final class PlayerStore {
         force: Bool = false
     ) {
         guard let song = currentSong else { return }
-        let lyrics = nowPlayingLyricsSongID == song.id
-            ? nowPlayingLyrics
-            : []
+        let lyrics = currentSongLyrics
         let highlightedLyricID = settings.systemNowPlayingLyricsEnabled
             ? LyricPlaybackTimeline.position(
                 at: estimatedProgress() + settings.lyricsAdvanceTime,
@@ -797,9 +826,7 @@ final class PlayerStore {
             return
         }
 
-        let lyrics = nowPlayingLyricsSongID == song.id
-            ? nowPlayingLyrics
-            : []
+        let lyrics = currentSongLyrics
         let adjustedProgress =
             estimatedProgress() + settings.lyricsAdvanceTime
         let position = LyricPlaybackTimeline.position(
@@ -875,6 +902,26 @@ final class PlayerStore {
             snapshot: snapshot,
             force: force
         )
+    }
+
+    private func updateLyricsNotification(force: Bool = false) {
+        lyricsNotificationController.update(
+            song: currentSong,
+            lyrics: currentSongLyrics,
+            playbackTime:
+                estimatedProgress()
+                    + settings.lyricsAdvanceTime,
+            isPlaying: isPlaying,
+            force: force
+        )
+    }
+
+    private var currentSongLyrics: [LyricLine] {
+        guard let songID = currentSong?.id,
+              nowPlayingLyricsSongID == songID else {
+            return []
+        }
+        return nowPlayingLyrics
     }
 
     private var shouldPresentLyricsLiveActivity: Bool {

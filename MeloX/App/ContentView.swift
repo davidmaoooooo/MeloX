@@ -119,6 +119,7 @@ struct ContentView: View {
                 settings.lastSelectedTab = tab
             }
             .onChange(of: scenePhase) { _, phase in
+                player.refreshLyricsNotification()
                 guard phase == .active else { return }
                 player.refreshLyricsLiveActivity()
             }

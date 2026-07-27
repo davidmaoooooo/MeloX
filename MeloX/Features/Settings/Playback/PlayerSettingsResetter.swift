@@ -20,5 +20,6 @@ enum PlayerSettingsResetter {
         player.applyAutoMixSettings()
         player.applySystemNowPlayingLyricsPreference()
         player.applyLyricsLiveActivityPreference()
+        player.applyLyricsNotificationPreference()
     }
 }

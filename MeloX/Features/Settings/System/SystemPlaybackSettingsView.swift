@@ -1,8 +1,15 @@
 import SwiftUI
+import UIKit
 
 struct SystemPlaybackSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(PlayerStore.self) private var player
+    @Environment(LyricsNotificationController.self)
+    private var notifications
+    @Environment(\.openURL) private var openURL
+
+    @State private var showsNotificationPermissionAlert =
+        false
 
     var body: some View {
         @Bindable var settings = settings
@@ -37,6 +44,40 @@ struct SystemPlaybackSettingsView: View {
                 Text("系统播放信息")
             } footer: {
                 Text("控制中心和锁定屏幕会使用当前歌词更新播放信息；关闭后恢复标准歌名与作者。")
+            }
+
+            Section {
+                Toggle(
+                    "通知歌词",
+                    isOn: lyricsNotificationEnabledBinding
+                )
+                .disabled(
+                    notifications.isRequestingAuthorization
+                )
+
+                if settings.lyricsNotifications.isEnabled {
+                    NavigationLink {
+                        LyricsNotificationSettingsView()
+                    } label: {
+                        Label(
+                            "通知歌词设置",
+                            systemImage: "bell.badge"
+                        )
+                    }
+
+                    if notifications.authorizationStatus
+                        == .denied {
+                        Label(
+                            "系统通知权限已关闭",
+                            systemImage: "bell.slash.fill"
+                        )
+                        .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("通知歌词")
+            } footer: {
+                Text("歌词更新时撤回上一条通知并弹出新的静音横幅；可分别控制前台与后台显示。")
             }
 
             Section {
@@ -76,8 +117,11 @@ struct SystemPlaybackSettingsView: View {
                 Text("格式说明")
             }
         }
-        .navigationTitle("锁定屏幕与实时活动")
+        .navigationTitle("系统歌词显示")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await notifications.refreshAuthorizationStatus()
+        }
         .onChange(of: settings.systemNowPlayingLyricsEnabled) {
             player.applySystemNowPlayingLyricsPreference()
         }
@@ -90,6 +134,55 @@ struct SystemPlaybackSettingsView: View {
         .onChange(of: settings.lyricsLiveActivityEnabled) {
             player.applyLyricsLiveActivityPreference()
         }
+        .alert(
+            "无法开启通知歌词",
+            isPresented:
+                $showsNotificationPermissionAlert
+        ) {
+            Button("打开系统设置") {
+                openNotificationSettings()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请先在系统设置中允许 MeloX 显示通知。通知歌词始终不会播放提示音。")
+        }
+    }
+
+    private var lyricsNotificationEnabledBinding:
+        Binding<Bool>
+    {
+        Binding {
+            settings.lyricsNotifications.isEnabled
+        } set: { isEnabled in
+            if !isEnabled {
+                settings.lyricsNotifications.isEnabled = false
+                player.applyLyricsNotificationPreference()
+                return
+            }
+
+            Task { @MainActor in
+                guard await notifications
+                    .requestAuthorization() else {
+                    settings.lyricsNotifications.isEnabled =
+                        false
+                    showsNotificationPermissionAlert = true
+                    return
+                }
+                settings.lyricsNotifications.isEnabled = true
+                player.applyLyricsNotificationPreference()
+            }
+        }
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(
+            string:
+                UIApplication
+                    .openNotificationSettingsURLString
+        ) else {
+            return
+        }
+        openURL(url)
     }
 
     private func formatField(

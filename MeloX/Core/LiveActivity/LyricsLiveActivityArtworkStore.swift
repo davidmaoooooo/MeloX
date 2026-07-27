@@ -1,7 +1,5 @@
 import CryptoKit
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 
 @MainActor
 final class LyricsLiveActivityArtworkStore {
@@ -58,7 +56,9 @@ final class LyricsLiveActivityArtworkStore {
                 let jpegData = await Task.detached(
                     priority: .utility
                 ) {
-                    Self.thumbnailData(from: data)
+                    ArtworkThumbnailEncoder.jpegData(
+                        from: data
+                    )
                 }.value
                 guard let jpegData,
                       let destination = destinationURL(
@@ -118,51 +118,6 @@ final class LyricsLiveActivityArtworkStore {
         }
         .joined()
         return "\(songID)-\(suffix).jpg"
-    }
-
-    nonisolated private static func thumbnailData(
-        from data: Data
-    ) -> Data? {
-        guard let source = CGImageSourceCreateWithData(
-            data as CFData,
-            nil
-        ) else {
-            return nil
-        }
-
-        let thumbnailOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 180,
-        ]
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(
-            source,
-            0,
-            thumbnailOptions as CFDictionary
-        ) else {
-            return nil
-        }
-
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            output,
-            UTType.jpeg.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-        CGImageDestinationAddImage(
-            destination,
-            thumbnail,
-            [
-                kCGImageDestinationLossyCompressionQuality: 0.82
-            ] as CFDictionary
-        )
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-        return output as Data
     }
 
     private func cleanArtworkDirectory(keeping retainedURL: URL) {
