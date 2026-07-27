@@ -190,15 +190,24 @@ final class AutoMixPreferences {
 
     var fixedDuration: Double {
         didSet {
-            fixedDuration = Self.fixedDurationRange.clamped(fixedDuration)
+            let clampedValue =
+                Self.fixedDurationRange.clamped(fixedDuration)
+            guard clampedValue == fixedDuration else {
+                fixedDuration = clampedValue
+                return
+            }
             defaults.set(fixedDuration, forKey: Key.fixedDuration)
         }
     }
 
     var preloadLeadTime: Double {
         didSet {
-            preloadLeadTime =
+            let clampedValue =
                 Self.preloadLeadTimeRange.clamped(preloadLeadTime)
+            guard clampedValue == preloadLeadTime else {
+                preloadLeadTime = clampedValue
+                return
+            }
             defaults.set(preloadLeadTime, forKey: Key.preloadLeadTime)
         }
     }
@@ -220,10 +229,14 @@ final class AutoMixPreferences {
 
     var maximumTempoAdjustmentPercent: Double {
         didSet {
-            maximumTempoAdjustmentPercent =
+            let clampedValue =
                 Self.maximumTempoAdjustmentPercentRange.clamped(
                     maximumTempoAdjustmentPercent
                 )
+            guard clampedValue == maximumTempoAdjustmentPercent else {
+                maximumTempoAdjustmentPercent = clampedValue
+                return
+            }
             defaults.set(
                 maximumTempoAdjustmentPercent,
                 forKey: Key.maximumTempoAdjustmentPercent
@@ -242,10 +255,14 @@ final class AutoMixPreferences {
 
     var minimumAnalysisConfidence: Double {
         didSet {
-            minimumAnalysisConfidence =
+            let clampedValue =
                 Self.minimumAnalysisConfidenceRange.clamped(
                     minimumAnalysisConfidence
                 )
+            guard clampedValue == minimumAnalysisConfidence else {
+                minimumAnalysisConfidence = clampedValue
+                return
+            }
             defaults.set(
                 minimumAnalysisConfidence,
                 forKey: Key.minimumAnalysisConfidence
