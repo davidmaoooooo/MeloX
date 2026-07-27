@@ -16,6 +16,7 @@ struct AppleMusicLyricsView: View {
     let bottomOverlayHeight: CGFloat
     let onInterfaceInteraction: (() -> Void)?
     let onInterfaceVisibilityChange: ((Bool) -> Void)?
+    let onInitialFocusPrepared: (() -> Void)?
     private let lyricIndexByID: [LyricLine.ID: Int]
     private let hasSyllableSyncedLyrics: Bool
     private let hasTranslations: Bool
@@ -48,7 +49,8 @@ struct AppleMusicLyricsView: View {
         isInterfaceHidden: Bool = false,
         bottomOverlayHeight: CGFloat = 0,
         onInterfaceInteraction: (() -> Void)? = nil,
-        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil
+        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil,
+        onInitialFocusPrepared: (() -> Void)? = nil
     ) {
         self.lyrics = lyrics
         self.errorMessage = errorMessage
@@ -57,6 +59,7 @@ struct AppleMusicLyricsView: View {
         self.bottomOverlayHeight = bottomOverlayHeight
         self.onInterfaceInteraction = onInterfaceInteraction
         self.onInterfaceVisibilityChange = onInterfaceVisibilityChange
+        self.onInitialFocusPrepared = onInitialFocusPrepared
         lyricIndexByID = Dictionary(
             uniqueKeysWithValues: lyrics.enumerated().map { index, line in
                 (line.id, index)
@@ -562,6 +565,8 @@ struct AppleMusicLyricsView: View {
                     synchronizeFocusWithPlayback()
                 }
                 .task(id: focusMovementTrigger) {
+                    let preparesInitialFocus =
+                        isPreparingInitialFocus
                     await cascadeMoveFocus(
                         to: requestedFocusLyricID,
                         viewportHeight: proxy.size.height,
@@ -570,6 +575,9 @@ struct AppleMusicLyricsView: View {
                     )
                     guard !Task.isCancelled else { return }
                     isPreparingInitialFocus = false
+                    if preparesInitialFocus {
+                        onInitialFocusPrepared?()
+                    }
                 }
                 .task(id: seekFeedback) {
                     await holdSeekFeedbackUntilFocusCompletes(

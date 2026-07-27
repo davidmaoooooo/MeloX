@@ -20,6 +20,7 @@ struct NowPlayingLyricsPage: View {
     let showsSongHeader: Bool
     let onInterfaceInteraction: (() -> Void)?
     let onInterfaceVisibilityChange: ((Bool) -> Void)?
+    let onInitialFocusPrepared: (() -> Void)?
 
     init(
         song: Song,
@@ -32,7 +33,8 @@ struct NowPlayingLyricsPage: View {
         usesArtworkTransition: Bool = true,
         showsSongHeader: Bool = true,
         onInterfaceInteraction: (() -> Void)? = nil,
-        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil
+        onInterfaceVisibilityChange: ((Bool) -> Void)? = nil,
+        onInitialFocusPrepared: (() -> Void)? = nil
     ) {
         self.song = song
         self.lyrics = lyrics
@@ -45,6 +47,7 @@ struct NowPlayingLyricsPage: View {
         self.showsSongHeader = showsSongHeader
         self.onInterfaceInteraction = onInterfaceInteraction
         self.onInterfaceVisibilityChange = onInterfaceVisibilityChange
+        self.onInitialFocusPrepared = onInitialFocusPrepared
     }
 
     var body: some View {
@@ -86,7 +89,8 @@ struct NowPlayingLyricsPage: View {
                 bottomOverlayHeight: appleMusicBottomOverlayHeight,
                 onInterfaceInteraction: onInterfaceInteraction,
                 onInterfaceVisibilityChange:
-                    onInterfaceVisibilityChange
+                    onInterfaceVisibilityChange,
+                onInitialFocusPrepared: onInitialFocusPrepared
             )
         case .eva:
             EVALyricsView(
