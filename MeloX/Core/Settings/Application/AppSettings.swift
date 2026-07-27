@@ -79,7 +79,7 @@ final class AppSettings {
     static let lyricsFocusCascadeFollowingDelayRange = 0.0...0.2
     static let defaultLyricsFocusCascadeCatchUpRatio = 0.95
     static let lyricsFocusCascadeCatchUpRatioRange = 0.5...1.0
-    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.75
+    static let defaultLyricsFocusCascadeChaseSpeedGradient = 0.68
     static let lyricsFocusCascadeChaseSpeedGradientRange = 0.0...1.0
     static let defaultLyricsFocusCascadeDuration = 0.68
     static let lyricsFocusCascadeDurationRange = 0.2...1.2
@@ -144,6 +144,7 @@ final class AppSettings {
             "lyricsLiveActivityScrollSpeed"
         static let lyricsLiveActivityScrollPause =
             "lyricsLiveActivityScrollPause"
+        static let appearance = "appAppearance"
         static let defaultLaunchTab = "defaultLaunchTab"
         static let restoresLastSelectedTab = "restoresLastSelectedTab"
         static let lastSelectedTab = "lastSelectedTab"
@@ -382,6 +383,15 @@ final class AppSettings {
             defaults.set(
                 lyricsLiveActivityScrollPause,
                 forKey: Key.lyricsLiveActivityScrollPause
+            )
+        }
+    }
+
+    var appearance: AppAppearance {
+        didSet {
+            defaults.set(
+                appearance.rawValue,
+                forKey: Key.appearance
             )
         }
     }
@@ -940,6 +950,9 @@ final class AppSettings {
         lyricsLiveActivityScrollPause = defaults.object(
             forKey: Key.lyricsLiveActivityScrollPause
         ) as? Double ?? Self.defaultLyricsLiveActivityScrollPause
+        appearance = AppAppearance(
+            rawValue: defaults.string(forKey: Key.appearance) ?? ""
+        ) ?? .system
         defaultLaunchTab = AppTab(
             rawValue: defaults.string(forKey: Key.defaultLaunchTab) ?? ""
         ) ?? .home

@@ -8,6 +8,25 @@ struct GeneralSettingsView: View {
 
         Form {
             Section {
+                Picker(
+                    "主题",
+                    selection: $settings.appearance
+                ) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Label(
+                            appearance.title,
+                            systemImage: appearance.systemImage
+                        )
+                        .tag(appearance)
+                    }
+                }
+            } header: {
+                Text("外观")
+            } footer: {
+                Text("跟随系统会根据设备外观自动切换浅色和深色主题。")
+            }
+
+            Section {
                 Toggle(
                     "启动时继续上次页面",
                     isOn: $settings.restoresLastSelectedTab

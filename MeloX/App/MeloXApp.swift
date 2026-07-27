@@ -67,6 +67,9 @@ struct MeloXApp: App {
                 .environment(releaseNotes)
                 .environment(\.effectiveLyricsRefreshRate, effectiveLyricsRefreshRate)
                 .tint(.red)
+                .preferredColorScheme(
+                    settings.appearance.preferredColorScheme
+                )
                 .onReceive(
                     NotificationCenter.default.publisher(
                         for: .NSProcessInfoPowerStateDidChange

@@ -171,12 +171,13 @@ struct SettingsView: View {
             systemPlaybackSummary
         case .downloads:
             downloads.totalByteCount.formatted(.byteCount(style: .file))
+        case .general:
+            settings.appearance.title
         case .about:
             Bundle.main.appVersion
         case .accountHome,
              .privateMessages,
              .playerAppearance,
-             .general,
              .content,
              .skylineLyrics,
              .floatingLyrics:

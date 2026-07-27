@@ -167,9 +167,13 @@ enum SettingsCatalog {
                 SettingsCatalogItem(
                     route: .general,
                     title: "通用",
-                    subtitle: "启动页面、导航与音乐库记忆",
+                    subtitle: "主题、启动页面、导航与音乐库记忆",
                     systemImage: "gearshape",
                     keywords: [
+                        "主题",
+                        "浅色",
+                        "深色",
+                        "跟随系统",
                         "默认页面",
                         "上次页面",
                         "首页",
