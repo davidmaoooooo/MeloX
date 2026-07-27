@@ -270,7 +270,9 @@ struct AppleMusicLyricsView: View {
                                         || lyricSharePresentation?.lyric.id
                                             == line.id,
                                     onTap: {
-                                        onInterfaceInteraction?()
+                                        if !isInterfaceHidden {
+                                            onInterfaceInteraction?()
+                                        }
                                         seek(to: line)
                                     },
                                     onLongPress: {
