@@ -13,6 +13,7 @@ struct NowPlayingLyricsPage: View {
     let lyrics: [LyricLine]
     let errorMessage: String?
     let highlightedLyricID: LyricLine.ID?
+    let isActive: Bool
     let presentation: NowPlayingLyricsPresentation
     let isInterfaceHidden: Bool
     let artworkNamespace: Namespace.ID
@@ -27,6 +28,7 @@ struct NowPlayingLyricsPage: View {
         lyrics: [LyricLine],
         errorMessage: String?,
         highlightedLyricID: LyricLine.ID?,
+        isActive: Bool = true,
         presentation: NowPlayingLyricsPresentation = .portrait,
         isInterfaceHidden: Bool = false,
         artworkNamespace: Namespace.ID,
@@ -40,6 +42,7 @@ struct NowPlayingLyricsPage: View {
         self.lyrics = lyrics
         self.errorMessage = errorMessage
         self.highlightedLyricID = highlightedLyricID
+        self.isActive = isActive
         self.presentation = presentation
         self.isInterfaceHidden = isInterfaceHidden
         self.artworkNamespace = artworkNamespace
@@ -85,6 +88,7 @@ struct NowPlayingLyricsPage: View {
                 lyrics: lyrics,
                 errorMessage: errorMessage,
                 highlightedLyricID: highlightedLyricID,
+                isActive: isActive,
                 isInterfaceHidden: isInterfaceHidden,
                 bottomOverlayHeight: appleMusicBottomOverlayHeight,
                 onInterfaceInteraction: onInterfaceInteraction,

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct NowPlayingArtworkPage: View {
+    static let pausedArtworkScale: CGFloat = 0.74
+
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
@@ -44,7 +46,12 @@ struct NowPlayingArtworkPage: View {
                 )
             )
             let displayedArtworkSize =
-                artworkSize * (isArtworkExpanded ? 1 : 0.74)
+                artworkSize
+                * (
+                    isArtworkExpanded
+                        ? 1
+                        : Self.pausedArtworkScale
+                )
 
             VStack(spacing: 0) {
                 Spacer(minLength: 8)
@@ -76,8 +83,8 @@ struct NowPlayingArtworkPage: View {
                     } else {
                         Color.clear
                             .frame(
-                                width: displayedArtworkSize,
-                                height: displayedArtworkSize
+                                width: artworkSize,
+                                height: artworkSize
                             )
                             .onGeometryChange(
                                 for: CGRect.self

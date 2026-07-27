@@ -15,6 +15,7 @@ struct AppleMusicLyricsView: View {
     let lyrics: [LyricLine]
     let errorMessage: String?
     let highlightedLyricID: LyricLine.ID?
+    let isActive: Bool
     let isInterfaceHidden: Bool
     let bottomOverlayHeight: CGFloat
     let onInterfaceInteraction: (() -> Void)?
@@ -53,6 +54,7 @@ struct AppleMusicLyricsView: View {
         lyrics: [LyricLine],
         errorMessage: String?,
         highlightedLyricID: LyricLine.ID?,
+        isActive: Bool = true,
         isInterfaceHidden: Bool = false,
         bottomOverlayHeight: CGFloat = 0,
         onInterfaceInteraction: (() -> Void)? = nil,
@@ -62,6 +64,7 @@ struct AppleMusicLyricsView: View {
         self.lyrics = lyrics
         self.errorMessage = errorMessage
         self.highlightedLyricID = highlightedLyricID
+        self.isActive = isActive
         self.isInterfaceHidden = isInterfaceHidden
         self.bottomOverlayHeight = bottomOverlayHeight
         self.onInterfaceInteraction = onInterfaceInteraction
@@ -98,6 +101,7 @@ struct AppleMusicLyricsView: View {
                 )
             }
             .onChange(of: isInterfaceHidden) { _, isHidden in
+                guard isActive else { return }
                 withAnimation(
                     NowPlayingInterfaceTransition.interfaceAnimation(
                         isVisible: !isHidden,
@@ -107,6 +111,10 @@ struct AppleMusicLyricsView: View {
                     hiddenInterfaceProgress = isHidden ? 1 : 0
                 }
             }
+            .onChange(of: isActive) { _, isActive in
+                guard isActive else { return }
+                synchronizeInterfaceVisibility()
+            }
             .sheet(item: $lyricSharePresentation) { presentation in
                 SystemShareSheet(
                     activityItems: [
@@ -114,6 +122,14 @@ struct AppleMusicLyricsView: View {
                     ]
                 )
             }
+    }
+
+    private func synchronizeInterfaceVisibility() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            hiddenInterfaceProgress = isInterfaceHidden ? 1 : 0
+        }
     }
 
     @ViewBuilder

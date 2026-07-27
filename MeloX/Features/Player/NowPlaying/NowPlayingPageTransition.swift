@@ -4,7 +4,10 @@ enum NowPlayingPageTransition {
     static let animation = Animation.smooth(duration: 0.3)
     static let directLyricsQueueContentScale: CGFloat = 0.92
     static let lyricsEntranceOffset: CGFloat = 400
+    static let queueOffset: CGFloat = 400
     static let lyricsEntranceDelay = Duration.milliseconds(110)
+    static let lyricsExitInterruptionWindow =
+        Duration.milliseconds(240)
     static let lyricsEntranceAnimation =
         Animation.smooth(duration: 0.34)
     private static let directLyricsQueueAnimation =
@@ -13,11 +16,12 @@ enum NowPlayingPageTransition {
     private static let artworkDetailsInsertionOffset: CGFloat = -300
     private static let artworkDetailsRemovalOffset: CGFloat = -300
     private static let songHeaderOffset: CGFloat = 40
-    private static let queueOffset: CGFloat = 400
     private static let outgoingAnimation =
         Animation.smooth(duration: 0.24)
     private static let incomingAnimation =
         Animation.smooth(duration: 0.22).delay(0.07)
+    private static let delayedResidentPageEntranceAnimation =
+        Animation.smooth(duration: 0.34).delay(0.11)
 
     static func content(
         for page: NowPlayingPage,
@@ -69,6 +73,51 @@ enum NowPlayingPageTransition {
             return directLyricsQueueAnimation
         }
         return animation
+    }
+
+    static func residentQueueAnimation(
+        from source: NowPlayingPage,
+        to destination: NowPlayingPage,
+        reducesMotion: Bool
+    ) -> Animation? {
+        guard !reducesMotion else { return nil }
+        if isDirectLyricsQueueTransition(
+            from: source,
+            to: destination
+        ) {
+            return directLyricsQueueAnimation
+        }
+        if destination == .queue {
+            return delayedResidentPageEntranceAnimation
+        }
+        if source == .queue {
+            return outgoingAnimation
+        }
+        return nil
+    }
+
+    static func residentLyricsAnimation(
+        from source: NowPlayingPage,
+        to destination: NowPlayingPage,
+        interruptsExit: Bool,
+        reducesMotion: Bool
+    ) -> Animation? {
+        guard !reducesMotion else { return nil }
+        if isDirectLyricsQueueTransition(
+            from: source,
+            to: destination
+        ) {
+            return directLyricsQueueAnimation
+        }
+        if source == .lyrics {
+            return outgoingAnimation
+        }
+        if source == .artwork,
+           destination == .lyrics,
+           interruptsExit {
+            return lyricsEntranceAnimation
+        }
+        return nil
     }
 
     static func isDirectLyricsQueueTransition(

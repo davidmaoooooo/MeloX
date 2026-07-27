@@ -171,17 +171,20 @@ struct NowPlayingLandscapeView: View {
     }
 
     private var pageContent: some View {
-        Group {
+        ZStack {
+            NowPlayingQueuePage(
+                song: song,
+                presentation: .landscape,
+                artworkNamespace: artworkNamespace
+            )
+            .opacity(page == .queue ? 1 : 0)
+            .allowsHitTesting(page == .queue)
+            .accessibilityHidden(page != .queue)
+
             switch page {
             case .artwork:
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    NowPlayingProgressControl(song: song)
-                    NowPlayingTransportControls()
-                    NowPlayingVolumeControl()
-                    Spacer(minLength: 0)
-                }
-                .transition(.opacity)
+                landscapeArtworkControls
+                    .transition(.opacity)
             case .lyrics:
                 NowPlayingLyricsPage(
                     song: song,
@@ -191,7 +194,8 @@ struct NowPlayingLandscapeView: View {
                     presentation: .landscape,
                     isInterfaceHidden: hidesLyricsControls,
                     artworkNamespace: artworkNamespace,
-                    onInterfaceInteraction: onInterfaceInteraction,
+                    onInterfaceInteraction:
+                        onInterfaceInteraction,
                     onInterfaceVisibilityChange:
                         onInterfaceVisibilityChange
                 )
@@ -202,13 +206,18 @@ struct NowPlayingLandscapeView: View {
                 }
                 .transition(.opacity)
             case .queue:
-                NowPlayingQueuePage(
-                    song: song,
-                    presentation: .landscape,
-                    artworkNamespace: artworkNamespace
-                )
-                    .transition(.opacity)
+                EmptyView()
             }
+        }
+    }
+
+    private var landscapeArtworkControls: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            NowPlayingProgressControl(song: song)
+            NowPlayingTransportControls()
+            NowPlayingVolumeControl()
+            Spacer(minLength: 0)
         }
     }
 

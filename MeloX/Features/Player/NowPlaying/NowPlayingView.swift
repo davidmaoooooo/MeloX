@@ -30,6 +30,9 @@ struct NowPlayingView: View {
     @State private var lyricsEntranceState:
         NowPlayingLyricsEntranceState = .presented
     @State private var preparedLyricsSongID: Song.ID?
+    @State private var lyricsExitInterruptionDeadline:
+        ContinuousClock.Instant?
+    @State private var interruptsLyricsExit = false
     @GestureState private var isInteractingWithPlayer = false
     @Namespace private var pageArtworkNamespace
 
@@ -247,23 +250,41 @@ struct NowPlayingView: View {
         Binding(
             get: { page },
             set: { newPage in
+                let previousPage = page
                 let startsLyricsEntrance =
-                    page == .artwork
+                    previousPage == .artwork
                     && newPage == .lyrics
                     && settings.lyricsStyle == .appleMusic
-                transitionSourcePage = page
+                let interruptsActiveLyricsExit =
+                    startsLyricsEntrance
+                    && lyricsExitInterruptionDeadline.map {
+                        ContinuousClock.now < $0
+                    } == true
+                transitionSourcePage = previousPage
                 transitionDestinationPage = newPage
                 pageTransitionResetGeneration &+= 1
+                interruptsLyricsExit =
+                    interruptsActiveLyricsExit
                 entersPageFromHiddenQueue =
-                    page == .queue
+                    previousPage == .queue
                     && isQueueSongHeaderHidden
                     && newPage != .queue
-                if newPage == .queue, page != .queue {
-                    isQueueSongHeaderHidden = false
-                    queueSongHeaderOffset = 0
+                if previousPage == .lyrics,
+                   newPage == .artwork {
+                    lyricsExitInterruptionDeadline =
+                        ContinuousClock.now.advanced(
+                            by: NowPlayingPageTransition
+                                .lyricsExitInterruptionWindow
+                        )
+                } else if newPage == .lyrics {
+                    lyricsExitInterruptionDeadline = nil
                 }
                 if startsLyricsEntrance {
-                    beginLyricsEntrance()
+                    if interruptsActiveLyricsExit {
+                        interruptLyricsExit()
+                    } else {
+                        beginLyricsEntrance()
+                    }
                 }
                 page = newPage
             }
@@ -339,12 +360,14 @@ struct NowPlayingView: View {
 
     private func pageContent(for song: Song) -> some View {
         ZStack(alignment: .top) {
-            transientPortraitPageContent(for: song)
+            transientArtworkPageContent(for: song)
                 .frame(
                     maxWidth: .infinity,
                     maxHeight: .infinity
                 )
                 .clipped()
+
+            residentQueuePage(for: song)
 
             if settings.lyricsStyle == .appleMusic {
                 residentAppleMusicLyricsPage(for: song)
@@ -382,6 +405,12 @@ struct NowPlayingView: View {
                         x: portraitArtworkFrame.midX,
                         y: portraitArtworkFrame.midY
                     )
+                    .animation(
+                        accessibilityReduceMotion
+                            ? nil
+                            : .smooth(duration: 0.48),
+                        value: isPortraitArtworkExpanded
+                    )
                 }
             }
             .allowsHitTesting(false)
@@ -392,7 +421,7 @@ struct NowPlayingView: View {
     }
 
     @ViewBuilder
-    private func transientPortraitPageContent(
+    private func transientArtworkPageContent(
         for song: Song
     ) -> some View {
         if page == .artwork {
@@ -410,28 +439,38 @@ struct NowPlayingView: View {
                 pageContentTransition(for: .artwork)
             )
         }
+    }
 
-        if page == .queue {
-            NowPlayingQueuePage(
-                song: song,
-                presentation: .portrait,
-                artworkNamespace: pageArtworkNamespace,
-                usesArtworkTransition:
-                    !entersPageFromHiddenQueue,
-                showsSongHeader: false,
-                onSongHeaderHiddenChange: {
-                    guard page == .queue else { return }
-                    isQueueSongHeaderHidden = $0
-                },
-                onSongHeaderOffsetChange: {
-                    guard page == .queue else { return }
-                    queueSongHeaderOffset = $0
-                }
-            )
-            .transition(
-                pageContentTransition(for: .queue)
-            )
-        }
+    private func residentQueuePage(
+        for song: Song
+    ) -> some View {
+        NowPlayingQueuePage(
+            song: song,
+            presentation: .portrait,
+            artworkNamespace: pageArtworkNamespace,
+            usesArtworkTransition: false,
+            showsSongHeader: false,
+            onSongHeaderHiddenChange: {
+                isQueueSongHeaderHidden = $0
+            },
+            onSongHeaderOffsetChange: {
+                queueSongHeaderOffset = $0
+            }
+        )
+        .clipped()
+        .offset(y: residentQueueOffset)
+        .scaleEffect(residentQueueScale)
+        .opacity(page == .queue ? 1 : 0)
+        .animation(
+            NowPlayingPageTransition.residentQueueAnimation(
+                from: transitionSourcePage,
+                to: transitionDestinationPage,
+                reducesMotion: accessibilityReduceMotion
+            ),
+            value: page
+        )
+        .allowsHitTesting(page == .queue)
+        .accessibilityHidden(page != .queue)
     }
 
     private func portraitLyricsPage(
@@ -443,6 +482,7 @@ struct NowPlayingView: View {
             lyrics: lyrics,
             errorMessage: lyricError,
             highlightedLyricID: highlightedLyricID,
+            isActive: page == .lyrics,
             isInterfaceHidden: hidesLyricsControls,
             artworkNamespace: pageArtworkNamespace,
             usesArtworkTransition:
@@ -474,6 +514,15 @@ struct NowPlayingView: View {
         .offset(y: residentLyricsOffset)
         .scaleEffect(residentLyricsScale)
         .opacity(residentLyricsOpacity)
+        .animation(
+            NowPlayingPageTransition.residentLyricsAnimation(
+                from: transitionSourcePage,
+                to: transitionDestinationPage,
+                interruptsExit: interruptsLyricsExit,
+                reducesMotion: accessibilityReduceMotion
+            ),
+            value: page
+        )
         .allowsHitTesting(page == .lyrics)
         .accessibilityHidden(page != .lyrics)
     }
@@ -506,6 +555,20 @@ struct NowPlayingView: View {
             : 1
     }
 
+    private var residentQueueOffset: CGFloat {
+        guard page == .artwork,
+              !entersPageFromHiddenQueue else {
+            return 0
+        }
+        return NowPlayingPageTransition.queueOffset
+    }
+
+    private var residentQueueScale: CGFloat {
+        page == .lyrics
+            ? NowPlayingPageTransition.directLyricsQueueContentScale
+            : 1
+    }
+
     private func sharedPortraitSongHeader(
         for song: Song
     ) -> some View {
@@ -520,7 +583,7 @@ struct NowPlayingView: View {
 
     private var portraitArtworkFrame: CGRect {
         if page == .artwork {
-            return artworkPageFrame
+            return displayedArtworkPageFrame
         }
 
         return CGRect(
@@ -529,6 +592,28 @@ struct NowPlayingView: View {
             width: NowPlayingSongHeader.referenceHeight,
             height: NowPlayingSongHeader.referenceHeight
         )
+    }
+
+    private var displayedArtworkPageFrame: CGRect {
+        guard !isPortraitArtworkExpanded else {
+            return artworkPageFrame
+        }
+        let horizontalInset =
+            artworkPageFrame.width
+            * (1 - NowPlayingArtworkPage.pausedArtworkScale)
+            / 2
+        let verticalInset =
+            artworkPageFrame.height
+            * (1 - NowPlayingArtworkPage.pausedArtworkScale)
+            / 2
+        return artworkPageFrame.insetBy(
+            dx: horizontalInset,
+            dy: verticalInset
+        )
+    }
+
+    private var isPortraitArtworkExpanded: Bool {
+        player.isPlaying || !settings.shrinksPausedArtwork
     }
 
     private var sharedPortraitSongHeaderOffset: CGFloat {
@@ -619,6 +704,14 @@ struct NowPlayingView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             lyricsEntranceState = .pending(UUID(), deadline)
+        }
+    }
+
+    private func interruptLyricsExit() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            lyricsEntranceState = .presented
         }
     }
 
