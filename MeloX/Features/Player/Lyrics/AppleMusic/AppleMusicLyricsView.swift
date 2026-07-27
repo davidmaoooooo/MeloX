@@ -26,6 +26,7 @@ struct AppleMusicLyricsView: View {
     private let hasTranslations: Bool
     private let interludes: [LyricInterlude]
     private let interludeByID: [LyricInterlude.ID: LyricInterlude]
+    private let displayItems: [AppleMusicLyricsDisplayItem]
 
     @State private var scrollPositionID: LyricLine.ID?
     @State private var isBrowsingLyrics = false
@@ -42,7 +43,8 @@ struct AppleMusicLyricsView: View {
     @State private var lyricMovementOffsetByID: [LyricLine.ID: CGFloat] = [:]
     @State private var lyricMovementTransition: LyricMovementTransition?
     @State private var retainedTopCascadeLyrics: [RetainedCascadeLyric] = []
-    @State private var activeInterludeID: LyricInterlude.ID?
+    @State private var playbackFocus: AppleMusicLyricsPlaybackFocus?
+    @State private var positionedInterludeID: LyricInterlude.ID?
     @State private var isManuallyScrolling = false
     @State private var interfaceVisibilityTracker =
         LyricsScrollInterfaceVisibilityTracker()
@@ -84,9 +86,26 @@ struct AppleMusicLyricsView: View {
         interludeByID = Dictionary(
             uniqueKeysWithValues: interludes.map { ($0.id, $0) }
         )
+        let interludeByDisplayLyricID = interludes.reduce(into: [:]) {
+            interludeByLyricID,
+            interlude in
+            interludeByLyricID[interlude.displayBeforeLyricID] = interlude
+        }
+        displayItems = lyrics.flatMap {
+            line -> [AppleMusicLyricsDisplayItem] in
+            if let interlude = interludeByDisplayLyricID[line.id] {
+                return [.interlude(interlude), .lyric(line)]
+            }
+            return [.lyric(line)]
+        }
         _scrollPositionID = State(initialValue: highlightedLyricID)
         _visualHighlightedLyricID = State(initialValue: highlightedLyricID)
         _visualCascadeFocusLyricID = State(initialValue: highlightedLyricID)
+        _playbackFocus = State(
+            initialValue: highlightedLyricID.map {
+                AppleMusicLyricsPlaybackFocus.lyric($0)
+            }
+        )
         _hiddenInterfaceProgress = State(
             initialValue: isInterfaceHidden ? 1 : 0
         )
@@ -95,9 +114,10 @@ struct AppleMusicLyricsView: View {
     var body: some View {
         lyricsContent
             .background {
-                AppleMusicLyricInterludeCoordinator(
+                AppleMusicLyricsFocusCoordinator(
+                    lyrics: lyrics,
                     interludes: interludes,
-                    activeInterludeID: $activeInterludeID
+                    playbackFocus: $playbackFocus
                 )
             }
             .onChange(of: isInterfaceHidden) { _, isHidden in
@@ -177,7 +197,7 @@ struct AppleMusicLyricsView: View {
             )
             let reservesTranslationSpace = showsTranslations
             let lineSpacing = CGFloat(settings.lyricsLineSpacing)
-            let activeInterlude = focusedInterlude
+            let activeInterlude = playbackInterlude
             let translationHeight = showsTranslations
                 ? CGFloat(
                     settings.lyricsFontSize
@@ -248,21 +268,23 @@ struct AppleMusicLyricsView: View {
                         alignment: .leading,
                         spacing: lineSpacing
                     ) {
-                        ForEach(lyrics) { line in
-                            if let activeInterlude,
-                               activeInterlude.displayBeforeLyricID
-                                == line.id {
+                        ForEach(displayItems) { item in
+                            if case let .interlude(interlude) = item {
                                 AppleMusicLyricInterludeView(
-                                    interlude: activeInterlude,
+                                    interlude: interlude,
+                                    isActive:
+                                        activeInterlude?.id
+                                        == interlude.id,
                                     fontSize: CGFloat(
                                         settings.lyricsFontSize
                                     ),
                                     onInterfaceInteraction:
                                         onInterfaceInteraction
                                 )
-                                .id(activeInterlude.id)
+                                .id(interlude.id)
                             }
 
+                            if case let .lyric(line) = item {
                             let isPlaybackLine = line.id == visualHighlightedLyricID
                             let isCascadeFocusLine = line.id == visualCascadeFocusLyricID
                             let isVisualScaleFocusLine =
@@ -465,6 +487,7 @@ struct AppleMusicLyricsView: View {
                                 .accessibilityAction {
                                     seek(to: line)
                                 }
+                            }
                         }
                     }
                     .scrollTargetLayout()
@@ -563,6 +586,7 @@ struct AppleMusicLyricsView: View {
                         }
                         browsingGeneration += 1
                         resetMovementOffsets()
+                        positionedInterludeID = nil
                         isBrowsingLyrics = true
                     case .idle:
                         isManuallyScrolling = false
@@ -579,6 +603,9 @@ struct AppleMusicLyricsView: View {
                     lyricMovementOffsetByID.removeAll()
                     lyricMovementTransition = nil
                     retainedTopCascadeLyrics.removeAll()
+                    if playbackInterlude == nil {
+                        positionedInterludeID = nil
+                    }
                 }
                 .onChange(of: settings.lyricsTranslationDisplayMode) {
                     _, _ in
@@ -642,6 +669,7 @@ struct AppleMusicLyricsView: View {
                     lyricMovementOffsetByID.removeAll()
                     lyricMovementTransition = nil
                     retainedTopCascadeLyrics.removeAll()
+                    positionedInterludeID = nil
                 }
             }
         }
@@ -804,21 +832,17 @@ struct AppleMusicLyricsView: View {
         )
     }
 
-    private var focusedInterlude: LyricInterlude? {
-        guard seekFeedback == nil else { return nil }
-        guard let interlude = coordinatedInterlude,
-              highlightedLyricID != interlude.followingLyricID else {
+    private var playbackInterlude: LyricInterlude? {
+        guard settings.lyricsInterludeCountdownEnabled,
+              let interludeID = playbackFocus?.interludeID else {
             return nil
         }
-        return interlude
+        return interludeByID[interludeID]
     }
 
-    private var coordinatedInterlude: LyricInterlude? {
-        guard settings.lyricsInterludeCountdownEnabled,
-              let activeInterludeID else {
-            return nil
-        }
-        return interludeByID[activeInterludeID]
+    private var focusedInterlude: LyricInterlude? {
+        guard seekFeedback == nil else { return nil }
+        return playbackInterlude
     }
 
     private func lyricsFocusPosition(for viewportHeight: CGFloat) -> CGFloat {
@@ -1007,7 +1031,10 @@ struct AppleMusicLyricsView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             lyricMovementOffsetByID = focusedLineFollowingOffsets(
-                for: visualCascadeFocusLyricID ?? highlightedLyricID
+                for:
+                    visualCascadeFocusLyricID
+                    ?? playbackFocus?.lyricID
+                    ?? highlightedLyricID
             )
         }
     }
@@ -1128,7 +1155,9 @@ struct AppleMusicLyricsView: View {
     }
 
     private var requestedFocusLyricID: LyricLine.ID? {
-        seekFeedback?.lyricID ?? highlightedLyricID
+        seekFeedback?.lyricID
+            ?? playbackFocus?.lyricID
+            ?? highlightedLyricID
     }
 
     private func lyricFocusEffectAnimation(
@@ -1234,22 +1263,15 @@ struct AppleMusicLyricsView: View {
             )
             return
         }
-        let interludeHandoffLyricID =
-            coordinatedInterlude?.followingLyricID
-                == highlightedLyricID
-                ? highlightedLyricID
-                : nil
-        let movementFocusLyricID = interludeHandoffLyricID
-            ?? lyricMovementTransition?.focusID
+        let isInterludeHandoff = positionedInterludeID.flatMap {
+            interludeByID[$0]
+        }?.followingLyricID == highlightedLyricID
+        let movementFocusLyricID = lyricMovementTransition?.focusID
             ?? visualCascadeFocusLyricID
             ?? scrollPositionID
         guard movementFocusLyricID != highlightedLyricID else {
-            if interludeHandoffLyricID != nil {
-                completeCascadeMovement(to: highlightedLyricID)
-            } else {
-                visualHighlightedLyricID = highlightedLyricID
-                visualCascadeFocusLyricID = highlightedLyricID
-            }
+            visualHighlightedLyricID = highlightedLyricID
+            visualCascadeFocusLyricID = highlightedLyricID
             await ensureFocusAlignment(
                 to: highlightedLyricID,
                 viewportHeight: viewportHeight,
@@ -1270,6 +1292,7 @@ struct AppleMusicLyricsView: View {
         let isManualSeekTransition =
             seekFeedback?.lyricID == highlightedLyricID
         guard isManualSeekTransition
+                || isInterludeHandoff
                 || isAdjacentFocusTransition(
                     from: movementFocusLyricID,
                     to: highlightedLyricID
@@ -1747,6 +1770,7 @@ struct AppleMusicLyricsView: View {
         viewportHeight: CGFloat
     ) async {
         resetMovementOffsets()
+        positionedInterludeID = nil
         await ensureFocusAlignment(
             to: id,
             viewportHeight: viewportHeight,
@@ -1783,6 +1807,7 @@ struct AppleMusicLyricsView: View {
             lyricMovementOffsetByID.removeAll()
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
+            positionedInterludeID = interlude.id
         }
 
         guard animated,
@@ -1807,6 +1832,7 @@ struct AppleMusicLyricsView: View {
             lyricMovementOffsetByID = focusedLineFollowingOffsets(for: id)
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
+            positionedInterludeID = nil
         }
         completeSeekFeedbackIfNeeded(for: id)
     }
@@ -1816,7 +1842,10 @@ struct AppleMusicLyricsView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             lyricMovementOffsetByID = focusedLineFollowingOffsets(
-                for: visualCascadeFocusLyricID ?? highlightedLyricID
+                for:
+                    visualCascadeFocusLyricID
+                    ?? playbackFocus?.lyricID
+                    ?? highlightedLyricID
             )
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
@@ -2008,14 +2037,17 @@ struct AppleMusicLyricsView: View {
 
     private func synchronizeFocusWithPlayback() {
         let interlude = focusedInterlude
+        let playbackLyricID =
+            playbackFocus?.lyricID
+            ?? highlightedLyricID
         guard let focusID =
             interlude?.id
-                ?? highlightedLyricID
+                ?? playbackLyricID
                 ?? lyrics.first?.id else {
             return
         }
         let visualFocusID = interlude == nil
-            ? highlightedLyricID
+            ? playbackLyricID
             : nil
         guard scrollPositionID != focusID
                 || visualHighlightedLyricID != visualFocusID
@@ -2034,11 +2066,12 @@ struct AppleMusicLyricsView: View {
             visualCascadeFocusLyricID = visualFocusID
             lyricMovementOffsetByID = interlude == nil
                 ? focusedLineFollowingOffsets(
-                    for: highlightedLyricID
+                    for: playbackLyricID
                 )
                 : [:]
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
+            positionedInterludeID = interlude?.id
         }
     }
 
@@ -2249,6 +2282,20 @@ struct AppleMusicLyricsView: View {
             if isAligned {
                 return
             }
+        }
+    }
+}
+
+private enum AppleMusicLyricsDisplayItem: Identifiable {
+    case interlude(LyricInterlude)
+    case lyric(LyricLine)
+
+    var id: String {
+        switch self {
+        case let .interlude(interlude):
+            interlude.id
+        case let .lyric(line):
+            line.id
         }
     }
 }

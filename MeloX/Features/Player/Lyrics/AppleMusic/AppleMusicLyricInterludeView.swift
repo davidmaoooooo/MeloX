@@ -1,11 +1,27 @@
 import SwiftUI
 
-struct AppleMusicLyricInterludeCoordinator: View {
+enum AppleMusicLyricsPlaybackFocus: Hashable {
+    case lyric(LyricLine.ID)
+    case interlude(LyricInterlude.ID)
+
+    var lyricID: LyricLine.ID? {
+        guard case let .lyric(id) = self else { return nil }
+        return id
+    }
+
+    var interludeID: LyricInterlude.ID? {
+        guard case let .interlude(id) = self else { return nil }
+        return id
+    }
+}
+
+struct AppleMusicLyricsFocusCoordinator: View {
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
+    let lyrics: [LyricLine]
     let interludes: [LyricInterlude]
-    @Binding var activeInterludeID: LyricInterlude.ID?
+    @Binding var playbackFocus: AppleMusicLyricsPlaybackFocus?
 
     var body: some View {
         Color.clear
@@ -20,13 +36,16 @@ struct AppleMusicLyricInterludeCoordinator: View {
     }
 
     private var synchronizationTrigger:
-        AppleMusicInterludeSynchronizationTrigger {
-        AppleMusicInterludeSynchronizationTrigger(
+        AppleMusicLyricsFocusSynchronizationTrigger {
+        AppleMusicLyricsFocusSynchronizationTrigger(
             songID: player.currentSong?.id,
             seekRevision: player.seekRevision,
             isPlaying: player.isPlaying,
             isEnabled: settings.lyricsInterludeCountdownEnabled,
             advanceTime: settings.lyricsAdvanceTime,
+            lyricCount: lyrics.count,
+            firstLyricID: lyrics.first?.id,
+            lastLyricID: lyrics.last?.id,
             interludeCount: interludes.count,
             firstInterludeID: interludes.first?.id,
             lastInterludeID: interludes.last?.id
@@ -34,31 +53,19 @@ struct AppleMusicLyricInterludeCoordinator: View {
     }
 
     private func synchronizeImmediately() {
-        guard settings.lyricsInterludeCountdownEnabled else {
-            updateActiveInterlude(to: nil)
-            return
-        }
-        let position = LyricInterludeTimeline.position(
-            at: player.estimatedProgress() + settings.lyricsAdvanceTime,
-            in: interludes
+        let position = playbackPosition(
+            at: player.estimatedProgress()
+                + settings.lyricsAdvanceTime
         )
-        updateActiveInterlude(to: position.activeInterludeID)
+        updatePlaybackFocus(to: position.focus)
     }
 
     private func synchronizeAtTransitions() async {
-        guard settings.lyricsInterludeCountdownEnabled else {
-            updateActiveInterlude(to: nil)
-            return
-        }
-
         while !Task.isCancelled {
             let adjustedProgress = player.estimatedProgress()
                 + settings.lyricsAdvanceTime
-            let position = LyricInterludeTimeline.position(
-                at: adjustedProgress,
-                in: interludes
-            )
-            updateActiveInterlude(to: position.activeInterludeID)
+            let position = playbackPosition(at: adjustedProgress)
+            updatePlaybackFocus(to: position.focus)
 
             guard player.isPlaying,
                   let nextTransitionTime = position.nextTransitionTime else {
@@ -83,11 +90,66 @@ struct AppleMusicLyricInterludeCoordinator: View {
         }
     }
 
-    private func updateActiveInterlude(
-        to interludeID: LyricInterlude.ID?
+    private func playbackPosition(
+        at playbackTime: TimeInterval
+    ) -> AppleMusicLyricsPlaybackFocusPosition {
+        let lyricPosition = LyricPlaybackTimeline.position(
+            at: playbackTime,
+            in: lyrics
+        )
+        let interludePosition = settings.lyricsInterludeCountdownEnabled
+            ? LyricInterludeTimeline.position(
+                at: playbackTime,
+                in: interludes
+            )
+            : LyricInterludePlaybackPosition(
+                activeInterludeID: nil,
+                nextTransitionTime: nil
+            )
+        let activeInterlude = interludePosition.activeInterludeID
+            .flatMap { activeInterludeID in
+                interludes.first { $0.id == activeInterludeID }
+            }
+        let focus: AppleMusicLyricsPlaybackFocus?
+        let interludeHandoffTime: TimeInterval?
+        if let activeInterlude,
+           lyricPosition.highlightedLyricID
+            != activeInterlude.followingLyricID {
+            if playbackTime < activeInterlude.countdownEndTime {
+                focus = .interlude(activeInterlude.id)
+                interludeHandoffTime = activeInterlude.countdownEndTime
+            } else {
+                // The dots finish slightly before the lyric starts. Begin the
+                // same promotion used by an ordinary lyric change during this
+                // handoff window instead of leaving an empty focused row.
+                focus = .lyric(activeInterlude.followingLyricID)
+                interludeHandoffTime = nil
+            }
+        } else {
+            focus = lyricPosition.highlightedLyricID.map {
+                .lyric($0)
+            }
+            interludeHandoffTime = nil
+        }
+        let nextTransitionTime = [
+            lyricPosition.nextTransitionTime,
+            interludePosition.nextTransitionTime,
+            interludeHandoffTime,
+        ]
+        .compactMap { $0 }
+        .min()
+
+        return AppleMusicLyricsPlaybackFocusPosition(
+            focus: focus,
+            nextTransitionTime: nextTransitionTime
+        )
+    }
+
+    private func updatePlaybackFocus(
+        to focus: AppleMusicLyricsPlaybackFocus?
     ) {
-        guard activeInterludeID != interludeID else { return }
-        activeInterludeID = interludeID
+        guard playbackFocus != focus else { return }
+        playbackFocus = focus
     }
 }
 
@@ -100,6 +162,7 @@ struct AppleMusicLyricInterludeView: View {
     @Environment(AppSettings.self) private var settings
 
     let interlude: LyricInterlude
+    let isActive: Bool
     let fontSize: CGFloat
     let onInterfaceInteraction: (() -> Void)?
 
@@ -117,7 +180,7 @@ struct AppleMusicLyricInterludeView: View {
                     .animation(
                         minimumInterval:
                             effectiveLyricsRefreshRate.minimumInterval,
-                        paused: !player.isPlaying
+                        paused: !player.isPlaying || !isActive
                     )
                 ) { timeline in
                     dots(
@@ -181,7 +244,8 @@ struct AppleMusicLyricInterludeView: View {
     private func presentation(
         at playbackTime: TimeInterval
     ) -> AppleMusicInterludeDotsPresentation {
-        AppleMusicInterludeDotsPresentation.make(
+        guard isActive else { return .hidden }
+        return AppleMusicInterludeDotsPresentation.make(
             playbackTime: playbackTime,
             interlude: interlude,
             reducesMotion: accessibilityReduceMotion
@@ -189,15 +253,23 @@ struct AppleMusicLyricInterludeView: View {
     }
 }
 
-private struct AppleMusicInterludeSynchronizationTrigger: Hashable {
+private struct AppleMusicLyricsFocusSynchronizationTrigger: Hashable {
     let songID: Int?
     let seekRevision: Int
     let isPlaying: Bool
     let isEnabled: Bool
     let advanceTime: TimeInterval
+    let lyricCount: Int
+    let firstLyricID: LyricLine.ID?
+    let lastLyricID: LyricLine.ID?
     let interludeCount: Int
     let firstInterludeID: LyricInterlude.ID?
     let lastInterludeID: LyricInterlude.ID?
+}
+
+private struct AppleMusicLyricsPlaybackFocusPosition {
+    let focus: AppleMusicLyricsPlaybackFocus?
+    let nextTransitionTime: TimeInterval?
 }
 
 private struct AppleMusicInterludeDotsPresentation {
@@ -214,6 +286,13 @@ private struct AppleMusicInterludeDotsPresentation {
     let dotScales: [CGFloat]
     let scale: CGFloat
     let opacity: Double
+
+    static let hidden = AppleMusicInterludeDotsPresentation(
+        dotOpacities: Array(repeating: 0, count: dotCount),
+        dotScales: Array(repeating: 1, count: dotCount),
+        scale: 1,
+        opacity: 0
+    )
 
     static func make(
         playbackTime: TimeInterval,
