@@ -3,7 +3,6 @@ import SwiftUI
 struct AppleMusicLyricsView: View {
     private static let bottomPreloadLineCount = 2
     private static let futureCascadeSafetyLineCount = 6
-    private static let translationSpacing: CGFloat = 2
     nonisolated private static let expandedBottomDistanceScale: CGFloat = 0.68
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -34,7 +33,6 @@ struct AppleMusicLyricsView: View {
     @State private var lyricMovementOffsetByID: [LyricLine.ID: CGFloat] = [:]
     @State private var lyricMovementTransition: LyricMovementTransition?
     @State private var retainedTopCascadeLyrics: [RetainedCascadeLyric] = []
-    @State private var translationHeightByID: [LyricLine.ID: CGFloat] = [:]
     @State private var activeInterludeID: LyricInterlude.ID?
     @State private var isManuallyScrolling = false
     @State private var interfaceVisibilityTracker =
@@ -141,6 +139,9 @@ struct AppleMusicLyricsView: View {
             let focusEffectAnimation = lyricFocusEffectAnimation(
                 for: visualHighlightedLyricID
             )
+            let visualScaleFocusLyricID =
+                seekFeedback?.previousFocusLyricID
+                ?? visualCascadeFocusLyricID
             let usesPseudoTiming = settings.lyricsPseudoWordByWord
                 && !hasSyllableSyncedLyrics
             let showsTranslations = settings.lyricsTranslationEnabled
@@ -148,9 +149,7 @@ struct AppleMusicLyricsView: View {
             let retainedTopCascadeLyricIDs = Set(
                 retainedTopCascadeLyrics.map(\.id)
             )
-            let reservesTranslationSpace =
-                showsTranslations
-                && settings.lyricsTranslationDisplayMode == .allLines
+            let reservesTranslationSpace = showsTranslations
             let lineSpacing = CGFloat(settings.lyricsLineSpacing)
             let activeInterlude = focusedInterlude
             let translationHeight = showsTranslations
@@ -240,6 +239,8 @@ struct AppleMusicLyricsView: View {
 
                             let isPlaybackLine = line.id == visualHighlightedLyricID
                             let isCascadeFocusLine = line.id == visualCascadeFocusLyricID
+                            let isVisualScaleFocusLine =
+                                line.id == visualScaleFocusLyricID
                             let isActualPlaybackLine = line.id == highlightedLyricID
                             let isPrecedingFocusLine = line.id == focusNeighborIDs.preceding
                             let isFollowingFocusLine = line.id == focusNeighborIDs.following
@@ -254,7 +255,7 @@ struct AppleMusicLyricsView: View {
                                 isFollowingFocusLine: isFollowingFocusLine
                             )
                             let focusScaleAnimation = lyricFocusScaleAnimation(
-                                isFocused: isCascadeFocusLine
+                                isFocused: isVisualScaleFocusLine
                             )
 
                             LifecycleAwareLyricMovement(
@@ -284,12 +285,6 @@ struct AppleMusicLyricsView: View {
                                         ),
                                         reservesTranslationSpace:
                                             reservesTranslationSpace,
-                                        onTranslationHeightChange: { height in
-                                            recordTranslationHeight(
-                                                height,
-                                                for: line.id
-                                            )
-                                        },
                                         translationLayoutAnimation:
                                             lyricTranslationLayoutAnimation(),
                                         translationVisibilityAnimation:
@@ -297,7 +292,7 @@ struct AppleMusicLyricsView: View {
                                                 focusScaleAnimation: focusScaleAnimation
                                             ),
                                         visualScale:
-                                            isCascadeFocusLine
+                                            isVisualScaleFocusLine
                                                 ? currentLineScale
                                                 : 1,
                                         visualScaleAnimation: focusScaleAnimation,
@@ -324,7 +319,7 @@ struct AppleMusicLyricsView: View {
                                                     1
                                                 ),
                                             visualScale:
-                                                isCascadeFocusLine
+                                                isVisualScaleFocusLine
                                                     ? currentLineScale
                                                     : 1,
                                             opacity:
@@ -507,6 +502,9 @@ struct AppleMusicLyricsView: View {
                 .onScrollPhaseChange { _, newPhase in
                     switch newPhase {
                     case .tracking, .interacting:
+                        if let seekFeedback {
+                            completeSeekFeedback(seekFeedback)
+                        }
                         if !isManuallyScrolling {
                             isManuallyScrolling = true
                             interfaceVisibilityTracker.begin(
@@ -610,6 +608,11 @@ struct AppleMusicLyricsView: View {
                     let line = lyrics[lineIndex]
                     let isPlaybackLine = line.id == visualHighlightedLyricID
                     let isCascadeFocusLine = line.id == visualCascadeFocusLyricID
+                    let visualScaleFocusLyricID =
+                        seekFeedback?.previousFocusLyricID
+                        ?? visualCascadeFocusLyricID
+                    let isVisualScaleFocusLine =
+                        line.id == visualScaleFocusLyricID
                     let blurFocusLyricID =
                         visualCascadeFocusLyricID
                         ?? highlightedLyricID
@@ -621,7 +624,7 @@ struct AppleMusicLyricsView: View {
                         isFollowingFocusLine: line.id == focusNeighborIDs.following
                     )
                     let focusScaleAnimation = lyricFocusScaleAnimation(
-                        isFocused: isCascadeFocusLine
+                        isFocused: isVisualScaleFocusLine
                     )
 
                     LifecycleAwareLyricMovement(
@@ -657,9 +660,7 @@ struct AppleMusicLyricsView: View {
                             ),
                             reservesTranslationSpace:
                                 settings.lyricsTranslationEnabled
-                                && hasTranslations
-                                && settings.lyricsTranslationDisplayMode
-                                    == .allLines,
+                                && hasTranslations,
                             translationLayoutAnimation:
                                 lyricTranslationLayoutAnimation(),
                             translationVisibilityAnimation:
@@ -667,7 +668,9 @@ struct AppleMusicLyricsView: View {
                                     focusScaleAnimation: focusScaleAnimation
                                 ),
                             visualScale:
-                                isCascadeFocusLine ? currentLineScale : 1,
+                                isVisualScaleFocusLine
+                                    ? currentLineScale
+                                    : 1,
                             visualScaleAnimation: focusScaleAnimation,
                             promotedLayoutScale: currentLineScale,
                             layoutWidth: lyricLayoutWidth
@@ -865,26 +868,6 @@ struct AppleMusicLyricsView: View {
         }
     }
 
-    private func recordTranslationHeight(
-        _ height: CGFloat,
-        for id: LyricLine.ID
-    ) {
-        guard height.isFinite else { return }
-        let normalizedHeight = max(height, 0)
-        let previousHeight = translationHeightByID[id]
-        guard previousHeight == nil
-                || abs((previousHeight ?? 0) - normalizedHeight) > 0.5 else {
-            return
-        }
-
-        translationHeightByID[id] = normalizedHeight
-        guard id == visualCascadeFocusLyricID,
-              lyricMovementTransition == nil else {
-            return
-        }
-        synchronizeStationaryFollowingOffsets()
-    }
-
     private func recordLyricFrame(
         _ frame: CGRect,
         for id: LyricLine.ID
@@ -955,25 +938,7 @@ struct AppleMusicLyricsView: View {
             0
         )
 
-        var translationOverflow: CGFloat = 0
-        let focusedLine = lyrics[focusedIndex]
-        if settings.lyricsTranslationEnabled,
-           settings.lyricsTranslationDisplayMode == .focusedLine,
-           focusedLine.translation != nil {
-            let fallbackTranslationHeight = max(
-                CGFloat(
-                    settings.lyricsFontSize
-                        * settings.lyricsTranslationFontScale
-                ),
-                13
-            ) * 1.2
-            let translationHeight = translationHeightByID[focusedLyricID]
-                ?? fallbackTranslationHeight
-            translationOverflow =
-                (translationHeight + Self.translationSpacing) * scale
-        }
-
-        let followingOffset = scaleOverflow + translationOverflow
+        let followingOffset = scaleOverflow
         guard followingOffset > 0.5 else { return [:] }
         return Dictionary(
             uniqueKeysWithValues:
@@ -1915,7 +1880,18 @@ struct AppleMusicLyricsView: View {
 
     private func seek(to line: LyricLine) {
         guard settings.lyricsTapToSeek else { return }
-        seekFeedback = LyricSeekFeedback(lyricID: line.id)
+        seekFeedback = LyricSeekFeedback(
+            lyricID: line.id,
+            previousFocusLyricID: visualCascadeFocusLyricID,
+            startedAt: .now,
+            minimumHoldDuration:
+                accessibilityReduceMotion
+                    ? 0
+                    : LyricPlaybackTimeline.focusAnimationDuration(
+                        for: line.id,
+                        in: lyrics
+                    )
+        )
         browsingGeneration += 1
         isBrowsingLyrics = false
         resetMovementOffsets()
@@ -1934,11 +1910,13 @@ struct AppleMusicLyricsView: View {
                 return
             }
 
-            if hasCompletedSeekFocus(
-                to: feedback.lyricID,
+            if hasCompletedSeekMovement(
+                feedback,
                 viewportHeight: viewportHeight
             ) {
-                seekFeedback = nil
+                completeSeekFeedback(
+                    feedback
+                )
                 return
             }
 
@@ -1950,14 +1928,19 @@ struct AppleMusicLyricsView: View {
         }
 
         guard seekFeedback == feedback else { return }
-        seekFeedback = nil
+        completeSeekFeedback(
+            feedback
+        )
     }
 
-    private func hasCompletedSeekFocus(
-        to id: LyricLine.ID,
+    private func hasCompletedSeekMovement(
+        _ feedback: LyricSeekFeedback,
         viewportHeight: CGFloat
     ) -> Bool {
+        let id = feedback.lyricID
         guard visualCascadeFocusLyricID == id,
+              Date.now.timeIntervalSince(feedback.startedAt)
+                >= feedback.minimumHoldDuration,
               visualHighlightedLyricID == id,
               scrollPositionID == id,
               let frame = lyricFrameByID[id] else {
@@ -1980,6 +1963,20 @@ struct AppleMusicLyricsView: View {
             + frame.height * focusPosition
         let viewportAnchorY = viewportHeight * focusPosition
         return abs(visualAnchorY - viewportAnchorY) <= 2
+    }
+
+    private func completeSeekFeedback(
+        _ feedback: LyricSeekFeedback
+    ) {
+        guard seekFeedback == feedback else { return }
+
+        withAnimation(
+            accessibilityReduceMotion
+                ? nil
+                : lyricFocusScaleAnimation(isFocused: true)
+        ) {
+            seekFeedback = nil
+        }
     }
 
     private var lyricInteractionAccessibilityHint: String {
@@ -2093,6 +2090,9 @@ private struct LyricFocusMovementTrigger: Hashable {
 private struct LyricSeekFeedback: Hashable {
     let token = UUID()
     let lyricID: LyricLine.ID
+    let previousFocusLyricID: LyricLine.ID?
+    let startedAt: Date
+    let minimumHoldDuration: TimeInterval
 }
 
 private struct RetainedCascadeLyric: Identifiable, Equatable {
