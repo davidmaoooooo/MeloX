@@ -435,7 +435,11 @@ struct NowPlayingView: View {
                 .allowsHitTesting(false)
             }
         }
-        .clipped()
+        .modifier(
+            NowPlayingPageContentClippingModifier(
+                clipsContent: !usesExpandedAppleMusicLyricsLayout
+            )
+        )
         .coordinateSpace(
             name: NowPlayingPortraitCoordinateSpace.name
         )
@@ -659,5 +663,18 @@ struct NowPlayingView: View {
 
     private var acceptsPlayerActivityGesture: Bool {
         usesAutoHidingAppleMusicInterface && showsLyricsControls
+    }
+}
+
+private struct NowPlayingPageContentClippingModifier: ViewModifier {
+    let clipsContent: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if clipsContent {
+            content.clipped()
+        } else {
+            content
+        }
     }
 }

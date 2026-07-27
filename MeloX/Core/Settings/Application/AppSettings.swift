@@ -173,6 +173,7 @@ final class AppSettings {
         static let lyricsHiddenInterfaceBlurScale = "lyricsHiddenInterfaceBlurScale"
         static let lyricsDimAmount = "lyricsDimAmount"
         static let lyricsTapToSeek = "lyricsTapToSeek"
+        static let lyricsLongPressToShare = "lyricsLongPressToShare"
         static let lyricsWordByWord = "lyricsWordByWord"
         static let lyricsPseudoWordByWord = "lyricsPseudoWordByWord"
         static let lyricsLiftMode = "lyricsLiftMode"
@@ -547,6 +548,15 @@ final class AppSettings {
 
     var lyricsTapToSeek: Bool {
         didSet { defaults.set(lyricsTapToSeek, forKey: Key.lyricsTapToSeek) }
+    }
+
+    var lyricsLongPressToShare: Bool {
+        didSet {
+            defaults.set(
+                lyricsLongPressToShare,
+                forKey: Key.lyricsLongPressToShare
+            )
+        }
     }
 
     var lyricsWordByWord: Bool {
@@ -1030,6 +1040,9 @@ final class AppSettings {
         lyricsDimAmount = defaults.object(forKey: Key.lyricsDimAmount) as? Double
             ?? Self.defaultLyricsDimAmount
         lyricsTapToSeek = defaults.object(forKey: Key.lyricsTapToSeek) as? Bool ?? true
+        lyricsLongPressToShare = defaults.object(
+            forKey: Key.lyricsLongPressToShare
+        ) as? Bool ?? true
         lyricsWordByWord = defaults.object(forKey: Key.lyricsWordByWord) as? Bool ?? true
         lyricsPseudoWordByWord = defaults.object(forKey: Key.lyricsPseudoWordByWord) as? Bool ?? false
         lyricsLiftMode = LyricsLiftMode(
@@ -1336,6 +1349,7 @@ final class AppSettings {
         lyricsHiddenInterfaceBlurScale = Self.defaultLyricsHiddenInterfaceBlurScale
         lyricsDimAmount = Self.defaultLyricsDimAmount
         lyricsTapToSeek = true
+        lyricsLongPressToShare = true
         lyricsWordByWord = true
         lyricsPseudoWordByWord = false
         lyricsLiftMode = Self.defaultLyricsLiftMode

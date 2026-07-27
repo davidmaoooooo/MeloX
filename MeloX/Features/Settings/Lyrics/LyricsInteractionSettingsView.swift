@@ -9,9 +9,18 @@ struct LyricsInteractionSettingsView: View {
         Form {
             Section {
                 Toggle(
-                    "双击歌词跳转",
+                    settings.lyricsStyle == .appleMusic
+                        ? "单击歌词跳转"
+                        : "双击歌词跳转",
                     isOn: $settings.lyricsTapToSeek
                 )
+
+                if settings.lyricsStyle == .appleMusic {
+                    Toggle(
+                        "长按歌词分享",
+                        isOn: $settings.lyricsLongPressToShare
+                    )
+                }
 
                 Toggle(
                     "浏览后恢复跟随",
