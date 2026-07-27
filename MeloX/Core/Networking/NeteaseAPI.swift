@@ -755,9 +755,11 @@ final class NeteaseAPI {
     }
 
     func addSong(id: Int, toPlaylistID playlistID: Int) async throws {
+        // The unversioned EAPI route rejects authenticated writes with code 405.
+        let path = "/api/v1/playlist/manipulate/tracks"
         let trackID = String(id)
         var response: APIStatusResponse = try await client.eapi(
-            "/api/playlist/manipulate/tracks",
+            path,
             data: [
                 "op": "add",
                 "pid": playlistID,
@@ -770,7 +772,7 @@ final class NeteaseAPI {
         // Mirrors @neteaseapireborn/api's compatibility retry for code 512.
         if response.code == 512 {
             response = try await client.eapi(
-                "/api/playlist/manipulate/tracks",
+                path,
                 data: [
                     "op": "add",
                     "pid": playlistID,
