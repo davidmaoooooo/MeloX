@@ -57,6 +57,11 @@ struct NowPlayingBottomControls: View {
             }
         }
         .frame(height: Self.coreHeight)
+        .background {
+            Color.clear
+                .contentShape(.rect)
+                .onTapGesture {}
+        }
     }
 
     private func interfaceLayer<Content: View>(
