@@ -60,52 +60,29 @@ enum LyricMovementPhase: Equatable {
         }
     }
 
-    func continuation(
+    func presentation(
         at date: Date
-    ) -> LyricMovementContinuation? {
-        guard case let .animated(
+    ) -> LyricMovementPresentation {
+        switch self {
+        case let .stationary(offset):
+            return LyricMovementPresentation(
+                offset: offset,
+                velocity: 0
+            )
+        case let .animated(
             _,
             initialOffset,
             destinationOffset,
             configuration,
             startedAt
-        ) = self else {
-            return nil
-        }
-
-        let elapsed = max(date.timeIntervalSince(startedAt), 0)
-        let presentation = Self.presentation(
-            initialOffset: initialOffset,
-            destinationOffset: destinationOffset,
-            configuration: configuration,
-            elapsed: elapsed
-        )
-        let remainingDistance = destinationOffset - presentation.offset
-        guard abs(remainingDistance) > 0.25 else {
-            return LyricMovementContinuation(
-                presentation: presentation,
-                targetOffset: destinationOffset,
-                animation: nil
+        ):
+            return Self.presentation(
+                initialOffset: initialOffset,
+                destinationOffset: destinationOffset,
+                configuration: configuration,
+                elapsed: max(date.timeIntervalSince(startedAt), 0)
             )
         }
-
-        let remainingDelay = max(configuration.delay - elapsed, 0)
-        let normalizedVelocity = presentation.velocity / remainingDistance
-        let finiteVelocity = normalizedVelocity.isFinite
-            ? min(max(Double(normalizedVelocity), -12), 12)
-            : 0
-        var animation = Animation.interpolatingSpring(
-            configuration.spring,
-            initialVelocity: finiteVelocity
-        )
-        if remainingDelay > 0 {
-            animation = animation.delay(remainingDelay)
-        }
-        return LyricMovementContinuation(
-            presentation: presentation,
-            targetOffset: destinationOffset,
-            animation: animation
-        )
     }
 
     fileprivate static func presentation(
@@ -117,6 +94,12 @@ enum LyricMovementPhase: Equatable {
         guard elapsed >= configuration.delay else {
             return LyricMovementPresentation(
                 offset: initialOffset,
+                velocity: 0
+            )
+        }
+        guard elapsed < configuration.delay + configuration.duration else {
+            return LyricMovementPresentation(
+                offset: destinationOffset,
                 velocity: 0
             )
         }
@@ -141,12 +124,6 @@ enum LyricMovementPhase: Equatable {
             velocity: velocity.isFinite ? velocity : 0
         )
     }
-}
-
-struct LyricMovementContinuation {
-    let presentation: LyricMovementPresentation
-    let targetOffset: CGFloat
-    let animation: Animation?
 }
 
 struct LyricMovementTransition: Equatable {
@@ -197,6 +174,16 @@ struct LyricMovementTransition: Equatable {
             animationByID: animationByID,
             startedAt: date
         )
+    }
+
+    var completionDuration: TimeInterval {
+        animationByID.values.reduce(0) { duration, configuration in
+            max(
+                duration,
+                max(configuration.delay, 0)
+                    + max(configuration.duration, 0)
+            )
+        }
     }
 
     func presentationStates(
@@ -259,42 +246,24 @@ struct LifecycleAwareLyricMovement<Content: View>: View {
     let phase: LyricMovementPhase
     @ViewBuilder let content: (CGFloat) -> Content
 
-    @State private var animatedOffset: CGFloat
-
     init(
         phase: LyricMovementPhase,
         @ViewBuilder content: @escaping (CGFloat) -> Content
     ) {
         self.phase = phase
         self.content = content
-        _animatedOffset = State(
-            initialValue:
-                phase.continuation(at: .now)?.presentation.offset
-                    ?? phase.targetOffset
-        )
     }
 
+    @ViewBuilder
     var body: some View {
-        content(phase.isAnimated ? animatedOffset : phase.targetOffset)
-            .task(id: phase) {
-                guard let continuation = phase.continuation(at: .now) else {
-                    animatedOffset = phase.targetOffset
-                    return
-                }
-
-                guard let animation = continuation.animation else {
-                    animatedOffset = continuation.targetOffset
-                    return
-                }
-
-                withTransaction(Transaction(animation: nil)) {
-                    animatedOffset = continuation.presentation.offset
-                }
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                withAnimation(animation) {
-                    animatedOffset = continuation.targetOffset
-                }
+        if phase.isAnimated {
+            TimelineView(.animation) { context in
+                content(
+                    phase.presentation(at: context.date).offset
+                )
             }
+        } else {
+            content(phase.targetOffset)
+        }
     }
 }

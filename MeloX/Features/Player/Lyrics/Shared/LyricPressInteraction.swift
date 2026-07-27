@@ -193,7 +193,16 @@ private struct LyricPressButtonStyleBody<Label: View>: View {
             withTransaction(transaction) {
                 backgroundProgress = 1
             }
-        } else if !isPressed {
+        } else {
+            withAnimation(
+                reducesMotion
+                    ? nil
+                    : .easeInOut(
+                        duration: LyricPressAnimation.releaseDuration
+                    )
+            ) {
+                scale = 1
+            }
             withAnimation(
                 reducesMotion
                     ? nil

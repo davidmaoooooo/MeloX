@@ -3,6 +3,9 @@ import SwiftUI
 struct AppleMusicLyricsView: View {
     private static let bottomPreloadLineCount = 2
     private static let futureCascadeSafetyLineCount = 6
+    private static let translationSpacing: CGFloat = 2
+    private static let cascadeSettlementGraceDuration: TimeInterval =
+        1.0 / 60.0
     nonisolated private static let expandedBottomDistanceScale: CGFloat = 0.68
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -31,6 +34,10 @@ struct AppleMusicLyricsView: View {
     @State private var visualHighlightedLyricID: LyricLine.ID?
     @State private var visualCascadeFocusLyricID: LyricLine.ID?
     @State private var lyricFrameByID: [LyricLine.ID: CGRect] = [:]
+    @State private var lyricLayoutHeightByID: [LyricLine.ID: CGFloat] = [:]
+    @State private var lyricTranslationHeightByID: [
+        LyricLine.ID: CGFloat
+    ] = [:]
     @State private var lyricMovementOffsetByID: [LyricLine.ID: CGFloat] = [:]
     @State private var lyricMovementTransition: LyricMovementTransition?
     @State private var retainedTopCascadeLyrics: [RetainedCascadeLyric] = []
@@ -290,6 +297,12 @@ struct AppleMusicLyricsView: View {
                                         ),
                                         reservesTranslationSpace:
                                             reservesTranslationSpace,
+                                        onTranslationHeightChange: { height in
+                                            recordTranslationHeight(
+                                                height,
+                                                for: line.id
+                                            )
+                                        },
                                         translationLayoutAnimation:
                                             lyricTranslationLayoutAnimation(),
                                         translationVisibilityAnimation:
@@ -388,14 +401,30 @@ struct AppleMusicLyricsView: View {
                                 .blur(radius: focusBlurRadius)
                                 .animation(focusEffectAnimation, value: focusBlurRadius)
                             }
-                                .onGeometryChange(for: CGRect.self) { geometry in
-                                    geometry.frame(in: .scrollView(axis: .vertical))
-                                } action: { frame in
-                                    recordLyricFrame(frame, for: line.id)
+                                .onGeometryChange(
+                                    for: LyricGeometryMeasurement.self
+                                ) { geometry in
+                                    LyricGeometryMeasurement(
+                                        frame: geometry.frame(
+                                            in: .scrollView(axis: .vertical)
+                                        ),
+                                        layoutHeight: geometry.size.height
+                                    )
+                                } action: { measurement in
+                                    recordLyricGeometry(
+                                        measurement,
+                                        for: line.id
+                                    )
                                 }
                                 .id(line.id)
                                 .onDisappear {
                                     lyricFrameByID.removeValue(forKey: line.id)
+                                    lyricLayoutHeightByID.removeValue(
+                                        forKey: line.id
+                                    )
+                                    lyricTranslationHeightByID.removeValue(
+                                        forKey: line.id
+                                    )
                                 }
                                 .accessibilityLabel(
                                     line.accessibilityText(
@@ -592,6 +621,8 @@ struct AppleMusicLyricsView: View {
                     interfaceVisibilityTracker.end()
                     seekFeedback = nil
                     lyricFrameByID.removeAll()
+                    lyricLayoutHeightByID.removeAll()
+                    lyricTranslationHeightByID.removeAll()
                     lyricMovementOffsetByID.removeAll()
                     lyricMovementTransition = nil
                     retainedTopCascadeLyrics.removeAll()
@@ -883,32 +914,62 @@ struct AppleMusicLyricsView: View {
         }
     }
 
-    private func recordLyricFrame(
-        _ frame: CGRect,
+    private func recordLyricGeometry(
+        _ measurement: LyricGeometryMeasurement,
         for id: LyricLine.ID
     ) {
-        guard Self.isValidLyricFrame(frame) else {
+        let frame = measurement.frame
+        let layoutHeight = measurement.layoutHeight
+        guard Self.isValidLyricFrame(frame),
+              layoutHeight.isFinite,
+              layoutHeight > 0 else {
             if lyricFrameByID[id] != nil {
                 lyricFrameByID.removeValue(forKey: id)
+            }
+            if lyricLayoutHeightByID[id] != nil {
+                lyricLayoutHeightByID.removeValue(forKey: id)
             }
             return
         }
 
         let previousFrame = lyricFrameByID[id]
-        guard previousFrame == nil
-                || !Self.isApproximatelyEqual(
-                    previousFrame ?? .zero,
-                    frame
-                ) else {
+        let previousLayoutHeight = lyricLayoutHeightByID[id]
+        let frameChanged = previousFrame == nil
+            || !Self.isApproximatelyEqual(
+                previousFrame ?? .zero,
+                frame
+            )
+        let layoutHeightChanged = previousLayoutHeight == nil
+            || abs((previousLayoutHeight ?? 0) - layoutHeight) > 0.5
+        guard frameChanged || layoutHeightChanged else {
             return
         }
 
-        let previousHeight = previousFrame?.height
         lyricFrameByID[id] = frame
+        lyricLayoutHeightByID[id] = layoutHeight
         guard id == visualCascadeFocusLyricID,
               lyricMovementTransition == nil,
-              previousHeight == nil
-                || abs((previousHeight ?? 0) - frame.height) > 0.5 else {
+              layoutHeightChanged else {
+            return
+        }
+        synchronizeStationaryFollowingOffsets()
+    }
+
+    private func recordTranslationHeight(
+        _ height: CGFloat,
+        for id: LyricLine.ID
+    ) {
+        guard height.isFinite else { return }
+        let normalizedHeight = max(height, 0)
+        let previousHeight = lyricTranslationHeightByID[id]
+        guard previousHeight == nil
+                || abs((previousHeight ?? 0) - normalizedHeight) > 0.5 else {
+            return
+        }
+
+        lyricTranslationHeightByID[id] = normalizedHeight
+        guard id == visualCascadeFocusLyricID,
+              lyricMovementTransition == nil else {
             return
         }
         synchronizeStationaryFollowingOffsets()
@@ -946,8 +1007,25 @@ struct AppleMusicLyricsView: View {
 
         let scale = lyricsCurrentLineScale
         let fallbackPrimaryHeight = CGFloat(settings.lyricsFontSize) * 1.2
-        let focusedLayoutHeight = lyricFrameByID[focusedLyricID]?.height
+        var focusedLayoutHeight = lyricLayoutHeightByID[focusedLyricID]
             ?? fallbackPrimaryHeight
+        let focusedLine = lyrics[focusedIndex]
+        if settings.lyricsTranslationEnabled,
+           settings.lyricsTranslationDisplayMode == .focusedLine,
+           focusedLine.translation != nil,
+           focusedLyricID != visualCascadeFocusLyricID {
+            let fallbackTranslationHeight = max(
+                CGFloat(
+                    settings.lyricsFontSize
+                        * settings.lyricsTranslationFontScale
+                ),
+                13
+            ) * 1.2
+            focusedLayoutHeight +=
+                (lyricTranslationHeightByID[focusedLyricID]
+                    ?? fallbackTranslationHeight)
+                + Self.translationSpacing
+        }
         let scaleOverflow = max(
             focusedLayoutHeight * (scale - 1),
             0
@@ -1160,6 +1238,16 @@ struct AppleMusicLyricsView: View {
                 to: highlightedLyricID,
                 viewportHeight: viewportHeight,
                 animated: !isPreparingInitialFocus
+            )
+            return
+        }
+        guard !isReverseFocusTransition(
+            from: movementFocusLyricID,
+            to: highlightedLyricID
+        ) else {
+            await moveFocusWithoutCascade(
+                to: highlightedLyricID,
+                viewportHeight: viewportHeight
             )
             return
         }
@@ -1531,10 +1619,26 @@ struct AppleMusicLyricsView: View {
             startFocusColorTransition(to: highlightedLyricID)
         }
 
-        // Keep the finished presentation state until the next focus change.
-        // Clearing it on the furthest row's timer can swap a retained row back
-        // to LazyVStack's layout frame while the current lyric is still playing.
-        // The next transition reads this state and retargets it continuously.
+        let elapsedSinceMovementStart = startedTransition.startedAt.map {
+            Date.now.timeIntervalSince($0)
+        } ?? 0
+        let remainingMovementDuration = max(
+            startedTransition.completionDuration
+                - elapsedSinceMovementStart,
+            0
+        ) + Self.cascadeSettlementGraceDuration
+        if remainingMovementDuration > 0 {
+            do {
+                try await Task.sleep(
+                    for: .seconds(remainingMovementDuration)
+                )
+            } catch {
+                return
+            }
+        }
+        guard !Task.isCancelled,
+              lyricMovementTransition?.id == transition.id else { return }
+        completeCascadeMovement(to: highlightedLyricID)
     }
 
     private func lyricFocusCascadeBounce(
@@ -1603,6 +1707,18 @@ struct AppleMusicLyricsView: View {
         return abs(nextIndex - currentIndex) == 1
     }
 
+    private func isReverseFocusTransition(
+        from currentID: LyricLine.ID?,
+        to nextID: LyricLine.ID
+    ) -> Bool {
+        guard let currentID,
+              let currentIndex = lyricIndexByID[currentID],
+              let nextIndex = lyricIndexByID[nextID] else {
+            return false
+        }
+        return nextIndex < currentIndex
+    }
+
     private func moveFocusWithoutCascade(
         to id: LyricLine.ID,
         viewportHeight: CGFloat
@@ -1615,6 +1731,7 @@ struct AppleMusicLyricsView: View {
         )
         await Task.yield()
         guard !Task.isCancelled else { return }
+        let destinationOffsets = focusedLineFollowingOffsets(for: id)
         withAnimation(
             accessibilityReduceMotion
                 ? nil
@@ -1627,8 +1744,9 @@ struct AppleMusicLyricsView: View {
         ) {
             visualHighlightedLyricID = id
             visualCascadeFocusLyricID = id
-            lyricMovementOffsetByID = focusedLineFollowingOffsets(for: id)
+            lyricMovementOffsetByID = destinationOffsets
         }
+        completeSeekFeedbackIfNeeded(for: id)
     }
 
     private func moveFocusToInterlude(
@@ -1667,6 +1785,7 @@ struct AppleMusicLyricsView: View {
             lyricMovementTransition = nil
             retainedTopCascadeLyrics.removeAll()
         }
+        completeSeekFeedbackIfNeeded(for: id)
     }
 
     private func resetMovementOffsets() {
@@ -2000,6 +2119,16 @@ struct AppleMusicLyricsView: View {
         }
     }
 
+    private func completeSeekFeedbackIfNeeded(
+        for lyricID: LyricLine.ID
+    ) {
+        guard let feedback = seekFeedback,
+              feedback.lyricID == lyricID else {
+            return
+        }
+        completeSeekFeedback(feedback)
+    }
+
     private var lyricInteractionAccessibilityHint: String {
         switch (
             settings.lyricsTapToSeek,
@@ -2121,4 +2250,12 @@ private struct RetainedCascadeLyric: Identifiable, Equatable {
     let id: LyricLine.ID
     let frame: CGRect
     let movementDistance: CGFloat
+}
+
+private nonisolated struct LyricGeometryMeasurement:
+    Equatable,
+    Sendable
+{
+    let frame: CGRect
+    let layoutHeight: CGFloat
 }
