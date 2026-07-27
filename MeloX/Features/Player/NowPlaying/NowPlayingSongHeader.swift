@@ -117,3 +117,50 @@ struct NowPlayingSongHeader: View {
         return song.artists.map(\.name).joined(separator: " & ")
     }
 }
+
+struct NowPlayingLandscapeSongHeader: View {
+    let song: Song
+    let onExpandLyrics: (() -> Void)?
+
+    init(
+        song: Song,
+        onExpandLyrics: (() -> Void)? = nil
+    ) {
+        self.song = song
+        self.onExpandLyrics = onExpandLyrics
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(song.name)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Text(song.artistText)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.64))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let onExpandLyrics {
+                Button(action: onExpandLyrics) {
+                    Image(
+                        systemName:
+                            "arrow.up.left.and.arrow.down.right"
+                    )
+                    .font(.title3.weight(.medium))
+                    .frame(width: 40, height: 40)
+                    .background(.white.opacity(0.13), in: .circle)
+                    .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开全屏天际歌词")
+            }
+
+            NowPlayingSongActions(song: song)
+        }
+        .frame(height: 52)
+    }
+}

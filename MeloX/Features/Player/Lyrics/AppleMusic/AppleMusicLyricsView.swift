@@ -503,6 +503,11 @@ struct AppleMusicLyricsView: View {
                             }
                             .accessibilityHidden(true)
                     }
+                    .overlay(alignment: .top) {
+                        hiddenControlsTapTarget(
+                            viewportHeight: proxy.size.height
+                        )
+                    }
                 }
                 .scrollIndicators(.hidden)
                 .scrollClipDisabled()
@@ -671,6 +676,36 @@ struct AppleMusicLyricsView: View {
                     retainedTopCascadeLyrics.removeAll()
                     positionedInterludeID = nil
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func hiddenControlsTapTarget(
+        viewportHeight: CGFloat
+    ) -> some View {
+        let tapHeight = min(
+            max(bottomOverlayHeight, 0),
+            max(viewportHeight, 0)
+        )
+
+        if isInterfaceHidden, tapHeight > 0 {
+            GeometryReader { geometry in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: tapHeight)
+                    .contentShape(.rect)
+                    .offset(
+                        y:
+                            -geometry.frame(
+                                in: .scrollView(axis: .vertical)
+                            ).minY
+                            + max(viewportHeight - tapHeight, 0)
+                    )
+                    .onTapGesture {
+                        onInterfaceInteraction?()
+                    }
+                    .accessibilityHidden(true)
             }
         }
     }

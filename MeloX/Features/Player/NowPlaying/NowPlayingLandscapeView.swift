@@ -129,7 +129,8 @@ struct NowPlayingLandscapeView: View {
                 .allowsHitTesting(!hidesLyricsControls)
                 .accessibilityHidden(hidesLyricsControls)
 
-            if hidesLyricsControls {
+            if hidesLyricsControls,
+               settings.lyricsStyle != .appleMusic {
                 Color.clear
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
@@ -151,37 +152,16 @@ struct NowPlayingLandscapeView: View {
         page == .lyrics && settings.lyricsStyle == .appleMusic
     }
 
+    @ViewBuilder
     private var songHeader: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(song.name)
-                    .font(.headline)
-                    .lineLimit(1)
-
-                Text(song.artistText)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.64))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if page == .lyrics, !lyrics.isEmpty {
-                Button(action: enterSkylineLyrics) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.title3.weight(.medium))
-                        .frame(width: 40, height: 40)
-                        .background(.white.opacity(0.13), in: .circle)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("打开全屏天际歌词")
-            }
-
-            NowPlayingSongActions(
-                song: song
+        if page == .lyrics, !lyrics.isEmpty {
+            NowPlayingLandscapeSongHeader(
+                song: song,
+                onExpandLyrics: enterSkylineLyrics
             )
+        } else {
+            NowPlayingLandscapeSongHeader(song: song)
         }
-        .frame(height: 52)
     }
 
     private var pageContent: some View {

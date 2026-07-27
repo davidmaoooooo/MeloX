@@ -241,7 +241,8 @@ struct NowPlayingView: View {
                 .allowsHitTesting(!hidesLyricsControls)
                 .accessibilityHidden(hidesLyricsControls)
 
-            if hidesLyricsControls {
+            if hidesLyricsControls,
+               settings.lyricsStyle != .appleMusic {
                 Color.clear
                     .frame(maxWidth: .infinity)
                     .frame(
@@ -433,9 +434,9 @@ struct NowPlayingView: View {
                             : .smooth(duration: 0.48),
                         value: isPortraitArtworkExpanded
                     )
+                    .allowsHitTesting(false)
                 }
             }
-            .allowsHitTesting(false)
         }
         .coordinateSpace(
             name: NowPlayingPortraitCoordinateSpace.name
