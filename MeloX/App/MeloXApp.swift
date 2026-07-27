@@ -11,6 +11,7 @@ struct MeloXApp: App {
     @State private var cloud: CloudMusicStore
     @State private var downloads: DownloadStore
     @State private var player: PlayerStore
+    @State private var listenTogether: ListenTogetherStore
     @State private var lyrics: LyricsStore
     @State private var floatingLyrics: FloatingLyricsController
     @State private var lyricsNotifications:
@@ -42,6 +43,10 @@ struct MeloXApp: App {
                 library.recordRecentlyPlayed(song)
             }
         )
+        let listenTogether = ListenTogetherStore(
+            api: api,
+            player: player
+        )
         let lyrics = LyricsStore(api: api)
         let floatingLyrics = FloatingLyricsController(
             player: player,
@@ -54,6 +59,7 @@ struct MeloXApp: App {
         _cloud = State(initialValue: cloud)
         _downloads = State(initialValue: downloads)
         _player = State(initialValue: player)
+        _listenTogether = State(initialValue: listenTogether)
         _lyrics = State(initialValue: lyrics)
         _floatingLyrics = State(initialValue: floatingLyrics)
         _lyricsNotifications = State(
@@ -72,6 +78,7 @@ struct MeloXApp: App {
                 .environment(cloud)
                 .environment(downloads)
                 .environment(player)
+                .environment(listenTogether)
                 .environment(lyrics)
                 .environment(floatingLyrics)
                 .environment(lyricsNotifications)

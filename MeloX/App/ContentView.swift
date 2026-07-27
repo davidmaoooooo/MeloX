@@ -196,6 +196,7 @@ struct ContentView: View {
                         ?? "系统画中画暂时不可用。"
                 )
             }
+            .coordinateListenTogether()
             .appLaunchExperience()
     }
 

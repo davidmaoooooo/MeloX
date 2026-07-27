@@ -20,6 +20,13 @@ private struct LyricsLiveActivityPublicationSignature: Equatable {
     let durationMilliseconds: Int
 }
 
+private struct ListenTogetherSavedPlaybackOptions {
+    let repeatMode: RepeatMode
+    let wasShuffled: Bool
+    let autoplayEnabled: Bool
+    let autoMixEnabled: Bool
+}
+
 @MainActor
 @Observable
 final class PlayerStore {
@@ -31,6 +38,7 @@ final class PlayerStore {
     private(set) var isLoading = false
     private(set) var playbackIssue: PlaybackIssue?
     private(set) var volume: Double = 1
+    private(set) var isListenTogetherSessionActive = false
     private(set) var repeatMode: RepeatMode = .off
     private(set) var isAutoplayEnabled = false
     private(set) var isAutoMixEnabled = false
@@ -56,6 +64,15 @@ final class PlayerStore {
     }
     var queueModeBadgeSystemImage: String? {
         queueModeIndicator?.systemImage
+    }
+    var listenTogetherDisplaySongIDs: [Int] {
+        queue.map(\.id)
+    }
+    var listenTogetherRandomSongIDs: [Int] {
+        guard isShuffled else { return listenTogetherDisplaySongIDs }
+        return playbackQueue.persistedShuffleOrder.compactMap { index in
+            queue.indices.contains(index) ? queue[index].id : nil
+        }
     }
     var isAutoMixTransitioning: Bool {
         autoMixTransitionProgress != nil
@@ -153,6 +170,10 @@ final class PlayerStore {
     private var publishedLyricsLiveActivity:
         LyricsLiveActivityPublication?
 
+    @ObservationIgnored
+    private var listenTogetherSavedPlaybackOptions:
+        ListenTogetherSavedPlaybackOptions?
+
     init(
         api: NeteaseAPI,
         settings: AppSettings,
@@ -227,6 +248,129 @@ final class PlayerStore {
             autoplay: false,
             startAt: progress
         )
+    }
+
+    func beginListenTogetherSession() {
+        guard listenTogetherSavedPlaybackOptions == nil else { return }
+        listenTogetherSavedPlaybackOptions =
+            ListenTogetherSavedPlaybackOptions(
+                repeatMode: repeatMode,
+                wasShuffled: isShuffled,
+                autoplayEnabled: isAutoplayEnabled,
+                autoMixEnabled: isAutoMixEnabled
+            )
+        isListenTogetherSessionActive = true
+        repeatMode = .all
+        if isShuffled {
+            playbackQueue.toggleShuffle()
+        }
+        isAutoplayEnabled = false
+        isAutoMixEnabled = false
+        cancelAutoMixPreparation()
+        updateQueueModeIndicator()
+        persistSnapshot()
+    }
+
+    func endListenTogetherSession() {
+        guard let saved = listenTogetherSavedPlaybackOptions else {
+            return
+        }
+        listenTogetherSavedPlaybackOptions = nil
+        isListenTogetherSessionActive = false
+        repeatMode = saved.repeatMode
+        if isShuffled != saved.wasShuffled {
+            playbackQueue.toggleShuffle()
+        }
+        isAutoplayEnabled = saved.autoplayEnabled
+        isAutoMixEnabled = saved.autoMixEnabled
+        updateQueueModeIndicator()
+        persistSnapshot()
+        prepareAutoMixIfNeeded()
+    }
+
+    func synchronizeListenTogetherPlayback(
+        songs: [Song],
+        targetSongID: Int,
+        progress targetProgress: TimeInterval,
+        isPlaying shouldPlay: Bool,
+        shouldSeek: Bool,
+        playMode: String?
+    ) async {
+        guard !songs.isEmpty,
+              let targetIndex = songs.firstIndex(where: {
+                  $0.id == targetSongID
+              }) else {
+            return
+        }
+
+        applyListenTogetherPlayMode(playMode)
+        let queueChanged = songs.map(\.id) != queue.map(\.id)
+        let songChanged = currentSong?.id != targetSongID
+
+        if songChanged {
+            recordCurrentPlayback()
+        }
+        if queueChanged {
+            cancelAutoMixPreparation()
+            playbackQueue.replace(
+                with: songs,
+                startingAt: targetIndex
+            )
+            historySourceID = nil
+        } else if currentIndex != targetIndex {
+            _ = playbackQueue.select(index: targetIndex)
+        }
+
+        if songChanged || !engine.hasCurrentItem {
+            hasRecordedCurrentStart = false
+            await loadCurrentSong(
+                autoplay: shouldPlay,
+                startAt: max(targetProgress, 0)
+            )
+            return
+        }
+
+        currentSong = songs[targetIndex]
+        nowPlayingSession.setSong(
+            songs[targetIndex],
+            duration: duration,
+            queueIndex: currentIndex,
+            queueCount: queue.count,
+            lyricsDisplaySettings:
+                nowPlayingLyricsDisplaySettings
+        )
+
+        if shouldSeek,
+           abs(estimatedProgress() - targetProgress) > 0.35 {
+            seek(to: targetProgress)
+        }
+
+        if shouldPlay {
+            playbackIssue = nil
+            engine.play()
+        } else {
+            engine.pause()
+        }
+        updateNowPlayingState()
+        persistSnapshot()
+    }
+
+    private func applyListenTogetherPlayMode(_ playMode: String?) {
+        guard isListenTogetherSessionActive,
+              let mode = playMode?.uppercased() else {
+            return
+        }
+        if mode.contains("SINGLE") {
+            repeatMode = .one
+        } else if mode.contains("LOOP") {
+            repeatMode = .all
+        } else {
+            repeatMode = .off
+        }
+        if isShuffled {
+            playbackQueue.toggleShuffle()
+        }
+        updateQueueModeIndicator()
     }
 
     func play(
@@ -450,6 +594,7 @@ final class PlayerStore {
     }
 
     func cycleRepeatMode() {
+        guard !isListenTogetherSessionActive else { return }
         cancelAutoMixPreparation()
         switch repeatMode {
         case .off:
@@ -466,6 +611,7 @@ final class PlayerStore {
     }
 
     func toggleShuffle() {
+        guard !isListenTogetherSessionActive else { return }
         cancelAutoMixPreparation()
         playbackQueue.toggleShuffle()
         if isShuffled {
@@ -477,6 +623,7 @@ final class PlayerStore {
     }
 
     func toggleAutoplay() {
+        guard !isListenTogetherSessionActive else { return }
         isAutoplayEnabled.toggle()
         if isAutoplayEnabled {
             queueModeIndicator = .autoplay
@@ -492,10 +639,12 @@ final class PlayerStore {
     }
 
     func toggleAutoMix() {
+        guard !isListenTogetherSessionActive else { return }
         setAutoMixEnabled(!isAutoMixEnabled)
     }
 
     func setAutoMixEnabled(_ isEnabled: Bool) {
+        guard !isListenTogetherSessionActive else { return }
         guard isAutoMixEnabled != isEnabled else { return }
         isAutoMixEnabled = isEnabled
         if isEnabled {

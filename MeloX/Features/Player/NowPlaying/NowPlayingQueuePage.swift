@@ -262,6 +262,12 @@ private struct NowPlayingQueueModeControls: View {
                 action: toggleAutoMix
             )
         }
+        .disabled(player.isListenTogetherSessionActive)
+        .accessibilityHint(
+            player.isListenTogetherSessionActive
+                ? "一起听期间由房间统一管理播放模式"
+                : ""
+        )
     }
 
     private func modeButton(

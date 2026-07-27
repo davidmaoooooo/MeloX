@@ -126,9 +126,14 @@ struct NowPlayingArtworkPage: View {
 
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(song.name)
-                            .font(.title3.weight(.semibold))
-                            .lineLimit(1)
+                        HStack(spacing: 8) {
+                            Text(song.name)
+                                .font(.title3.weight(.semibold))
+                                .lineLimit(1)
+                                .layoutPriority(1)
+
+                            ListenTogetherNowPlayingBadge()
+                        }
 
                         Text(song.artistText)
                             .font(.title3)

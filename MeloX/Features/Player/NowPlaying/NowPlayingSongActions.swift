@@ -4,6 +4,7 @@ struct NowPlayingSongActions: View {
     @Environment(\.openMusicRoute) private var openMusicRoute
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
+    @Environment(ListenTogetherStore.self) private var listenTogether
 
     let song: Song
     var showsFavoriteButton = true
@@ -26,6 +27,10 @@ struct NowPlayingSongActions: View {
                     .presentationDragIndicator(.visible)
             case .comments(let selectedSong):
                 SongCommentsSheet(song: selectedSong)
+            case .listenTogether:
+                ListenTogetherView()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -91,6 +96,15 @@ struct NowPlayingSongActions: View {
                 )
             }
 
+            Button {
+                presentedSheet = .listenTogether
+            } label: {
+                Label(
+                    listenTogether.isInRoom ? "一起听房间" : "发起一起听",
+                    systemImage: "person.2.wave.2"
+                )
+            }
+
             Divider()
 
             Button {
@@ -139,6 +153,7 @@ struct NowPlayingSongActions: View {
 private enum NowPlayingSongSheet: Identifiable {
     case addToPlaylist(Song)
     case comments(Song)
+    case listenTogether
 
     var id: String {
         switch self {
@@ -146,6 +161,8 @@ private enum NowPlayingSongSheet: Identifiable {
             "add-to-playlist-\(song.id)"
         case .comments(let song):
             "comments-\(song.id)"
+        case .listenTogether:
+            "listen-together"
         }
     }
 }

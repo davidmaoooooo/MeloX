@@ -68,13 +68,18 @@ struct NowPlayingSongHeader: View {
                 .frame(width: artworkSize, height: artworkSize)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.name)
-                    .font(
-                        usesReferenceLayout
-                            ? .title3.weight(.semibold)
-                            : .headline
-                    )
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(song.name)
+                        .font(
+                            usesReferenceLayout
+                                ? .title3.weight(.semibold)
+                                : .headline
+                        )
+                        .lineLimit(1)
+                        .layoutPriority(1)
+
+                    ListenTogetherNowPlayingBadge()
+                }
 
                 Text(artistText)
                     .font(usesReferenceLayout ? .title3 : .subheadline)
@@ -133,9 +138,14 @@ struct NowPlayingLandscapeSongHeader: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(song.name)
-                    .font(.headline)
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(song.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+
+                    ListenTogetherNowPlayingBadge()
+                }
 
                 Text(song.artistText)
                     .font(.subheadline)
