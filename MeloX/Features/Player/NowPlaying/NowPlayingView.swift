@@ -7,6 +7,8 @@ enum NowPlayingPage: String, Hashable {
 }
 
 struct NowPlayingView: View {
+    private static let portraitHorizontalPadding: CGFloat = 32
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.accessibilityVoiceOverEnabled)
@@ -220,7 +222,7 @@ struct NowPlayingView: View {
                     portraitPlayerControlsLayer(for: song)
                 }
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, Self.portraitHorizontalPadding)
         .safeAreaPadding(.bottom, 3)
     }
 
@@ -416,7 +418,9 @@ struct NowPlayingView: View {
                         height: portraitArtworkFrame.height
                     )
                     .position(
-                        x: portraitArtworkFrame.midX,
+                        x:
+                            portraitArtworkFrame.midX
+                            + Self.portraitHorizontalPadding,
                         y: portraitArtworkFrame.midY
                     )
                     .animation(
@@ -428,7 +432,13 @@ struct NowPlayingView: View {
                     .allowsHitTesting(false)
                 }
             }
+            // Keep page-transition clipping vertically while allowing the
+            // expanded artwork to use the portrait layout's side margins.
             .clipped()
+            .padding(
+                .horizontal,
+                -Self.portraitHorizontalPadding
+            )
         }
         .coordinateSpace(
             name: NowPlayingPortraitCoordinateSpace.name
