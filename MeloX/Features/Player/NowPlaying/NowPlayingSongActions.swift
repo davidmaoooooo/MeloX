@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NowPlayingSongActions: View {
     @Environment(\.openMusicRoute) private var openMusicRoute
+    @Environment(AppSettings.self) private var settings
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
     @Environment(ListenTogetherStore.self) private var listenTogether
@@ -30,6 +31,10 @@ struct NowPlayingSongActions: View {
             case .listenTogether:
                 ListenTogetherView()
                     .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            case .beatNetDebug:
+                BeatNetDebugSheet()
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -136,6 +141,19 @@ struct NowPlayingSongActions: View {
                     )
                 }
             }
+
+            if settings.beatNetDebugEnabled {
+                Divider()
+
+                Button {
+                    presentedSheet = .beatNetDebug
+                } label: {
+                    Label(
+                        "BeatNet 调试",
+                        systemImage: "waveform.path.ecg"
+                    )
+                }
+            }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.title3.weight(.semibold))
@@ -154,6 +172,7 @@ private enum NowPlayingSongSheet: Identifiable {
     case addToPlaylist(Song)
     case comments(Song)
     case listenTogether
+    case beatNetDebug
 
     var id: String {
         switch self {
@@ -163,6 +182,8 @@ private enum NowPlayingSongSheet: Identifiable {
             "comments-\(song.id)"
         case .listenTogether:
             "listen-together"
+        case .beatNetDebug:
+            "beatnet-debug"
         }
     }
 }

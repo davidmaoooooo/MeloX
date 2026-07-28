@@ -51,7 +51,12 @@ struct NowPlayingView: View {
                         .ignoresSafeArea()
                 } else {
                     NowPlayingBackground(
-                        artworkURL: player.currentSong?.album?.artworkURL
+                        artworkURL:
+                            player.currentSong?
+                                .album?
+                                .artworkURL,
+                        beatTimeline:
+                            player.currentBeatTimeline
                     )
                 }
 
@@ -116,6 +121,9 @@ struct NowPlayingView: View {
         }
         .keepsScreenAwake(keepsPlayerScreenAwake)
         .preferredColorScheme(.dark)
+        .task(id: beatAnalysisTaskID) {
+            await loadBeatTimeline()
+        }
         .task(id: usesFullScreenTextPV) {
             guard usesFullScreenTextPV else {
                 showsTextPVLandscapeSuggestion = false
@@ -210,6 +218,34 @@ struct NowPlayingView: View {
         ) {
             registerAppleMusicControlsActivity()
         }
+    }
+
+    private var beatAnalysisTaskID:
+        NowPlayingBeatAnalysisTaskID {
+        NowPlayingBeatAnalysisTaskID(
+            songID: player.currentSong?.id,
+            isPlaybackReady: !player.isLoading,
+            isEnabled:
+                settings.playerBackgroundStyle
+                    == .flowingLight
+                    && settings
+                        .playerBackgroundBeatEffectsEnabled
+        )
+    }
+
+    private func loadBeatTimeline() async {
+        let taskID = beatAnalysisTaskID
+        guard taskID.isEnabled else {
+            player.clearCurrentSongBeatAnalysis()
+            return
+        }
+        guard
+              taskID.isPlaybackReady,
+              taskID.songID != nil else {
+            return
+        }
+
+        await player.analyzeCurrentSongBeats()
     }
 
     private func portraitContent(for song: Song) -> some View {
@@ -932,6 +968,12 @@ struct NowPlayingView: View {
         appleMusicControlsActivityGeneration &+= 1
     }
 
+}
+
+private struct NowPlayingBeatAnalysisTaskID: Equatable {
+    let songID: Int?
+    let isPlaybackReady: Bool
+    let isEnabled: Bool
 }
 
 private enum NowPlayingLyricsEntranceState: Hashable {

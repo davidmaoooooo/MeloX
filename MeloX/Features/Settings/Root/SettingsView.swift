@@ -144,6 +144,8 @@ struct SettingsView: View {
                 SkylineLyricsSettingsView()
             case .floatingLyrics:
                 FloatingLyricsSettingsView()
+            case .developer:
+                DeveloperSettingsView()
             case .about:
                 AboutView()
             }
@@ -174,6 +176,8 @@ struct SettingsView: View {
             downloads.totalByteCount.formatted(.byteCount(style: .file))
         case .general:
             settings.appearance.title
+        case .developer:
+            developerSettingsSummary
         case .about:
             Bundle.main.appVersion
         case .accountHome,
@@ -184,6 +188,12 @@ struct SettingsView: View {
              .floatingLyrics:
             nil
         }
+    }
+
+    private var developerSettingsSummary: String {
+        settings.beatNetDebugEnabled
+            ? "调试面板已开启"
+            : "调试面板已关闭"
     }
 
     private func resetPlayerSettings() {

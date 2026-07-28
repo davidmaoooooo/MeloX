@@ -12,6 +12,7 @@ enum SettingsRoute: Hashable {
     case downloads
     case skylineLyrics
     case floatingLyrics
+    case developer
     case about
 }
 
@@ -185,6 +186,21 @@ enum SettingsCatalog {
                         "发现",
                         "音乐库",
                         "搜索",
+                    ]
+                ),
+                SettingsCatalogItem(
+                    route: .developer,
+                    title: "开发者选项",
+                    subtitle: "BeatNet 分析与播放器调试工具",
+                    systemImage: "hammer",
+                    keywords: [
+                        "BeatNet",
+                        "节拍",
+                        "重拍",
+                        "Onset",
+                        "调试",
+                        "Core ML",
+                        "全曲分析",
                     ]
                 ),
                 SettingsCatalogItem(

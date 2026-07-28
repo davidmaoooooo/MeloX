@@ -8,13 +8,14 @@ struct PlayerAppearanceSettingsView: View {
 
         Form {
             Section {
-                valueSlider(
-                    title: "背景模糊",
-                    value: $settings.playerBackgroundBlur,
-                    range: 0...140,
-                    step: 5,
-                    valueText: "\(Int(settings.playerBackgroundBlur))"
-                )
+                Picker(
+                    "背景样式",
+                    selection: $settings.playerBackgroundStyle
+                ) {
+                    ForEach(PlayerBackgroundStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
 
                 valueSlider(
                     title: "背景色彩",
@@ -25,6 +26,35 @@ struct PlayerAppearanceSettingsView: View {
                         "\(Int(settings.playerBackgroundSaturation * 100))%"
                 )
 
+                if settings.playerBackgroundStyle == .flowingLight {
+                    valueSlider(
+                        title: "流动幅度",
+                        value:
+                            $settings
+                                .playerBackgroundMotionIntensity,
+                        range: 0.4...1.4,
+                        step: 0.1,
+                        valueText:
+                            "\(Int(settings.playerBackgroundMotionIntensity * 100))%"
+                    )
+
+                    Toggle(
+                        "重拍暗角",
+                        isOn:
+                            $settings
+                                .playerBackgroundBeatEffectsEnabled
+                    )
+                } else {
+                    valueSlider(
+                        title: "背景模糊",
+                        value: $settings.playerBackgroundBlur,
+                        range: 0...140,
+                        step: 5,
+                        valueText:
+                            "\(Int(settings.playerBackgroundBlur))"
+                    )
+                }
+
                 Toggle(
                     "暂停时缩小封面",
                     isOn: $settings.shrinksPausedArtwork
@@ -32,7 +62,7 @@ struct PlayerAppearanceSettingsView: View {
             } header: {
                 Text("背景与封面")
             } footer: {
-                Text("背景选项会实时生效；开启暂停缩小后，封面会在暂停时缩至 90%。")
+                Text(backgroundFooter)
             }
 
             Section {
@@ -52,6 +82,14 @@ struct PlayerAppearanceSettingsView: View {
         }
         .navigationTitle("播放器外观")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var backgroundFooter: String {
+        if settings.playerBackgroundStyle == .flowingLight {
+            "流动光影会从封面提取颜色；100% 是增强后的流动基准，速度和位移约为旧效果的 2 倍。开启“重拍暗角”后，Onset 达到 0.4 且 Beat 或 Downbeat 在前后 20 ms 内达到 0.4 时触发暗角；Downbeat 达到 0.6 时会略微加深。效果遵循系统的“减少动态效果”和“调暗闪烁光线”设置。"
+        } else {
+            "模糊封面保留原有背景效果。背景选项会实时生效。"
+        }
     }
 
     private func valueSlider(

@@ -33,6 +33,11 @@ enum MusicQuality: String, CaseIterable, Identifiable, Codable {
 @Observable
 final class AppSettings {
     static let defaultPlayerVolumeControlMode: PlayerVolumeControlMode = .system
+    static let defaultPlayerBackgroundStyle: PlayerBackgroundStyle =
+        .flowingLight
+    static let defaultPlayerBackgroundMotionIntensity = 1.0
+    static let defaultPlayerBackgroundBeatEffectsEnabled = false
+    static let defaultBeatNetDebugEnabled = false
     static let defaultSystemNowPlayingLyricsEnabled = true
     static let defaultSystemNowPlayingLyricsTitleFormat = "{歌词}"
     static let defaultSystemNowPlayingLyricsSubtitleFormat =
@@ -155,6 +160,12 @@ final class AppSettings {
         static let lastLibraryPage = "lastLibraryPage"
         static let area = "musicArea"
         static let showPlayCount = "showPlayCount"
+        static let playerBackgroundStyle = "playerBackgroundStyle"
+        static let playerBackgroundMotionIntensity =
+            "playerBackgroundMotionIntensity"
+        static let playerBackgroundBeatEffectsEnabled =
+            "playerBackgroundBeatEffectsEnabled"
+        static let beatNetDebugEnabled = "beatNetDebugEnabled"
         static let playerBackgroundBlur = "playerBackgroundBlur"
         static let playerBackgroundSaturation = "playerBackgroundSaturation"
         static let shrinksPausedArtwork = "shrinksPausedArtwork"
@@ -464,6 +475,42 @@ final class AppSettings {
 
     var showPlayCount: Bool {
         didSet { defaults.set(showPlayCount, forKey: Key.showPlayCount) }
+    }
+
+    var playerBackgroundStyle: PlayerBackgroundStyle {
+        didSet {
+            defaults.set(
+                playerBackgroundStyle.rawValue,
+                forKey: Key.playerBackgroundStyle
+            )
+        }
+    }
+
+    var playerBackgroundMotionIntensity: Double {
+        didSet {
+            defaults.set(
+                playerBackgroundMotionIntensity,
+                forKey: Key.playerBackgroundMotionIntensity
+            )
+        }
+    }
+
+    var playerBackgroundBeatEffectsEnabled: Bool {
+        didSet {
+            defaults.set(
+                playerBackgroundBeatEffectsEnabled,
+                forKey: Key.playerBackgroundBeatEffectsEnabled
+            )
+        }
+    }
+
+    var beatNetDebugEnabled: Bool {
+        didSet {
+            defaults.set(
+                beatNetDebugEnabled,
+                forKey: Key.beatNetDebugEnabled
+            )
+        }
     }
 
     var playerBackgroundBlur: Double {
@@ -1022,6 +1069,24 @@ final class AppSettings {
         ) ?? .songs
         musicArea = defaults.string(forKey: Key.area) ?? "ALL"
         showPlayCount = defaults.object(forKey: Key.showPlayCount) as? Bool ?? true
+        playerBackgroundStyle = PlayerBackgroundStyle(
+            rawValue: defaults.string(
+                forKey: Key.playerBackgroundStyle
+            ) ?? ""
+        ) ?? Self.defaultPlayerBackgroundStyle
+        let storedPlayerBackgroundMotionIntensity = defaults.object(
+            forKey: Key.playerBackgroundMotionIntensity
+        ) as? Double ?? Self.defaultPlayerBackgroundMotionIntensity
+        playerBackgroundMotionIntensity = min(
+            max(storedPlayerBackgroundMotionIntensity, 0.4),
+            1.4
+        )
+        playerBackgroundBeatEffectsEnabled = defaults.object(
+            forKey: Key.playerBackgroundBeatEffectsEnabled
+        ) as? Bool ?? Self.defaultPlayerBackgroundBeatEffectsEnabled
+        beatNetDebugEnabled = defaults.object(
+            forKey: Key.beatNetDebugEnabled
+        ) as? Bool ?? Self.defaultBeatNetDebugEnabled
         playerBackgroundBlur = defaults.object(forKey: Key.playerBackgroundBlur) as? Double ?? 90
         playerBackgroundSaturation = defaults.object(forKey: Key.playerBackgroundSaturation) as? Double ?? 0.82
         shrinksPausedArtwork = defaults.object(forKey: Key.shrinksPausedArtwork) as? Bool ?? true
@@ -1404,6 +1469,14 @@ final class AppSettings {
             Self.defaultLyricsLiveActivityScrollPause
         equalizer.reset()
         autoMix.reset()
+        playerBackgroundStyle =
+            Self.defaultPlayerBackgroundStyle
+        playerBackgroundMotionIntensity =
+            Self.defaultPlayerBackgroundMotionIntensity
+        playerBackgroundBeatEffectsEnabled =
+            Self.defaultPlayerBackgroundBeatEffectsEnabled
+        beatNetDebugEnabled =
+            Self.defaultBeatNetDebugEnabled
         playerBackgroundBlur = 90
         playerBackgroundSaturation = 0.82
         shrinksPausedArtwork = true

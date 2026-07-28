@@ -23,7 +23,7 @@ final class AutoMixPlaybackCoordinator {
     private let api: NeteaseAPI
     private let downloads: DownloadStore
     private let engine: AudioPlaybackEngine
-    private let analyzer = AutoMixAudioAnalyzer()
+    private let analyzer: AutoMixAudioAnalyzer
 
     private var preparationTask: Task<Void, Never>?
     private var preparationGeneration = 0
@@ -34,11 +34,13 @@ final class AutoMixPlaybackCoordinator {
     init(
         api: NeteaseAPI,
         downloads: DownloadStore,
-        engine: AudioPlaybackEngine
+        engine: AudioPlaybackEngine,
+        analyzer: AutoMixAudioAnalyzer
     ) {
         self.api = api
         self.downloads = downloads
         self.engine = engine
+        self.analyzer = analyzer
         bindEngine()
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 private enum LyricsLiveActivityPublication: Equatable {
     case inactive
@@ -30,6 +31,13 @@ private struct ListenTogetherSavedPlaybackOptions {
 @MainActor
 @Observable
 final class PlayerStore {
+    private static let beatAnalysisLogger = Logger(
+        subsystem:
+            Bundle.main.bundleIdentifier
+                ?? "MeloX",
+        category: "BeatNet"
+    )
+
     private(set) var currentSong: Song?
     private(set) var isPlaying = false
     private(set) var progress: TimeInterval = 0
@@ -48,6 +56,10 @@ final class PlayerStore {
     private(set) var autoMixIncomingSongName: String?
     private(set) var queueModeIndicator:
         QueuePlaybackModeIndicator?
+    private(set) var currentBeatTimeline:
+        PlaybackBeatTimeline?
+    private(set) var beatAnalysisStatus:
+        PlaybackBeatAnalysisStatus = .idle
 
     private var playbackQueue = PlaybackQueue()
 
@@ -101,6 +113,9 @@ final class PlayerStore {
     private let engine: AudioPlaybackEngine
 
     @ObservationIgnored
+    private let beatAnalyzer: AutoMixAudioAnalyzer
+
+    @ObservationIgnored
     private let autoMixCoordinator:
         AutoMixPlaybackCoordinator
 
@@ -123,6 +138,13 @@ final class PlayerStore {
 
     @ObservationIgnored
     private var loadGeneration = 0
+
+    @ObservationIgnored
+    private var beatAnalysisGeneration = 0
+
+    @ObservationIgnored
+    private var beatAnalysisTask:
+        Task<Void, Never>?
 
     @ObservationIgnored
     private var isResolvingSource = false
@@ -196,10 +218,13 @@ final class PlayerStore {
             equalizerConfiguration: settings.equalizer.configuration
         )
         self.engine = engine
+        let beatAnalyzer = AutoMixAudioAnalyzer()
+        self.beatAnalyzer = beatAnalyzer
         autoMixCoordinator = AutoMixPlaybackCoordinator(
             api: api,
             downloads: downloads,
-            engine: engine
+            engine: engine,
+            analyzer: beatAnalyzer
         )
         nowPlayingSession = NowPlayingSession(
             players: engine.nowPlayingPlayers
@@ -576,6 +601,132 @@ final class PlayerStore {
         return maximum > 0 ? min(estimated, maximum) : estimated
     }
 
+    func beatDebugSnapshot(
+        at date: Date = Date()
+    ) -> PlaybackBeatDebugSnapshot? {
+        currentBeatTimeline?.debugSnapshot(
+            at: estimatedProgress(at: date)
+        )
+    }
+
+    func clearCurrentSongBeatAnalysis() {
+        resetBeatAnalysis()
+    }
+
+    @discardableResult
+    func analyzeCurrentSongBeats() async -> PlaybackBeatTimeline? {
+        guard let song = currentSong,
+              let source = currentPlaybackSource else {
+            currentBeatTimeline = nil
+            beatAnalysisStatus = .idle
+            return nil
+        }
+        if let currentBeatTimeline {
+            return currentBeatTimeline
+        }
+        if case .analyzing = beatAnalysisStatus {
+            return nil
+        }
+
+        beatAnalysisGeneration += 1
+        let generation = beatAnalysisGeneration
+        let songID = song.id
+        beatAnalysisStatus = .analyzing
+        let request = AutoMixAnalysisRequest(
+            songID: songID,
+            source: source,
+            duration: max(
+                duration,
+                TimeInterval(song.durationMS) / 1_000
+            ),
+            isDownloaded: isUsingDownloadedSource
+        )
+
+        do {
+            let analysis = try await beatAnalyzer.analyzeFullTrack(
+                request
+            )
+            try Task.checkCancellation()
+            guard generation == beatAnalysisGeneration,
+                  currentSong?.id == songID,
+                  currentPlaybackSource == source else {
+                return nil
+            }
+            guard let timeline = PlaybackBeatTimeline(
+                analysis: analysis
+            ) else {
+                throw AutoMixAnalysisError
+                    .invalidModelOutput
+            }
+            currentBeatTimeline = timeline
+            beatAnalysisStatus = .ready(
+                bpm: timeline.bpm,
+                confidence: timeline.confidence
+            )
+            return timeline
+        } catch is CancellationError {
+            guard generation == beatAnalysisGeneration else {
+                return nil
+            }
+            restoreBeatAnalysisStatus()
+            return nil
+        } catch {
+            guard generation == beatAnalysisGeneration,
+                  currentSong?.id == songID,
+                  currentPlaybackSource == source else {
+                return nil
+            }
+            beatAnalysisStatus = .failed(
+                message: error.localizedDescription
+            )
+            Self.beatAnalysisLogger.error(
+                "Beat analysis failed for song \(songID, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
+    }
+
+    private func resetBeatAnalysis() {
+        beatAnalysisTask?.cancel()
+        beatAnalysisTask = nil
+        beatAnalysisGeneration += 1
+        currentBeatTimeline = nil
+        beatAnalysisStatus = .idle
+    }
+
+    private func scheduleBeatAnalysisIfNeeded() {
+        guard settings.playerBackgroundStyle
+            == .flowingLight,
+            settings
+                .playerBackgroundBeatEffectsEnabled,
+            currentSong != nil,
+            currentPlaybackSource != nil,
+            currentBeatTimeline == nil else {
+            return
+        }
+        if case .analyzing = beatAnalysisStatus {
+            return
+        }
+
+        beatAnalysisTask?.cancel()
+        beatAnalysisTask = Task {
+            [weak self] in
+            await self?.analyzeCurrentSongBeats()
+        }
+    }
+
+    private func restoreBeatAnalysisStatus() {
+        if let currentBeatTimeline {
+            beatAnalysisStatus = .ready(
+                bpm: currentBeatTimeline.bpm,
+                confidence:
+                    currentBeatTimeline.confidence
+            )
+        } else {
+            beatAnalysisStatus = .idle
+        }
+    }
+
     func setVolume(_ value: Double) {
         volume = min(max(value, 0), 1)
         applyVolumeControlMode()
@@ -675,6 +826,7 @@ final class PlayerStore {
         loadGeneration += 1
         let generation = loadGeneration
         currentSong = song
+        resetBeatAnalysis()
         progress = max(0, startAt)
         lastProgressUpdateDate = Date()
         duration = TimeInterval(song.durationMS) / 1_000
@@ -809,6 +961,7 @@ final class PlayerStore {
                 self.currentLoadShouldAutoplay = true
                 self.playbackIssue = nil
                 self.recordCurrentPlaybackStartIfNeeded()
+                self.scheduleBeatAnalysisIfNeeded()
                 self.prepareAutoMixIfNeeded()
             }
             self.lastProgressUpdateDate = Date()
@@ -1341,6 +1494,7 @@ final class PlayerStore {
 
         loadGeneration += 1
         currentSong = context.incomingSong
+        resetBeatAnalysis()
         currentPlaybackSource = context.source
         isUsingDownloadedSource =
             context.sourceIsDownloaded
@@ -1377,6 +1531,7 @@ final class PlayerStore {
             forceLyricsLiveActivity: true
         )
         persistSnapshot()
+        scheduleBeatAnalysisIfNeeded()
         prepareAutoMixIfNeeded()
     }
 }

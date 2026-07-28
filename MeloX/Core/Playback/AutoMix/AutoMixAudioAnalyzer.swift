@@ -16,6 +16,11 @@ nonisolated struct AutoMixTrackAnalysis: Sendable {
     let downbeats: [TimeInterval]
     let regionStart: TimeInterval
     let normalizedEnergy: [Float]
+    let modelBeatActivations: [Float]
+    let modelDownbeatActivations: [Float]
+    let featureStatistics: BeatNetFeatureStatistics
+    let finalAllZeroSegmentCount: Int
+    let analyzedSegmentCount: Int
 
     func energy(at absoluteTime: TimeInterval) -> Float {
         let relativeTime = absoluteTime - regionStart
@@ -26,6 +31,75 @@ nonisolated struct AutoMixTrackAnalysis: Sendable {
             return 0
         }
         return normalizedEnergy[frame]
+    }
+}
+
+nonisolated struct BeatNetFeatureStatistics:
+    Equatable,
+    Sendable
+{
+    let maximum: Float
+    let mean: Float
+    let nonzeroValueCount: Int
+    let finiteValueCount: Int
+    let valueCount: Int
+
+    init(values: [Float]) {
+        var maximum: Float = 0
+        var sum: Double = 0
+        var nonzeroValueCount = 0
+        var finiteValueCount = 0
+
+        for value in values where value.isFinite {
+            maximum = max(maximum, value)
+            sum += Double(value)
+            finiteValueCount += 1
+            if abs(value) > 0.000_001 {
+                nonzeroValueCount += 1
+            }
+        }
+
+        self.maximum = maximum
+        mean =
+            finiteValueCount > 0
+            ? Float(sum / Double(finiteValueCount))
+            : 0
+        self.nonzeroValueCount = nonzeroValueCount
+        self.finiteValueCount = finiteValueCount
+        valueCount = values.count
+    }
+
+    init(merging statistics: [Self]) {
+        maximum =
+            statistics
+                .map(\.maximum)
+                .max()
+                ?? 0
+        nonzeroValueCount =
+            statistics.reduce(0) {
+                $0 + $1.nonzeroValueCount
+            }
+        finiteValueCount =
+            statistics.reduce(0) {
+                $0 + $1.finiteValueCount
+            }
+        valueCount =
+            statistics.reduce(0) {
+                $0 + $1.valueCount
+            }
+        let weightedSum =
+            statistics.reduce(0.0) {
+                $0
+                    + Double($1.mean)
+                        * Double($1.finiteValueCount)
+            }
+        mean =
+            finiteValueCount > 0
+            ? Float(
+                weightedSum
+                    / Double(finiteValueCount)
+            )
+            : 0
     }
 }
 
@@ -41,6 +115,7 @@ nonisolated enum AutoMixAnalysisError: LocalizedError {
     case readerFailed(Error?)
     case invalidAudioBuffer
     case invalidModelOutput
+    case invalidRemoteResponse
 
     var errorDescription: String? {
         switch self {
@@ -56,6 +131,8 @@ nonisolated enum AutoMixAnalysisError: LocalizedError {
             "歌曲解码结果无法用于分析。"
         case .invalidModelOutput:
             "BeatNet 返回了无效结果。"
+        case .invalidRemoteResponse:
+            "无法下载用于 BeatNet 分析的歌曲音频。"
         }
     }
 }
@@ -64,6 +141,7 @@ actor AutoMixAudioAnalyzer {
     private enum Region: Hashable {
         case head
         case tail(durationMilliseconds: Int)
+        case window(startMilliseconds: Int)
     }
 
     private struct CacheKey: Hashable {
@@ -71,12 +149,39 @@ actor AutoMixAudioAnalyzer {
         let region: Region
     }
 
+    private struct FullTrackCacheKey: Hashable {
+        let songID: Int
+        let durationMilliseconds: Int
+    }
+
     private var cachedAnalyses: [CacheKey: AutoMixTrackAnalysis] = [:]
+    private var cachedFullTrackAnalyses:
+        [FullTrackCacheKey: AutoMixTrackAnalysis] = [:]
+    private var stagedSourceURLs: [Int: URL] = [:]
+    private var stagedSourceOrder: [Int] = []
     private var model: MLModel?
     private let featureExtractor: BeatNetFeatureExtractor
+    private let stagingDirectory: URL
 
     init() {
         featureExtractor = try! BeatNetFeatureExtractor()
+        stagingDirectory =
+            FileManager.default.temporaryDirectory
+                .appending(
+                    path:
+                        "MeloX-BeatNet-\(UUID().uuidString)",
+                    directoryHint: .isDirectory
+                )
+        try? FileManager.default.createDirectory(
+            at: stagingDirectory,
+            withIntermediateDirectories: true
+        )
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(
+            at: stagingDirectory
+        )
     }
 
     func analyzePair(
@@ -102,8 +207,85 @@ actor AutoMixAudioAnalyzer {
         )
     }
 
+    func analyzeFullTrack(
+        _ request: AutoMixAnalysisRequest
+    ) async throws -> AutoMixTrackAnalysis {
+        let duration = max(request.duration, 0)
+        let cacheKey = FullTrackCacheKey(
+            songID: request.songID,
+            durationMilliseconds: Int(
+                (duration * 1_000).rounded()
+            )
+        )
+        if let cached =
+            cachedFullTrackAnalyses[cacheKey] {
+            return cached
+        }
+
+        if !request.source.url.isFileURL {
+            _ = try await stagedSourceURL(
+                for: request
+            )
+            try Task.checkCancellation()
+        }
+
+        let windowDuration =
+            BeatNetFeatureExtractor.windowDuration
+        let segmentCount = max(
+            Int(
+                ceil(
+                    max(duration, 0.1)
+                        / windowDuration
+                )
+            ),
+            1
+        )
+        var segments: [AutoMixTrackAnalysis] = []
+        segments.reserveCapacity(segmentCount)
+
+        for segmentIndex in 0..<segmentCount {
+            try Task.checkCancellation()
+            let startTime =
+                Double(segmentIndex)
+                    * windowDuration
+            let region: Region =
+                segmentIndex == 0
+                ? .head
+                : .window(
+                    startMilliseconds: Int(
+                        (startTime * 1_000)
+                            .rounded()
+                    )
+                )
+            segments.append(
+                try await analyze(
+                    request,
+                    region: region
+                )
+            )
+        }
+
+        let analysis = mergeFullTrackSegments(
+            segments,
+            duration: duration
+        )
+        cachedFullTrackAnalyses[cacheKey] =
+            analysis
+        return analysis
+    }
+
     func clearCache() {
         cachedAnalyses.removeAll()
+        cachedFullTrackAnalyses.removeAll()
+        stagedSourceURLs.removeAll()
+        stagedSourceOrder.removeAll()
+        try? FileManager.default.removeItem(
+            at: stagingDirectory
+        )
+        try? FileManager.default.createDirectory(
+            at: stagingDirectory,
+            withIntermediateDirectories: true
+        )
     }
 
     private func analyze(
@@ -128,9 +310,13 @@ actor AutoMixAudioAnalyzer {
                     - BeatNetFeatureExtractor.windowDuration,
                 0
             )
+        case .window(let startMilliseconds):
+            regionStart =
+                TimeInterval(startMilliseconds)
+                    / 1_000
         }
         let samples = try await decodeSamples(
-            from: request.source.url,
+            for: request,
             startTime: regionStart,
             duration: min(
                 BeatNetFeatureExtractor.windowDuration,
@@ -143,10 +329,166 @@ actor AutoMixAudioAnalyzer {
         let analysis = BeatNetTemporalDecoder.decode(
             activations: activations,
             energy: features.normalizedEnergy,
+            featureStatistics:
+                BeatNetFeatureStatistics(
+                    values: features.values
+                ),
+            finalAllZeroSegmentCount:
+                outputIsAllZero(activations)
+                    ? 1
+                    : 0,
+            analyzedSegmentCount: 1,
             regionStart: regionStart
         )
         cachedAnalyses[cacheKey] = analysis
         return analysis
+    }
+
+    private func mergeFullTrackSegments(
+        _ segments: [AutoMixTrackAnalysis],
+        duration: TimeInterval
+    ) -> AutoMixTrackAnalysis {
+        let framesPerSecond = 50.0
+        let frameCount = max(
+            Int(
+                ceil(
+                    max(duration, 0.02)
+                        * framesPerSecond
+                )
+            ),
+            1
+        )
+        var energy = Array(
+            repeating: Float.zero,
+            count: frameCount
+        )
+        var modelBeatActivations = energy
+        var modelDownbeatActivations = energy
+        var beats: [TimeInterval] = []
+        var downbeats: [TimeInterval] = []
+        var bpmWeightedSum = 0.0
+        var bpmWeight = 0.0
+        var confidenceWeightedSum = 0.0
+        var confidenceWeight = 0.0
+
+        for segment in segments {
+            let startFrame = Int(
+                (
+                    segment.regionStart
+                        * framesPerSecond
+                ).rounded()
+            )
+            copy(
+                segment.normalizedEnergy,
+                into: &energy,
+                at: startFrame
+            )
+            copy(
+                segment.modelBeatActivations,
+                into: &modelBeatActivations,
+                at: startFrame
+            )
+            copy(
+                segment.modelDownbeatActivations,
+                into: &modelDownbeatActivations,
+                at: startFrame
+            )
+            let segmentEnd = min(
+                segment.regionStart
+                    + BeatNetFeatureExtractor
+                        .windowDuration,
+                duration
+            )
+            beats.append(
+                contentsOf:
+                    segment.beats.filter {
+                        $0 >= segment.regionStart
+                            && $0 < segmentEnd
+                    }
+            )
+            downbeats.append(
+                contentsOf:
+                    segment.downbeats.filter {
+                        $0 >= segment.regionStart
+                            && $0 < segmentEnd
+                    }
+            )
+
+            let coveredDuration = max(
+                segmentEnd - segment.regionStart,
+                0
+            )
+            let confidence =
+                min(max(segment.confidence, 0), 1)
+            let localBPMWeight =
+                coveredDuration
+                    * (0.25 + confidence * 0.75)
+            bpmWeightedSum +=
+                segment.bpm * localBPMWeight
+            bpmWeight += localBPMWeight
+            confidenceWeightedSum +=
+                confidence * coveredDuration
+            confidenceWeight += coveredDuration
+        }
+
+        return AutoMixTrackAnalysis(
+            bpm:
+                bpmWeight > 0
+                ? bpmWeightedSum / bpmWeight
+                : segments.first?.bpm ?? 120,
+            confidence:
+                confidenceWeight > 0
+                ? confidenceWeightedSum
+                    / confidenceWeight
+                : segments.first?.confidence ?? 0,
+            beats: beats.sorted(),
+            downbeats: downbeats.sorted(),
+            regionStart: 0,
+            normalizedEnergy: energy,
+            modelBeatActivations:
+                modelBeatActivations,
+            modelDownbeatActivations:
+                modelDownbeatActivations,
+            featureStatistics:
+                BeatNetFeatureStatistics(
+                    merging:
+                        segments.map(
+                            \.featureStatistics
+                        )
+                ),
+            finalAllZeroSegmentCount:
+                segments.reduce(0) {
+                    $0
+                        + $1
+                            .finalAllZeroSegmentCount
+                },
+            analyzedSegmentCount:
+                segments.reduce(0) {
+                    $0 + $1.analyzedSegmentCount
+                }
+        )
+    }
+
+    private func copy(
+        _ source: [Float],
+        into destination: inout [Float],
+        at startIndex: Int
+    ) {
+        guard startIndex >= 0,
+              startIndex < destination.count else {
+            return
+        }
+        let count = min(
+            source.count,
+            destination.count - startIndex
+        )
+        guard count > 0 else {
+            return
+        }
+        destination.replaceSubrange(
+            startIndex..<(startIndex + count),
+            with: source.prefix(count)
+        )
     }
 
     private func loadModel() throws -> MLModel {
@@ -160,7 +502,7 @@ actor AutoMixAudioAnalyzer {
             throw AutoMixAnalysisError.modelMissing
         }
         let configuration = MLModelConfiguration()
-        configuration.computeUnits = .all
+        configuration.computeUnits = .cpuOnly
         let loadedModel = try MLModel(
             contentsOf: modelURL,
             configuration: configuration
@@ -171,7 +513,9 @@ actor AutoMixAudioAnalyzer {
 
     private func predict(
         _ features: [Float]
-    ) throws -> [(beat: Float, downbeat: Float)] {
+    ) throws -> [
+        (beat: Float, downbeat: Float)
+    ] {
         let expectedCount =
             BeatNetFeatureExtractor.frameCount
                 * BeatNetFeatureExtractor.featureCount
@@ -202,11 +546,31 @@ actor AutoMixAudioAnalyzer {
         let provider = try MLDictionaryFeatureProvider(
             dictionary: ["features": input]
         )
-        let prediction = try loadModel().prediction(from: provider)
+        return try activations(
+            from: loadModel(),
+            provider: provider
+        )
+    }
+
+    private func activations(
+        from model: MLModel,
+        provider: MLFeatureProvider
+    ) throws -> [
+        (beat: Float, downbeat: Float)
+    ] {
+        let prediction = try model.prediction(
+            from: provider
+        )
         guard let output = prediction.featureValue(
             for: "activations"
         )?.multiArrayValue,
-              output.shape.count == 3 else {
+              output.shape.map(\.intValue)
+                == [
+                    1,
+                    BeatNetFeatureExtractor
+                        .frameCount,
+                    2,
+                ] else {
             throw AutoMixAnalysisError.invalidModelOutput
         }
         var activations: [(Float, Float)] = []
@@ -231,6 +595,157 @@ actor AutoMixAudioAnalyzer {
             activations.append((beat, downbeat))
         }
         return activations
+    }
+
+    private func outputIsAllZero(
+        _ activations: [
+            (beat: Float, downbeat: Float)
+        ]
+    ) -> Bool {
+        !activations.contains { activation in
+            (
+                activation.beat.isFinite
+                    && activation.beat > 0
+            )
+                || (
+                    activation.downbeat.isFinite
+                        && activation.downbeat > 0
+                )
+        }
+    }
+
+    private func decodeSamples(
+        for request: AutoMixAnalysisRequest,
+        startTime: TimeInterval,
+        duration: TimeInterval
+    ) async throws -> [Float] {
+        if let stagedURL =
+            stagedSourceURLs[request.songID],
+           FileManager.default.fileExists(
+               atPath: stagedURL.path
+           ) {
+            return try await decodeSamples(
+                from: stagedURL,
+                startTime: startTime,
+                duration: duration
+            )
+        }
+
+        do {
+            return try await decodeSamples(
+                from: request.source.url,
+                startTime: startTime,
+                duration: duration
+            )
+        } catch {
+            try Task.checkCancellation()
+            guard !request.source.url.isFileURL else {
+                throw error
+            }
+
+            let stagedURL = try await stagedSourceURL(
+                for: request
+            )
+            try Task.checkCancellation()
+            return try await decodeSamples(
+                from: stagedURL,
+                startTime: startTime,
+                duration: duration
+            )
+        }
+    }
+
+    private func stagedSourceURL(
+        for request: AutoMixAnalysisRequest
+    ) async throws -> URL {
+        if let cachedURL =
+            stagedSourceURLs[request.songID],
+           FileManager.default.fileExists(
+               atPath: cachedURL.path
+           ) {
+            return cachedURL
+        }
+
+        let temporaryURL: URL
+        let response: URLResponse
+        do {
+            (temporaryURL, response) =
+                try await URLSession.shared.download(
+                    from: request.source.url
+                )
+        } catch let error as URLError
+            where error.code == .cancelled {
+            throw CancellationError()
+        }
+        try Task.checkCancellation()
+
+        if let httpResponse =
+            response as? HTTPURLResponse,
+           !(200..<300).contains(
+               httpResponse.statusCode
+           ) {
+            throw AutoMixAnalysisError
+                .invalidRemoteResponse
+        }
+
+        try FileManager.default.createDirectory(
+            at: stagingDirectory,
+            withIntermediateDirectories: true
+        )
+        let baseURL = stagingDirectory.appending(
+            path:
+                "\(request.songID)-\(UUID().uuidString)",
+            directoryHint: .notDirectory
+        )
+        let sourceExtension =
+            request.source.url.pathExtension
+        let format = request.source.format ?? ""
+        let pathExtension = sourceExtension.isEmpty
+            ? format
+            : sourceExtension
+        let destinationURL = pathExtension.isEmpty
+            ? baseURL
+            : baseURL.appendingPathExtension(
+                pathExtension
+            )
+
+        do {
+            try FileManager.default.moveItem(
+                at: temporaryURL,
+                to: destinationURL
+            )
+            try Task.checkCancellation()
+        } catch {
+            try? FileManager.default.removeItem(
+                at: destinationURL
+            )
+            throw error
+        }
+
+        stagedSourceURLs[request.songID] =
+            destinationURL
+        stagedSourceOrder.removeAll {
+            $0 == request.songID
+        }
+        stagedSourceOrder.append(request.songID)
+        removeExpiredStagedSources()
+        return destinationURL
+    }
+
+    private func removeExpiredStagedSources() {
+        while stagedSourceOrder.count > 3 {
+            let songID =
+                stagedSourceOrder.removeFirst()
+            guard let url =
+                stagedSourceURLs.removeValue(
+                    forKey: songID
+                ) else {
+                continue
+            }
+            try? FileManager.default.removeItem(
+                at: url
+            )
+        }
     }
 
     private func decodeSamples(
@@ -276,6 +791,11 @@ actor AutoMixAudioAnalyzer {
         reader.add(output)
         guard reader.startReading() else {
             throw AutoMixAnalysisError.readerCouldNotStart
+        }
+        defer {
+            if reader.status == .reading {
+                reader.cancelReading()
+            }
         }
 
         let maximumSampleCount =
@@ -325,6 +845,10 @@ actor AutoMixAudioAnalyzer {
                 )
             )
         }
+        try Task.checkCancellation()
+        if reader.status == .cancelled {
+            throw CancellationError()
+        }
         if reader.status == .failed {
             throw AutoMixAnalysisError.readerFailed(
                 reader.error
@@ -343,6 +867,9 @@ nonisolated private enum BeatNetTemporalDecoder {
     static func decode(
         activations: [(beat: Float, downbeat: Float)],
         energy: [Float],
+        featureStatistics: BeatNetFeatureStatistics,
+        finalAllZeroSegmentCount: Int,
+        analyzedSegmentCount: Int,
         regionStart: TimeInterval
     ) -> AutoMixTrackAnalysis {
         let beatActivations = activations.map(\.beat)
@@ -401,7 +928,17 @@ nonisolated private enum BeatNetTemporalDecoder {
                 regionStart + Double($0) / framesPerSecond
             },
             regionStart: regionStart,
-            normalizedEnergy: energy
+            normalizedEnergy: energy,
+            modelBeatActivations:
+                beatActivations,
+            modelDownbeatActivations:
+                downbeatActivations,
+            featureStatistics:
+                featureStatistics,
+            finalAllZeroSegmentCount:
+                finalAllZeroSegmentCount,
+            analyzedSegmentCount:
+                analyzedSegmentCount
         )
     }
 
