@@ -4,6 +4,11 @@ import Foundation
 nonisolated struct BeatNetFeatures: Sendable {
     let values: [Float]
     let normalizedEnergy: [Float]
+    let loudnessDecibels: [Float]
+    let lowFrequencyRatios: [Float]
+    let midFrequencyRatios: [Float]
+    let highFrequencyRatios: [Float]
+    let spectralNovelty: [Float]
 }
 
 nonisolated enum BeatNetFeatureExtractorError: Error {
@@ -30,6 +35,7 @@ nonisolated final class BeatNetFeatureExtractor {
     private let fftSetup: FFTSetup
     private let window: [Float]
     private let filters: [[WeightedBin]]
+    private let filterCenterFrequencies: [Double]
 
     init() throws {
         let log2Size = vDSP_Length(log2(Float(Self.fftSize)))
@@ -46,7 +52,10 @@ nonisolated final class BeatNetFeatureExtractor {
             count: Self.frameSize,
             isHalfWindow: false
         )
-        filters = Self.makeFilters()
+        let filterBank = Self.makeFilters()
+        filters = filterBank.filters
+        filterCenterFrequencies =
+            filterBank.centerFrequencies
     }
 
     deinit {
@@ -74,6 +83,10 @@ nonisolated final class BeatNetFeatureExtractor {
             repeating: 0,
             count: Self.frameCount
         )
+        var lowFrequencyRatios = rawEnergy
+        var midFrequencyRatios = rawEnergy
+        var highFrequencyRatios = rawEnergy
+        var rawSpectralFlux = rawEnergy
         var previousBands = [Float](
             repeating: 0,
             count: Self.bandCount
@@ -124,6 +137,13 @@ nonisolated final class BeatNetFeatureExtractor {
 
             let featureOffset =
                 frameIndex * Self.featureCount
+            var lowMagnitude: Float = 0
+            var midMagnitude: Float = 0
+            var highMagnitude: Float = 0
+            var lowBandCount = 0
+            var midBandCount = 0
+            var highBandCount = 0
+            var spectralFlux: Float = 0
             for bandIndex in 0..<Self.bandCount {
                 var filteredMagnitude: Float = 0
                 for weightedBin in filters[bandIndex] {
@@ -133,25 +153,80 @@ nonisolated final class BeatNetFeatureExtractor {
                 }
                 let logarithmicMagnitude =
                     log10f(filteredMagnitude + 1)
+                let positiveDelta = max(
+                    logarithmicMagnitude
+                        - previousBands[bandIndex],
+                    0
+                )
                 featureValues[featureOffset + bandIndex] =
                     logarithmicMagnitude
                 featureValues[
                     featureOffset
                         + Self.bandCount
                         + bandIndex
-                ] = max(
-                    logarithmicMagnitude
-                        - previousBands[bandIndex],
-                    0
-                )
+                ] = positiveDelta
                 previousBands[bandIndex] =
                     logarithmicMagnitude
+                spectralFlux += positiveDelta
+
+                switch filterCenterFrequencies[bandIndex] {
+                case ..<250:
+                    lowMagnitude += logarithmicMagnitude
+                    lowBandCount += 1
+                case 250..<4_000:
+                    midMagnitude += logarithmicMagnitude
+                    midBandCount += 1
+                default:
+                    highMagnitude += logarithmicMagnitude
+                    highBandCount += 1
+                }
             }
+
+            let lowAverage =
+                lowMagnitude
+                    / Float(max(lowBandCount, 1))
+            let midAverage =
+                midMagnitude
+                    / Float(max(midBandCount, 1))
+            let highAverage =
+                highMagnitude
+                    / Float(max(highBandCount, 1))
+            let spectralTotal = max(
+                lowAverage + midAverage + highAverage,
+                .leastNonzeroMagnitude
+            )
+            lowFrequencyRatios[frameIndex] =
+                lowAverage / spectralTotal
+            midFrequencyRatios[frameIndex] =
+                midAverage / spectralTotal
+            highFrequencyRatios[frameIndex] =
+                highAverage / spectralTotal
+            rawSpectralFlux[frameIndex] =
+                frameIndex == 0
+                ? 0
+                : spectralFlux
         }
 
+        let normalizedEnergy =
+            Self.normalizeEnergy(rawEnergy)
         return BeatNetFeatures(
             values: featureValues,
-            normalizedEnergy: Self.normalizeEnergy(rawEnergy)
+            normalizedEnergy: normalizedEnergy,
+            loudnessDecibels:
+                rawEnergy.map(Self.decibels),
+            lowFrequencyRatios:
+                lowFrequencyRatios,
+            midFrequencyRatios:
+                midFrequencyRatios,
+            highFrequencyRatios:
+                highFrequencyRatios,
+            spectralNovelty:
+                Self.makeSpectralNovelty(
+                    spectralFlux:
+                        rawSpectralFlux,
+                    normalizedEnergy:
+                        normalizedEnergy
+                )
         )
     }
 
@@ -218,7 +293,10 @@ nonisolated final class BeatNetFeatureExtractor {
         magnitudes[0] = abs(real[0]) * scale
     }
 
-    private static func makeFilters() -> [[WeightedBin]] {
+    private static func makeFilters() -> (
+        filters: [[WeightedBin]],
+        centerFrequencies: [Double]
+    ) {
         let originalBinCount = 705
         let originalFFTSize = originalBinCount * 2
         let originalBinSpacing =
@@ -257,6 +335,7 @@ nonisolated final class BeatNetFeatureExtractor {
         let fftBinSpacing =
             Double(sampleRate) / Double(fftSize)
         var filters: [[WeightedBin]] = []
+        var filterCenterFrequencies: [Double] = []
         for index in 0..<(originalBins.count - 2) {
             let originalStart = originalBins[index]
             let originalCenter = originalBins[index + 1]
@@ -313,9 +392,90 @@ nonisolated final class BeatNetFeatureExtractor {
                     )
                 }
             )
+            filterCenterFrequencies.append(
+                Double(originalCenter)
+                    * originalBinSpacing
+            )
         }
         precondition(filters.count == bandCount)
-        return filters
+        precondition(
+            filterCenterFrequencies.count
+                == bandCount
+        )
+        return (
+            filters,
+            filterCenterFrequencies
+        )
+    }
+
+    private static func makeSpectralNovelty(
+        spectralFlux: [Float],
+        normalizedEnergy: [Float]
+    ) -> [Float] {
+        let normalizedFlux =
+            normalizeEnergy(spectralFlux)
+        let smoothedEnergy = movingAverage(
+            normalizedEnergy,
+            radius: 10
+        )
+        let comparisonOffset = 25
+        let combined = normalizedFlux.indices.map {
+            index in
+            let previousIndex = max(
+                index - comparisonOffset,
+                0
+            )
+            let energyChange = abs(
+                smoothedEnergy[index]
+                    - smoothedEnergy[previousIndex]
+            )
+            return normalizedFlux[index] * 0.72
+                + energyChange * 0.28
+        }
+        return normalizeEnergy(combined)
+    }
+
+    private static func movingAverage(
+        _ values: [Float],
+        radius: Int
+    ) -> [Float] {
+        guard !values.isEmpty else { return [] }
+        var prefix = [Float](
+            repeating: 0,
+            count: values.count + 1
+        )
+        for index in values.indices {
+            prefix[index + 1] =
+                prefix[index] + values[index]
+        }
+        return values.indices.map { index in
+            let lowerBound = max(index - radius, 0)
+            let upperBound = min(
+                index + radius + 1,
+                values.count
+            )
+            return (
+                prefix[upperBound]
+                    - prefix[lowerBound]
+            ) / Float(
+                max(upperBound - lowerBound, 1)
+            )
+        }
+    }
+
+    private static func decibels(
+        _ rootMeanSquare: Float
+    ) -> Float {
+        max(
+            20
+                * log10f(
+                    max(
+                        rootMeanSquare,
+                        0.000_001
+                    )
+                ),
+            -120
+        )
     }
 
     private static func normalizeEnergy(

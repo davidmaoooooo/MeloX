@@ -11,39 +11,55 @@ struct AutoMixTransitionPlan: Equatable, Sendable {
     let outgoingStartTime: TimeInterval
     let duration: TimeInterval
     let incomingStartTime: TimeInterval
-    let incomingPlaybackRate: Double
+    let outgoingEndPlaybackRate: Double
+    let incomingStartPlaybackRate: Double
     let fadeCurve: AutoMixFadeCurve
     let confidence: Double?
 }
 
 enum AutoMixTransitionPlanner {
+    private struct TempoRates {
+        let alignedIncomingBPM: Double
+        let outgoingEnd: Double
+        let incomingStart: Double
+    }
+
     static func makePlan(
         configuration: AutoMixConfiguration,
         outgoingDuration: TimeInterval,
         incomingDuration: TimeInterval,
         analysis: AutoMixPairAnalysis?
     ) -> AutoMixTransitionPlan? {
-        let outgoingDuration = max(outgoingDuration, 0)
-        let incomingDuration = max(incomingDuration, 0)
-        guard outgoingDuration > 1, incomingDuration > 1 else {
+        let outgoingDuration =
+            max(outgoingDuration, 0)
+        let incomingDuration =
+            max(incomingDuration, 0)
+        guard outgoingDuration > 1,
+              incomingDuration > 1 else {
             return nil
         }
 
         if configuration.mode == .fixed {
             return fixedPlan(
                 kind: .fixed,
-                duration: configuration.fixedDuration,
-                outgoingDuration: outgoingDuration,
-                incomingDuration: incomingDuration,
-                fadeCurve: configuration.fadeCurve
+                duration:
+                    configuration.fixedDuration,
+                outgoingDuration:
+                    outgoingDuration,
+                incomingDuration:
+                    incomingDuration,
+                fadeCurve:
+                    configuration.fadeCurve
             )
         }
 
         if let analysis,
            let smartPlan = smartPlan(
                configuration: configuration,
-               outgoingDuration: outgoingDuration,
-               incomingDuration: incomingDuration,
+               outgoingDuration:
+                   outgoingDuration,
+               incomingDuration:
+                   incomingDuration,
                analysis: analysis
            ) {
             return smartPlan
@@ -53,18 +69,35 @@ enum AutoMixTransitionPlanner {
         case .crossfade:
             return fixedPlan(
                 kind: .fallback,
-                duration: configuration.fixedDuration,
-                outgoingDuration: outgoingDuration,
-                incomingDuration: incomingDuration,
-                fadeCurve: configuration.fadeCurve
+                duration:
+                    configuration.fixedDuration,
+                outgoingDuration:
+                    outgoingDuration,
+                incomingDuration:
+                    incomingDuration,
+                fadeCurve:
+                    configuration.fadeCurve,
+                outgoingEndOffset:
+                    estimatedTailCutDuration(
+                        bars:
+                            configuration.tailCutBars
+                    )
             )
         case .shortCrossfade:
             return fixedPlan(
                 kind: .fallback,
                 duration: 3,
-                outgoingDuration: outgoingDuration,
-                incomingDuration: incomingDuration,
-                fadeCurve: configuration.fadeCurve
+                outgoingDuration:
+                    outgoingDuration,
+                incomingDuration:
+                    incomingDuration,
+                fadeCurve:
+                    configuration.fadeCurve,
+                outgoingEndOffset:
+                    estimatedTailCutDuration(
+                        bars:
+                            configuration.tailCutBars
+                    )
             )
         case .normal:
             return nil
@@ -82,211 +115,240 @@ enum AutoMixTransitionPlanner {
             analysis.incoming.confidence
         )
         guard confidence
-                >= configuration.minimumAnalysisConfidence,
+                >= configuration
+                    .minimumAnalysisConfidence,
               analysis.outgoing.bpm.isFinite,
               analysis.incoming.bpm.isFinite,
               analysis.outgoing.bpm > 0,
               analysis.incoming.bpm > 0,
-              !analysis.outgoing.downbeats.isEmpty,
-              !analysis.incoming.downbeats.isEmpty else {
+              !analysis.outgoing.beats.isEmpty,
+              !analysis.incoming.beats.isEmpty else {
             return nil
         }
 
-        let secondsPerBeat = 60 / analysis.outgoing.bpm
-        let secondsPerBar = secondsPerBeat * 4
-        let desiredDuration =
-            Double(configuration.transitionBars * 4)
-                * secondsPerBeat
-        let maximumDuration = min(
-            max(outgoingDuration - 1, 1),
-            max(incomingDuration - 1, 1),
-            24
-        )
-        let transitionDuration = min(
-            max(desiredDuration, 3),
-            maximumDuration
-        )
-        guard transitionDuration >= 1 else { return nil }
-
-        let tailCutDuration =
-            Double(configuration.tailCutBars)
-                * secondsPerBar
-        let desiredOutgoingEnd = max(
-            outgoingDuration - tailCutDuration,
-            transitionDuration + 1
-        )
-        let desiredOutgoingStart =
-            desiredOutgoingEnd - transitionDuration
-        let candidateDownbeats = analysis.outgoing.downbeats
-            .filter {
-                $0 >= max(analysis.outgoing.regionStart, 0)
-                    && $0 <= desiredOutgoingEnd - 0.75
-            }
-        let nearbyDownbeats = candidateDownbeats.filter {
-            abs($0 - desiredOutgoingStart)
-                <= max(secondsPerBar * 2, 2)
-        }
-        guard let outgoingStart = (
-            nearbyDownbeats.isEmpty
-                ? candidateDownbeats
-                : nearbyDownbeats
-        ).min(
-            by: {
-                outgoingCandidateScore(
-                    $0,
-                    desiredStart: desiredOutgoingStart,
-                    secondsPerBar: secondsPerBar,
-                    analysis: analysis.outgoing
-                )
-                    < outgoingCandidateScore(
-                        $1,
-                        desiredStart: desiredOutgoingStart,
-                        secondsPerBar: secondsPerBar,
-                        analysis: analysis.outgoing
-                    )
-            }
-        ) else {
-            return nil
-        }
-        let incomingStart = incomingCue(
-            analysis.incoming,
-            skipsQuietOpening: configuration.skipsQuietOpening,
-            incomingDuration: incomingDuration
-        )
-        let effectiveDuration = min(
-            desiredOutgoingEnd - outgoingStart,
-            incomingDuration - incomingStart,
-            transitionDuration
-        )
-        guard effectiveDuration >= 1 else { return nil }
-
-        let playbackRate = tempoMatchedRate(
-            outgoingBPM: analysis.outgoing.bpm,
-            incomingBPM: analysis.incoming.bpm,
+        let tempoRates = tempoRates(
+            outgoingBPM:
+                analysis.outgoing.bpm,
+            incomingBPM:
+                analysis.incoming.bpm,
             configuration: configuration
         )
+        let outgoingSecondsPerBeat =
+            60 / analysis.outgoing.bpm
+        let incomingSecondsPerBeat =
+            60
+                / tempoRates
+                    .alignedIncomingBPM
+        let secondsPerBar =
+            outgoingSecondsPerBeat * 4
+        let desiredOutgoingEnd = min(
+            max(
+                outgoingDuration
+                    - Double(
+                        configuration.tailCutBars
+                    ) * secondsPerBar,
+                1
+            ),
+            outgoingDuration
+        )
+        let requestedDuration =
+            Double(
+                configuration.transitionBars * 4
+            )
+                * (
+                    outgoingSecondsPerBeat
+                        + incomingSecondsPerBeat
+                ) / 2
+        let averageOutgoingRate =
+            (
+                1
+                    + tempoRates.outgoingEnd
+            ) / 2
+        let averageIncomingRate =
+            (
+                tempoRates.incomingStart
+                    + 1
+            ) / 2
+        let maximumDuration = min(
+            max(
+                (desiredOutgoingEnd - 0.5)
+                    / max(
+                        averageOutgoingRate,
+                        0.01
+                    ),
+                0
+            ),
+            max(
+                (incomingDuration - 0.5)
+                    / max(
+                        averageIncomingRate,
+                        0.01
+                    ),
+                0
+            ),
+            32
+        )
+        let transitionDuration = min(
+            max(requestedDuration, 3),
+            maximumDuration
+        )
+        guard transitionDuration >= 1 else {
+            return nil
+        }
+
+        guard let candidate =
+                AutoMixTransitionScorer
+                    .bestCandidate(
+                        outgoing:
+                            analysis.outgoing,
+                        incoming:
+                            analysis.incoming,
+                        outgoingDuration:
+                            outgoingDuration,
+                        incomingDuration:
+                            incomingDuration,
+                        desiredOutgoingEnd:
+                            desiredOutgoingEnd,
+                        transitionDuration:
+                            transitionDuration,
+                        outgoingEndRate:
+                            tempoRates.outgoingEnd,
+                        incomingStartRate:
+                            tempoRates.incomingStart,
+                        skipsQuietOpening:
+                            configuration
+                                .skipsQuietOpening
+                    ) else {
+            return nil
+        }
 
         return AutoMixTransitionPlan(
             kind: .smart,
-            outgoingStartTime: outgoingStart,
-            duration: effectiveDuration,
-            incomingStartTime: incomingStart,
-            incomingPlaybackRate: playbackRate,
-            fadeCurve: configuration.fadeCurve,
+            outgoingStartTime:
+                candidate.outgoingStartTime,
+            duration: transitionDuration,
+            incomingStartTime:
+                candidate.incomingStartTime,
+            outgoingEndPlaybackRate:
+                tempoRates.outgoingEnd,
+            incomingStartPlaybackRate:
+                tempoRates.incomingStart,
+            fadeCurve:
+                configuration.fadeCurve,
             confidence: confidence
         )
     }
 
-    private static func incomingCue(
-        _ analysis: AutoMixTrackAnalysis,
-        skipsQuietOpening: Bool,
-        incomingDuration: TimeInterval
-    ) -> TimeInterval {
-        let candidates = analysis.downbeats.filter {
-            $0 >= 0 && $0 < min(incomingDuration, 28)
-        }
-        guard skipsQuietOpening else {
-            return candidates.first ?? 0
-        }
-        let energeticCue = candidates.first {
-            meanEnergy(
-                around: $0,
-                analysis: analysis
-            ) >= 0.22
-        }
-        guard let energeticCue,
-              let energeticIndex =
-                candidates.firstIndex(
-                    of: energeticCue
-                ) else {
-            return candidates.first ?? 0
-        }
-        let phraseLeadIndex = max(
-            energeticIndex - 2,
-            0
-        )
-        return candidates[phraseLeadIndex]
-    }
-
-    private static func outgoingCandidateScore(
-        _ candidate: TimeInterval,
-        desiredStart: TimeInterval,
-        secondsPerBar: TimeInterval,
-        analysis: AutoMixTrackAnalysis
-    ) -> Double {
-        let timingDistance =
-            abs(candidate - desiredStart)
-                / max(secondsPerBar * 2, 1)
-        let energy = Double(
-            meanEnergy(
-                around: candidate,
-                analysis: analysis
-            )
-        )
-        return timingDistance * 0.7 + energy * 0.3
-    }
-
-    private static func meanEnergy(
-        around time: TimeInterval,
-        analysis: AutoMixTrackAnalysis
-    ) -> Float {
-        let offsets = stride(
-            from: 0.0,
-            through: 0.8,
-            by: 0.1
-        )
-        let values = offsets.map {
-            analysis.energy(at: time + $0)
-        }
-        return values.reduce(0, +)
-            / Float(max(values.count, 1))
-    }
-
-    private static func tempoMatchedRate(
+    private static func tempoRates(
         outgoingBPM: Double,
         incomingBPM: Double,
         configuration: AutoMixConfiguration
-    ) -> Double {
-        guard configuration.tempoMatchingEnabled else {
-            return 1
-        }
+    ) -> TempoRates {
         let alignedIncomingBPM = [
             incomingBPM / 2,
             incomingBPM,
             incomingBPM * 2,
         ].min {
-            abs($0 - outgoingBPM) < abs($1 - outgoingBPM)
+            abs($0 - outgoingBPM)
+                < abs($1 - outgoingBPM)
         } ?? incomingBPM
-        let rate = outgoingBPM / alignedIncomingBPM
-        let adjustmentPercent = abs(rate - 1) * 100
-        guard adjustmentPercent
-                <= configuration.maximumTempoAdjustmentPercent else {
-            return 1
+        guard configuration.tempoMatchingEnabled else {
+            return TempoRates(
+                alignedIncomingBPM:
+                    alignedIncomingBPM,
+                outgoingEnd: 1,
+                incomingStart: 1
+            )
         }
-        return min(max(rate, 0.92), 1.08)
+
+        let incomingStartRate =
+            outgoingBPM / alignedIncomingBPM
+        let adjustmentPercent =
+            abs(incomingStartRate - 1) * 100
+        guard adjustmentPercent
+                <= configuration
+                    .maximumTempoAdjustmentPercent else {
+            return TempoRates(
+                alignedIncomingBPM:
+                    alignedIncomingBPM,
+                outgoingEnd: 1,
+                incomingStart: 1
+            )
+        }
+
+        return TempoRates(
+            alignedIncomingBPM:
+                alignedIncomingBPM,
+            outgoingEnd:
+                min(
+                    max(
+                        alignedIncomingBPM
+                            / outgoingBPM,
+                        0.92
+                    ),
+                    1.08
+                ),
+            incomingStart:
+                min(
+                    max(
+                        incomingStartRate,
+                        0.92
+                    ),
+                    1.08
+                )
+        )
     }
 
     private static func fixedPlan(
         kind: AutoMixTransitionKind,
-        duration requestedDuration: TimeInterval,
+        duration requestedDuration:
+            TimeInterval,
         outgoingDuration: TimeInterval,
         incomingDuration: TimeInterval,
-        fadeCurve: AutoMixFadeCurve
+        fadeCurve: AutoMixFadeCurve,
+        outgoingEndOffset:
+            TimeInterval = 0
     ) -> AutoMixTransitionPlan? {
+        let outgoingEndTime = min(
+            max(
+                outgoingDuration
+                    - max(
+                        outgoingEndOffset,
+                        0
+                    ),
+                1
+            ),
+            outgoingDuration
+        )
         let duration = min(
             max(requestedDuration, 1),
-            max(outgoingDuration - 1, 1),
+            outgoingEndTime,
             max(incomingDuration - 1, 1)
         )
-        guard duration >= 1 else { return nil }
+        guard duration >= 1 else {
+            return nil
+        }
         return AutoMixTransitionPlan(
             kind: kind,
-            outgoingStartTime: max(outgoingDuration - duration, 0),
+            outgoingStartTime:
+                max(
+                    outgoingEndTime - duration,
+                    0
+                ),
             duration: duration,
             incomingStartTime: 0,
-            incomingPlaybackRate: 1,
+            outgoingEndPlaybackRate: 1,
+            incomingStartPlaybackRate: 1,
             fadeCurve: fadeCurve,
             confidence: nil
         )
+    }
+
+    private static func estimatedTailCutDuration(
+        bars: Int
+    ) -> TimeInterval {
+        Double(max(bars, 0))
+            * 4
+            * 0.5
     }
 }

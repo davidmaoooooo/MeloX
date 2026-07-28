@@ -19,7 +19,7 @@ enum AutoMixMode: String, CaseIterable, Identifiable, Sendable {
     var description: String {
         switch self {
         case .smart:
-            "在设备上分析节拍、重拍、速度和开头能量，选择音乐性更自然的切入点。"
+            "在设备上分析整曲的节拍、段落变化、能量与频谱，联合选择前后两首的自然衔接位置。"
         case .fixed:
             "不分析歌曲，按固定时长重叠播放前后两首歌曲。"
         }
@@ -74,7 +74,7 @@ enum AutoMixFadeCurve: String, CaseIterable, Identifiable, Sendable {
     var description: String {
         switch self {
         case .equalPower:
-            "让过渡中段保持较稳定的听感响度，适合大多数歌曲。"
+            "让交叉淡化中段保持较稳定的听感响度，适合大多数歌曲。"
         case .smooth:
             "开头和结尾变化更缓和，适合舒缓歌曲。"
         case .linear:
@@ -104,9 +104,9 @@ enum AutoMixFallbackBehavior: String, CaseIterable, Identifiable, Sendable {
     var description: String {
         switch self {
         case .crossfade:
-            "分析失败或置信度不足时，仍按设定时长重叠播放。"
+            "分析失败或置信度不足时，仍按设定时长重叠播放，并遵守上一首的提前结束位置。"
         case .shortCrossfade:
-            "分析失败时只进行 3 秒重叠，降低不协调的可能。"
+            "分析失败时只进行 3 秒重叠，并遵守上一首的提前结束位置。"
         case .normal:
             "分析失败时等待当前歌曲结束，再开始下一首。"
         }
@@ -140,7 +140,7 @@ final class AutoMixPreferences {
     static let preloadLeadTimeRange = 30.0...180.0
     static let defaultFadeCurve: AutoMixFadeCurve = .equalPower
     static let defaultTempoMatchingEnabled = true
-    static let defaultMaximumTempoAdjustmentPercent = 4.0
+    static let defaultMaximumTempoAdjustmentPercent = 5.0
     static let maximumTempoAdjustmentPercentRange = 1.0...8.0
     static let defaultSkipsQuietOpening = true
     static let defaultMinimumAnalysisConfidence = 0.42

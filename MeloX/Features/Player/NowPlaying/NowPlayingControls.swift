@@ -84,7 +84,11 @@ private struct NowPlayingAutoMixStatus: View {
             )
             .progressViewStyle(.linear)
             .tint(.white)
-            .frame(width: 24)
+            .frame(width: 30)
+
+            Text("\(progressPercent)%")
+                .monospacedDigit()
+                .frame(minWidth: 24, alignment: .trailing)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
@@ -99,17 +103,20 @@ private struct NowPlayingAutoMixStatus: View {
     }
 
     private var accessibilityValue: String {
-        let progress = Int(
+        if let songName =
+            player.autoMixIncomingSongName {
+            return "正在过渡到\(songName)，\(progressPercent)%"
+        }
+        return "\(progressPercent)%"
+    }
+
+    private var progressPercent: Int {
+        Int(
             (
                 player.autoMixTransitionProgress
                     ?? 0
             ) * 100
         )
-        if let songName =
-            player.autoMixIncomingSongName {
-            return "正在过渡到\(songName)，\(progress)%"
-        }
-        return "\(progress)%"
     }
 }
 

@@ -9,6 +9,12 @@ nonisolated struct AutoMixAnalysisRequest: Sendable {
     let isDownloaded: Bool
 }
 
+nonisolated struct AutoMixSpectralProfile: Sendable {
+    let low: Float
+    let mid: Float
+    let high: Float
+}
+
 nonisolated struct AutoMixTrackAnalysis: Sendable {
     let bpm: Double
     let confidence: Double
@@ -16,6 +22,11 @@ nonisolated struct AutoMixTrackAnalysis: Sendable {
     let downbeats: [TimeInterval]
     let regionStart: TimeInterval
     let normalizedEnergy: [Float]
+    let loudnessDecibels: [Float]
+    let lowFrequencyRatios: [Float]
+    let midFrequencyRatios: [Float]
+    let highFrequencyRatios: [Float]
+    let spectralNovelty: [Float]
     let modelBeatActivations: [Float]
     let modelDownbeatActivations: [Float]
     let featureStatistics: BeatNetFeatureStatistics
@@ -23,14 +34,84 @@ nonisolated struct AutoMixTrackAnalysis: Sendable {
     let analyzedSegmentCount: Int
 
     func energy(at absoluteTime: TimeInterval) -> Float {
+        value(
+            in: normalizedEnergy,
+            at: absoluteTime
+        )
+    }
+
+    func loudness(
+        at absoluteTime: TimeInterval
+    ) -> Float {
+        value(
+            in: loudnessDecibels,
+            at: absoluteTime,
+            fallback: -120
+        )
+    }
+
+    func spectralProfile(
+        at absoluteTime: TimeInterval
+    ) -> AutoMixSpectralProfile {
+        AutoMixSpectralProfile(
+            low:
+                value(
+                    in: lowFrequencyRatios,
+                    at: absoluteTime
+                ),
+            mid:
+                value(
+                    in: midFrequencyRatios,
+                    at: absoluteTime
+                ),
+            high:
+                value(
+                    in: highFrequencyRatios,
+                    at: absoluteTime
+                )
+        )
+    }
+
+    func novelty(
+        at absoluteTime: TimeInterval
+    ) -> Float {
+        value(
+            in: spectralNovelty,
+            at: absoluteTime
+        )
+    }
+
+    func beatActivation(
+        at absoluteTime: TimeInterval
+    ) -> Float {
+        value(
+            in: modelBeatActivations,
+            at: absoluteTime
+        )
+    }
+
+    func downbeatActivation(
+        at absoluteTime: TimeInterval
+    ) -> Float {
+        value(
+            in: modelDownbeatActivations,
+            at: absoluteTime
+        )
+    }
+
+    private func value(
+        in values: [Float],
+        at absoluteTime: TimeInterval,
+        fallback: Float = 0
+    ) -> Float {
         let relativeTime = absoluteTime - regionStart
         let frame = Int(
             (relativeTime * 50).rounded()
         )
-        guard normalizedEnergy.indices.contains(frame) else {
-            return 0
+        guard values.indices.contains(frame) else {
+            return fallback
         }
-        return normalizedEnergy[frame]
+        return values[frame]
     }
 }
 
@@ -188,22 +269,13 @@ actor AutoMixAudioAnalyzer {
         outgoing: AutoMixAnalysisRequest,
         incoming: AutoMixAnalysisRequest
     ) async throws -> AutoMixPairAnalysis {
-        let outgoingAnalysis = try await analyze(
-            outgoing,
-            region: .tail(
-                durationMilliseconds: Int(
-                    (outgoing.duration * 1_000).rounded()
-                )
-            )
-        )
-        try Task.checkCancellation()
-        let incomingAnalysis = try await analyze(
-            incoming,
-            region: .head
-        )
+        async let outgoingAnalysis =
+            analyzeFullTrack(outgoing)
+        async let incomingAnalysis =
+            analyzeFullTrack(incoming)
         return AutoMixPairAnalysis(
-            outgoing: outgoingAnalysis,
-            incoming: incomingAnalysis
+            outgoing: try await outgoingAnalysis,
+            incoming: try await incomingAnalysis
         )
     }
 
@@ -329,6 +401,16 @@ actor AutoMixAudioAnalyzer {
         let analysis = BeatNetTemporalDecoder.decode(
             activations: activations,
             energy: features.normalizedEnergy,
+            loudnessDecibels:
+                features.loudnessDecibels,
+            lowFrequencyRatios:
+                features.lowFrequencyRatios,
+            midFrequencyRatios:
+                features.midFrequencyRatios,
+            highFrequencyRatios:
+                features.highFrequencyRatios,
+            spectralNovelty:
+                features.spectralNovelty,
             featureStatistics:
                 BeatNetFeatureStatistics(
                     values: features.values
@@ -362,6 +444,14 @@ actor AutoMixAudioAnalyzer {
             repeating: Float.zero,
             count: frameCount
         )
+        var loudnessDecibels = Array(
+            repeating: Float(-120),
+            count: frameCount
+        )
+        var lowFrequencyRatios = energy
+        var midFrequencyRatios = energy
+        var highFrequencyRatios = energy
+        var spectralNovelty = energy
         var modelBeatActivations = energy
         var modelDownbeatActivations = energy
         var beats: [TimeInterval] = []
@@ -381,6 +471,31 @@ actor AutoMixAudioAnalyzer {
             copy(
                 segment.normalizedEnergy,
                 into: &energy,
+                at: startFrame
+            )
+            copy(
+                segment.loudnessDecibels,
+                into: &loudnessDecibels,
+                at: startFrame
+            )
+            copy(
+                segment.lowFrequencyRatios,
+                into: &lowFrequencyRatios,
+                at: startFrame
+            )
+            copy(
+                segment.midFrequencyRatios,
+                into: &midFrequencyRatios,
+                at: startFrame
+            )
+            copy(
+                segment.highFrequencyRatios,
+                into: &highFrequencyRatios,
+                at: startFrame
+            )
+            copy(
+                segment.spectralNovelty,
+                into: &spectralNovelty,
                 at: startFrame
             )
             copy(
@@ -445,6 +560,16 @@ actor AutoMixAudioAnalyzer {
             downbeats: downbeats.sorted(),
             regionStart: 0,
             normalizedEnergy: energy,
+            loudnessDecibels:
+                loudnessDecibels,
+            lowFrequencyRatios:
+                lowFrequencyRatios,
+            midFrequencyRatios:
+                midFrequencyRatios,
+            highFrequencyRatios:
+                highFrequencyRatios,
+            spectralNovelty:
+                spectralNovelty,
             modelBeatActivations:
                 modelBeatActivations,
             modelDownbeatActivations:
@@ -867,6 +992,11 @@ nonisolated private enum BeatNetTemporalDecoder {
     static func decode(
         activations: [(beat: Float, downbeat: Float)],
         energy: [Float],
+        loudnessDecibels: [Float],
+        lowFrequencyRatios: [Float],
+        midFrequencyRatios: [Float],
+        highFrequencyRatios: [Float],
+        spectralNovelty: [Float],
         featureStatistics: BeatNetFeatureStatistics,
         finalAllZeroSegmentCount: Int,
         analyzedSegmentCount: Int,
@@ -929,6 +1059,16 @@ nonisolated private enum BeatNetTemporalDecoder {
             },
             regionStart: regionStart,
             normalizedEnergy: energy,
+            loudnessDecibels:
+                loudnessDecibels,
+            lowFrequencyRatios:
+                lowFrequencyRatios,
+            midFrequencyRatios:
+                midFrequencyRatios,
+            highFrequencyRatios:
+                highFrequencyRatios,
+            spectralNovelty:
+                spectralNovelty,
             modelBeatActivations:
                 beatActivations,
             modelDownbeatActivations:

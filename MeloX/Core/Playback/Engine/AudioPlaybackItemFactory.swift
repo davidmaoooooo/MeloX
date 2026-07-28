@@ -16,7 +16,9 @@ final class AudioPlaybackItemFactory {
 
     func makeItem(
         for source: PlaybackSource,
-        preferredForwardBufferDuration: TimeInterval
+        preferredForwardBufferDuration: TimeInterval,
+        autoMixEqualizerState:
+            SharedAutoMixEqualizerState
     ) async -> AVPlayerItem {
         let asset = AVURLAsset(url: source.url)
         let item = AVPlayerItem(asset: asset)
@@ -28,7 +30,9 @@ final class AudioPlaybackItemFactory {
             ).first {
                 item.audioMix =
                     equalizerProcessor.makeAudioMix(
-                        for: audioTrack
+                        for: audioTrack,
+                        autoMixEqualizerState:
+                            autoMixEqualizerState
                     )
             }
         } catch {

@@ -20,16 +20,28 @@ final class AutoMixPlaybackCoordinator {
         let incomingSongID: Int
     }
 
+    private struct PlannedTransition {
+        let attempt: Attempt
+        let context: PreparedAutoMixContext
+        let plan: AutoMixTransitionPlan
+        let outgoingDuration: TimeInterval
+    }
+
     private let api: NeteaseAPI
     private let downloads: DownloadStore
     private let engine: AudioPlaybackEngine
     private let analyzer: AutoMixAudioAnalyzer
 
-    private var preparationTask: Task<Void, Never>?
+    private var planningTask: Task<Void, Never>?
+    private var deckPreparationTask: Task<Void, Never>?
     private var preparationGeneration = 0
     private var attempt: Attempt?
+    private var plannedTransition: PlannedTransition?
     private var preparedContext: PreparedAutoMixContext?
     private var transitionHasBegun = false
+    private var latestRemainingTime =
+        TimeInterval.infinity
+    private var latestPreloadLeadTime: TimeInterval = 0
 
     init(
         api: NeteaseAPI,
@@ -59,9 +71,6 @@ final class AutoMixPlaybackCoordinator {
         guard isEnabled,
               isPlaying,
               !repeatsCurrentSong,
-              preparationTask == nil,
-              preparedContext == nil,
-              !engine.hasPreparedAutoMix,
               !transitionHasBegun,
               let outgoingSong,
               let outgoingSource,
@@ -73,7 +82,6 @@ final class AutoMixPlaybackCoordinator {
             outgoingSongID: outgoingSong.id,
             incomingSongID: incomingSong.id
         )
-        guard attempt != nextAttempt else { return }
 
         let outgoingDuration = max(
             outgoingDuration,
@@ -83,19 +91,43 @@ final class AutoMixPlaybackCoordinator {
             outgoingDuration - outgoingProgress,
             0
         )
-        guard remaining <= configuration.preloadLeadTime else {
+
+        if let attempt,
+           attempt != nextAttempt {
+            cancel()
+        }
+        latestRemainingTime = remaining
+        latestPreloadLeadTime =
+            configuration.preloadLeadTime
+
+        if plannedTransition?.attempt
+            == nextAttempt {
+            prepareDeckIfNeeded()
+            return
+        }
+
+        guard planningTask == nil,
+              deckPreparationTask == nil,
+              preparedContext == nil,
+              !engine.hasPreparedAutoMix,
+              attempt != nextAttempt else {
+            return
+        }
+
+        if configuration.mode != .smart,
+           remaining > configuration.preloadLeadTime {
             return
         }
 
         attempt = nextAttempt
         preparationGeneration += 1
         let generation = preparationGeneration
-        preparationTask = Task {
+        planningTask = Task {
             @MainActor [weak self] in
             guard let self else { return }
             defer {
                 if generation == self.preparationGeneration {
-                    self.preparationTask = nil
+                    self.planningTask = nil
                 }
             }
 
@@ -141,27 +173,98 @@ final class AutoMixPlaybackCoordinator {
                     sourceIsDownloaded:
                         incomingSource.isDownloaded
                 )
-                self.preparedContext = context
-                await self.engine.prepareAutoMix(
-                    incomingSource.source,
-                    identifier: incomingSong.id,
-                    plan: plan
-                )
+                self.plannedTransition =
+                    PlannedTransition(
+                        attempt: nextAttempt,
+                        context: context,
+                        plan: plan,
+                        outgoingDuration:
+                            outgoingDuration
+                    )
+                self.prepareDeckIfNeeded()
             } catch is CancellationError {
                 return
             } catch {
+                if generation
+                    == self.preparationGeneration {
+                    self.attempt = nil
+                }
                 return
+            }
+        }
+    }
+
+    private func prepareDeckIfNeeded() {
+        guard deckPreparationTask == nil,
+              preparedContext == nil,
+              !engine.hasPreparedAutoMix,
+              !transitionHasBegun,
+              let plannedTransition,
+              plannedTransition.attempt
+                == attempt else {
+            return
+        }
+        let transitionLeadTime = max(
+            plannedTransition
+                .outgoingDuration
+                - plannedTransition
+                    .plan
+                    .outgoingStartTime
+                + 12,
+            latestPreloadLeadTime
+        )
+        guard latestRemainingTime
+                <= transitionLeadTime else {
+            return
+        }
+
+        self.plannedTransition = nil
+        preparedContext =
+            plannedTransition.context
+        let generation = preparationGeneration
+        deckPreparationTask = Task {
+            @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if generation
+                    == self.preparationGeneration {
+                    self.deckPreparationTask = nil
+                }
+            }
+            await self.engine.prepareAutoMix(
+                plannedTransition.context.source,
+                identifier:
+                    plannedTransition.context
+                        .incomingSong.id,
+                plan: plannedTransition.plan
+            )
+            if Task.isCancelled {
+                return
+            }
+            guard generation
+                    == self.preparationGeneration else {
+                return
+            }
+            if !self.engine.hasPreparedAutoMix,
+               !self.transitionHasBegun {
+                self.preparedContext = nil
+                self.attempt = nil
             }
         }
     }
 
     func cancel() {
         preparationGeneration += 1
-        preparationTask?.cancel()
-        preparationTask = nil
+        planningTask?.cancel()
+        planningTask = nil
+        deckPreparationTask?.cancel()
+        deckPreparationTask = nil
         attempt = nil
+        plannedTransition = nil
         preparedContext = nil
         transitionHasBegun = false
+        latestRemainingTime = .infinity
+        latestPreloadLeadTime = 0
         engine.cancelAutoMix()
     }
 
@@ -250,10 +353,14 @@ final class AutoMixPlaybackCoordinator {
                     == identifier else {
                 return
             }
-            self.preparationTask = nil
+            self.planningTask = nil
+            self.deckPreparationTask = nil
             self.attempt = nil
+            self.plannedTransition = nil
             self.preparedContext = nil
             self.transitionHasBegun = false
+            self.latestRemainingTime = .infinity
+            self.latestPreloadLeadTime = 0
             self.onTransitionCompleted?(context)
         }
         engine.onAutoMixPreparationFailed = {

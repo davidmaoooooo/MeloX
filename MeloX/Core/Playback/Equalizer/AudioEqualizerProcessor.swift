@@ -15,9 +15,16 @@ nonisolated final class AudioEqualizerProcessor {
         sharedConfiguration.update(configuration)
     }
 
-    func makeAudioMix(for track: AVAssetTrack) -> AVAudioMix? {
+    func makeAudioMix(
+        for track: AVAssetTrack,
+        autoMixEqualizerState:
+            SharedAutoMixEqualizerState
+    ) -> AVAudioMix? {
         let context = AudioEqualizerTapContext(
-            sharedConfiguration: sharedConfiguration
+            sharedConfiguration:
+                sharedConfiguration,
+            autoMixEqualizerState:
+                autoMixEqualizerState
         )
         let retainedContext = Unmanaged.passRetained(context)
 

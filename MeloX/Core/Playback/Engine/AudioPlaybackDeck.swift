@@ -3,6 +3,8 @@ import AVFoundation
 @MainActor
 final class AudioPlaybackDeck {
     let player: AVPlayer
+    let autoMixEqualizerState =
+        SharedAutoMixEqualizerState()
 
     var onItemStatusChanged: ((AVPlayerItem) -> Void)?
     private(set) var itemIdentifier: Int?
@@ -19,6 +21,7 @@ final class AudioPlaybackDeck {
         with item: AVPlayerItem,
         identifier: Int?
     ) {
+        autoMixEqualizerState.reset()
         itemStatusObserver?.invalidate()
         itemIdentifier = identifier
         itemStatusObserver = item.observe(
@@ -37,6 +40,7 @@ final class AudioPlaybackDeck {
     }
 
     func clear() {
+        autoMixEqualizerState.reset()
         itemStatusObserver?.invalidate()
         itemStatusObserver = nil
         itemIdentifier = nil

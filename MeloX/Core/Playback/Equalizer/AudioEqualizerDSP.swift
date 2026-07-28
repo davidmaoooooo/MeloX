@@ -55,10 +55,13 @@ nonisolated final class AudioEqualizerTapContext {
     )
 
     private let sharedConfiguration: SharedAudioEqualizerConfiguration
+    private let autoMixEqualizerState:
+        SharedAutoMixEqualizerState
     private var sampleRate = 0.0
     private var channelCount = 0
     private var isSupportedFormat = false
     private var appliedRevision: UInt64?
+    private var appliedAutoMixRevision: UInt64?
     private var isBypassed = true
     private var preampMultiplier: Float = 1
     private var coefficients = Array(
@@ -67,8 +70,15 @@ nonisolated final class AudioEqualizerTapContext {
     )
     private var delays: [AudioEqualizerBiquadDelay] = []
 
-    init(sharedConfiguration: SharedAudioEqualizerConfiguration) {
+    init(
+        sharedConfiguration:
+            SharedAudioEqualizerConfiguration,
+        autoMixEqualizerState:
+            SharedAutoMixEqualizerState
+    ) {
         self.sharedConfiguration = sharedConfiguration
+        self.autoMixEqualizerState =
+            autoMixEqualizerState
     }
 
     func prepare(format: AudioStreamBasicDescription) {
@@ -82,6 +92,7 @@ nonisolated final class AudioEqualizerTapContext {
             count: channelCount * AudioEqualizerBand.count
         )
         appliedRevision = nil
+        appliedAutoMixRevision = nil
         isBypassed = true
         refreshConfigurationIfNeeded()
     }
@@ -89,6 +100,7 @@ nonisolated final class AudioEqualizerTapContext {
     func unprepare() {
         delays.removeAll(keepingCapacity: false)
         appliedRevision = nil
+        appliedAutoMixRevision = nil
         isSupportedFormat = false
     }
 
@@ -141,23 +153,75 @@ nonisolated final class AudioEqualizerTapContext {
 
     private func refreshConfigurationIfNeeded() {
         let configuration = sharedConfiguration.snapshot()
-        guard appliedRevision != configuration.revision else { return }
+        let autoMixAdjustment =
+            autoMixEqualizerState.snapshot()
+        guard appliedRevision
+                != configuration.revision
+                || appliedAutoMixRevision
+                    != autoMixAdjustment.revision else {
+            return
+        }
 
         let wasBypassed = isBypassed
         appliedRevision = configuration.revision
-        isBypassed = configuration.isBypassed
-        preampMultiplier = pow(10, configuration.preamp / 20)
+        appliedAutoMixRevision =
+            autoMixAdjustment.revision
+        isBypassed =
+            configuration.isBypassed
+                && autoMixAdjustment.isFlat
+        preampMultiplier = pow(
+            10,
+            (
+                configuration.isEnabled
+                ? configuration.preamp
+                : 0
+            ) / 20
+        )
 
         for index in coefficients.indices {
+            let userGain =
+                configuration.isEnabled
+                ? configuration.bandGains[index]
+                : 0
+            let autoMixGain =
+                autoMixGain(
+                    for:
+                        centerFrequencies[index],
+                    adjustment:
+                        autoMixAdjustment
+                )
             coefficients[index] = AudioEqualizerBiquadCoefficients.peaking(
                 centerFrequency: centerFrequencies[index],
-                gain: configuration.bandGains[index],
+                gain:
+                    min(
+                        max(
+                            userGain
+                                + autoMixGain,
+                            -24
+                        ),
+                        12
+                    ),
                 sampleRate: sampleRate
             )
         }
 
         if wasBypassed != isBypassed {
             resetDelays()
+        }
+    }
+
+    private func autoMixGain(
+        for centerFrequency: Double,
+        adjustment:
+            AutoMixEqualizerAdjustment
+    ) -> Float {
+        switch centerFrequency {
+        case ...250:
+            adjustment.lowGain
+        case 250..<4_000:
+            adjustment.midGain
+        default:
+            adjustment.highGain
         }
     }
 

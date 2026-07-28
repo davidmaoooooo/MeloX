@@ -134,7 +134,10 @@ final class AudioPlaybackEngine {
 
         let item = await itemFactory.makeItem(
             for: source,
-            preferredForwardBufferDuration: 8
+            preferredForwardBufferDuration: 8,
+            autoMixEqualizerState:
+                activeDeck
+                    .autoMixEqualizerState
         )
         guard generation == loadGeneration,
               !Task.isCancelled else {
