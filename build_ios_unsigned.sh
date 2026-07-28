@@ -22,10 +22,8 @@ xcodebuild clean build \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
   -configuration Release \
-  -sdk iphoneos \
   -destination "generic/platform=iOS" \
   -derivedDataPath "$DERIVED_DATA" \
-  TARGETED_DEVICE_FAMILY="1,2" \
   REGISTER_APP_GROUPS=NO \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGNING_ALLOWED=NO \
