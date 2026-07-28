@@ -12,6 +12,9 @@
 
 > MeloX 是非官方开源项目，与网易云音乐及其关联公司不存在隶属、合作或授权关系。项目仍在开发中，接口和功能可能随网易云音乐服务变化而失效。
 
+> [!IMPORTANT]
+> **Apple Watch 版本仍在开发中。** 当前功能、交互和数据兼容性尚未稳定，不建议将其视为正式版本。
+
 ## 应用截图
 
 ### 基础页面
@@ -85,6 +88,21 @@ MeloX 将相关内容移植为原生 SwiftUI，并根据歌词播放进度实时
   <img src="docs/screenshots/10.png" alt="EVA样式歌词" width="30%">
 </p>
 
+### Apple Watch（开发中）
+
+手表端目前支持独立登录、搜索、每日推荐、歌单浏览、本地播放与同步歌词。播放器采用横向分页
+
+> 手表端仍处于持续开发阶段，功能范围、界面和最低系统要求可能在后续版本中调整。
+
+<p align="center">
+  <img src="docs/screenshots/15.png" alt="播放列表" width="40%">
+  <img src="docs/screenshots/16.png" alt="播放页" width="40%">
+  <img src="docs/screenshots/17.png" alt="歌词页" width="40%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/18.png" alt="设置页" width="40%">
+</p>
+
 ## 功能
 
 - 首页内容：编辑推荐、每日推荐、推荐歌单、热门排行、新碟上架和热门歌手。
@@ -116,6 +134,7 @@ MeloX 使用固定 32 秒窗口、FP16 计算精度的 Core ML ML Program；模�
 
 - Xcode 26.6 或更高版本
 - iOS / iPadOS 26.0 或更高版本
+- watchOS 10.0 或更高版本（手表端仍在开发中）
 - Swift 5
 - 用真机运行时，需要可用于代码签名的 Apple Developer 账号
 
@@ -143,28 +162,34 @@ MeloX 使用固定 32 秒窗口、FP16 计算精度的 Core ML ML Program；模�
 ## 项目结构
 
 ```text
-MeloX/
-├── App/                  # 应用入口、根视图与应用级导航
-├── Core/
-│   ├── Artwork/          # 封面颜色与视觉数据
-│   ├── Cloud/            # 云盘模型与状态
-│   ├── Downloads/        # 下载存储与传输
-│   ├── Library/          # 账号音乐库状态与收藏操作
-│   ├── Lyrics/           # LRC / YRC 模型和解析
-│   ├── Models/           # 按账号、音乐、网络和社交分类的业务模型
-│   ├── Networking/       # 网易云接口与直接请求客户端
-│   ├── Playback/         # AutoMix、播放引擎、均衡器、队列和媒体会话
-│   ├── Settings/         # 应用、歌词与播放偏好
-│   └── Updates/          # 版本与更新服务
-├── Features/
-│   ├── Player/           # Now Playing、歌词渲染方案、TextPV 与播放队列
-│   ├── Settings/         # 按账号、应用、歌词、播放和系统能力分类的设置页面
-│   └── …                 # 首页、发现、搜索、音乐库等独立业务功能
-├── Shared/
-│   ├── Components/       # 通用状态与辅助视图
-│   └── Media/            # 封面、媒体卡片与歌曲行
-├── Resources/            # 字体、Core ML 模型与许可证
-└── Assets.xcassets/      # 应用图标、强调色与图片资源
+.
+├── MeloX/
+│   ├── App/                  # 应用入口、根视图与应用级导航
+│   ├── Core/
+│   │   ├── Artwork/          # 封面颜色与视觉数据
+│   │   ├── Cloud/            # 云盘模型与状态
+│   │   ├── Downloads/        # 下载存储与传输
+│   │   ├── Library/          # 账号音乐库状态与收藏操作
+│   │   ├── Lyrics/           # LRC / YRC 模型和解析
+│   │   ├── Models/           # 按账号、音乐、网络和社交分类的业务模型
+│   │   ├── Networking/       # 网易云接口与直接请求客户端
+│   │   ├── Playback/         # AutoMix、播放引擎、均衡器、队列和媒体会话
+│   │   ├── Settings/         # 应用、歌词与播放偏好
+│   │   └── Updates/          # 版本与更新服务
+│   ├── Features/
+│   │   ├── Player/           # Now Playing、歌词渲染方案、TextPV 与播放队列
+│   │   ├── Settings/         # 按账号、应用、歌词、播放和系统能力分类的设置页面
+│   │   └── …                 # 首页、发现、搜索、音乐库等独立业务功能
+│   ├── Shared/
+│   │   ├── Components/       # 通用状态与辅助视图
+│   │   └── Media/            # 封面、媒体卡片与歌曲行
+│   ├── Resources/            # 字体、Core ML 模型与许可证
+│   └── Assets.xcassets/      # 应用图标、强调色与图片资源
+└── MeloXWatch/               # Apple Watch 独立应用（开发中）
+    ├── Playback/             # 手表端播放器、播放队列与状态恢复
+    ├── Player/               # 正在播放页、实时队列与播放模式控制
+    ├── Lyrics/               # 手表端同步歌词
+    └── …                     # 登录、发现、设置与连接
 ```
 
 ## 已知限制
@@ -172,6 +197,8 @@ MeloX/
 - 网易云音乐未公开保证这些接口长期稳定，服务端变更可能导致部分功能不可用。
 - 试听、完整播放、音质和地区可用性取决于网易云音乐账号、版权与服务端策略。
 - MeloX 不以绕过付费、版权或地区限制为目标。
+- Apple Watch 版本仍在开发中，暂不保证功能完整性和数据兼容性。
+
 ## 特别鸣谢
 
 - [jayfunc/BetterLyrics](https://github.com/jayfunc/BetterLyrics)：逐字歌词渲染、光效与动效参考。
