@@ -33,7 +33,7 @@ struct GeneralSettingsView: View {
                 )
 
                 Picker("默认启动页面", selection: $settings.defaultLaunchTab) {
-                    ForEach(AppTab.allCases) { tab in
+                    ForEach(settings.visibleTabs) { tab in
                         Label(tab.title, systemImage: tab.systemImage)
                             .tag(tab)
                     }
@@ -49,29 +49,31 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            Section {
-                Toggle(
-                    "记住上次音乐库页面",
-                    isOn: $settings.restoresLastLibraryPage
-                )
+            if !settings.embeddedLibraryPages.isEmpty {
+                Section {
+                    Toggle(
+                        "记住上次音乐库页面",
+                        isOn: $settings.restoresLastLibraryPage
+                    )
 
-                Picker(
-                    "默认打开页面",
-                    selection: $settings.defaultLibraryPage
-                ) {
-                    ForEach(LibraryPage.allCases) { page in
-                        Label(page.title, systemImage: page.systemImage)
-                            .tag(page)
+                    Picker(
+                        "默认打开页面",
+                        selection: $settings.defaultLibraryPage
+                    ) {
+                        ForEach(settings.embeddedLibraryPages) { page in
+                            Label(page.title, systemImage: page.systemImage)
+                                .tag(page)
+                        }
                     }
-                }
-                .disabled(settings.restoresLastLibraryPage)
-            } header: {
-                Text("音乐库")
-            } footer: {
-                if settings.restoresLastLibraryPage {
-                    Text("重新启动后，音乐库会恢复到最后浏览的歌曲、歌单、下载、云盘或历史页面。")
-                } else {
-                    Text("每次启动 MeloX 后首次打开音乐库时，会显示所选页面。")
+                    .disabled(settings.restoresLastLibraryPage)
+                } header: {
+                    Text("音乐库")
+                } footer: {
+                    if settings.restoresLastLibraryPage {
+                        Text("重新启动后，音乐库会恢复到最后浏览的内置页面。")
+                    } else {
+                        Text("每次启动 MeloX 后首次打开音乐库时，会显示所选页面。")
+                    }
                 }
             }
         }

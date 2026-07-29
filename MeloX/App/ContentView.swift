@@ -1,5 +1,16 @@
 import SwiftUI
 
+private enum ContentSheet: String, Identifiable {
+    case settings
+
+    var id: String { rawValue }
+}
+
+private enum ContentRoute: Hashable {
+    case privateMessages
+    case songRecognition
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(PlayerStore.self) private var player
@@ -10,11 +21,12 @@ struct ContentView: View {
     @Environment(FloatingLyricsController.self) private var floatingLyrics
 
     @State private var selectedTab: AppTab
-    @State private var homePath = NavigationPath()
-    @State private var explorePath = NavigationPath()
-    @State private var libraryPath = NavigationPath()
-    @State private var searchPath = NavigationPath()
-    @State private var settingsPath = NavigationPath()
+    @State private var navigationPaths = Dictionary(
+        uniqueKeysWithValues: AppTab.allCases.map {
+            ($0, NavigationPath())
+        }
+    )
+    @State private var presentedSheet: ContentSheet?
     @State private var playerPresentation: PlayerPresentation?
     @State private var neteaseSharePresentation: NeteaseSharePresentation?
     @State private var nowPlayingSharePresentation: NeteaseSharePresentation?
@@ -92,6 +104,20 @@ struct ContentView: View {
             .sheet(item: $neteaseSharePresentation) { presentation in
                 NeteaseShareSheet(presentation: presentation)
             }
+            .sheet(item: $presentedSheet) { destination in
+                switch destination {
+                case .settings:
+                    NavigationStack {
+                        SettingsView()
+                            .musicDestinations(
+                                in: musicNavigationNamespace
+                            )
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(32)
+                }
+            }
             .task {
                 await player.restore()
             }
@@ -124,6 +150,15 @@ struct ContentView: View {
             }
             .onChange(of: selectedTab) { _, tab in
                 settings.lastSelectedTab = tab
+            }
+            .onChange(of: settings.visibleTabs) { _, tabs in
+                guard !tabs.contains(selectedTab) else { return }
+                if selectedTab.libraryPage != nil,
+                   tabs.contains(.library) {
+                    selectedTab = .library
+                } else {
+                    selectedTab = settings.fallbackNavigationTab
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 player.refreshLyricsNotification()
@@ -242,64 +277,147 @@ struct ContentView: View {
 
     private var tabs: some View {
         TabView(selection: $selectedTab) {
-            Tab(
-                AppTab.home.title,
-                systemImage: AppTab.home.systemImage,
-                value: AppTab.home
-            ) {
-                NavigationStack(path: $homePath) {
-                    HomeView()
-                        .musicDestinations(in: musicNavigationNamespace)
-                }
-            }
-
-            Tab(
-                AppTab.explore.title,
-                systemImage: AppTab.explore.systemImage,
-                value: AppTab.explore
-            ) {
-                NavigationStack(path: $explorePath) {
-                    ExploreView()
-                        .musicDestinations(in: musicNavigationNamespace)
-                }
-            }
-
-            Tab(
-                AppTab.library.title,
-                systemImage: AppTab.library.systemImage,
-                value: AppTab.library
-            ) {
-                NavigationStack(path: $libraryPath) {
-                    LibraryView()
-                        .musicDestinations(in: musicNavigationNamespace)
-                }
-            }
-
-            Tab(
-                AppTab.search.title,
-                systemImage: AppTab.search.systemImage,
-                value: AppTab.search,
-                role: .search
-            ) {
-                NavigationStack(path: $searchPath) {
-                    SearchView()
-                        .musicDestinations(in: musicNavigationNamespace)
-                }
-            }
-
-            Tab(
-                AppTab.settings.title,
-                systemImage: AppTab.settings.systemImage,
-                value: AppTab.settings
-            ) {
-                NavigationStack(path: $settingsPath) {
-                    SettingsView()
-                        .musicDestinations(in: musicNavigationNamespace)
+            ForEach(settings.visibleTabs) { tab in
+                Tab(
+                    tab.title,
+                    systemImage: tab.systemImage,
+                    value: tab,
+                    role: tab == .search ? .search : nil
+                ) {
+                    NavigationStack(
+                        path: navigationPathBinding(for: tab)
+                    ) {
+                        tabRoot(for: tab)
+                            .toolbar {
+                                primaryToolbar(for: tab)
+                            }
+                            .navigationDestination(
+                                for: ContentRoute.self
+                            ) { route in
+                                contentDestination(for: route)
+                            }
+                            .musicDestinations(
+                                in: musicNavigationNamespace
+                            )
+                    }
                 }
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.musicNavigationNamespace, musicNavigationNamespace)
+    }
+
+    @ViewBuilder
+    private func tabRoot(for tab: AppTab) -> some View {
+        switch tab {
+        case .home:
+            HomeView()
+        case .explore:
+            ExploreView()
+        case .library:
+            LibraryView()
+        case .search:
+            SearchView()
+        case .librarySongs,
+             .libraryPlaylists,
+             .libraryDownloads,
+             .libraryCloud,
+             .libraryHistory:
+            if let page = tab.libraryPage {
+                LibraryView(fixedPage: page)
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func primaryToolbar(
+        for tab: AppTab
+    ) -> some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if library.isLoggedIn {
+                Button {
+                    navigate(to: .privateMessages, in: tab)
+                } label: {
+                    Image(
+                        systemName:
+                            "bubble.left.and.bubble.right"
+                    )
+                }
+                .accessibilityLabel("私信")
+                .accessibilityHint("打开网易云私信")
+            }
+
+            Button {
+                navigate(to: .songRecognition, in: tab)
+            } label: {
+                Image(systemName: "waveform")
+            }
+            .accessibilityLabel("听歌识曲")
+
+            Button {
+                presentedSheet = .settings
+            } label: {
+                accountToolbarLabel
+            }
+            .accessibilityLabel(accountToolbarAccessibilityLabel)
+        }
+    }
+
+    @ViewBuilder
+    private func contentDestination(
+        for route: ContentRoute
+    ) -> some View {
+        switch route {
+        case .privateMessages:
+            NeteasePrivateMessagesView()
+        case .songRecognition:
+            SongRecognitionView()
+        }
+    }
+
+    @ViewBuilder
+    private var accountToolbarLabel: some View {
+        if let profile = library.profile {
+            AsyncImage(url: profile.artworkURL) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "person.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .background(.quaternary, in: .circle)
+            .clipShape(.circle)
+        } else {
+            Image(
+                systemName: library.isLoggedIn
+                    ? "person.crop.circle.fill"
+                    : "person.crop.circle"
+            )
+        }
+    }
+
+    private var accountToolbarAccessibilityLabel: String {
+        if let profile = library.profile {
+            return "\(profile.nickname)的账号与设置"
+        }
+        return library.isLoggedIn ? "账号与设置" : "登录与设置"
+    }
+
+    private func navigationPathBinding(
+        for tab: AppTab
+    ) -> Binding<NavigationPath> {
+        Binding(
+            get: {
+                navigationPaths[tab] ?? NavigationPath()
+            },
+            set: {
+                navigationPaths[tab] = $0
+            }
+        )
     }
 
     private var initialNowPlayingPage: NowPlayingPage {
@@ -344,18 +462,18 @@ struct ContentView: View {
         navigate(to: route)
     }
 
+    private func navigate(
+        to route: ContentRoute,
+        in tab: AppTab
+    ) {
+        var path = navigationPaths[tab] ?? NavigationPath()
+        path.append(route)
+        navigationPaths[tab] = path
+    }
+
     private func navigate(to route: MusicRoute) {
-        switch selectedTab {
-        case .home:
-            homePath.append(route)
-        case .explore:
-            explorePath.append(route)
-        case .library:
-            libraryPath.append(route)
-        case .search:
-            searchPath.append(route)
-        case .settings:
-            settingsPath.append(route)
-        }
+        var path = navigationPaths[selectedTab] ?? NavigationPath()
+        path.append(route)
+        navigationPaths[selectedTab] = path
     }
 }

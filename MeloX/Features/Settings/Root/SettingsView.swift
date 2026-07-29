@@ -35,120 +35,28 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        List {
-            if showsAccount {
-                SettingsAccountSection()
+        ScrollView {
+            VStack(spacing: 32) {
+                SettingsHomeHeader()
+                    .padding(.bottom, 8)
+
+                settingsContent
             }
-
-            ForEach(visibleSections) { section in
-                Section(section.title) {
-                    ForEach(section.items, id: \.route) { item in
-                        NavigationLink(value: item.route) {
-                            HStack(spacing: 12) {
-                                Label {
-                                    VStack(
-                                        alignment: .leading,
-                                        spacing: 3
-                                    ) {
-                                        Text(item.title)
-
-                                        Text(item.subtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .fixedSize(
-                                                horizontal: false,
-                                                vertical: true
-                                            )
-                                    }
-                                } icon: {
-                                    Image(systemName: item.systemImage)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                if let value = value(for: item.route) {
-                                    Text(value)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                }
-            }
-
-            if showsReset {
-                Section {
-                    Button(
-                        "恢复播放器默认设置",
-                        systemImage: "arrow.counterclockwise",
-                        role: .destructive
-                    ) {
-                        showsResetConfirmation = true
-                    }
-                    .disabled(isResettingSettings)
-                } header: {
-                    Text("还原")
-                } footer: {
-                    Text("重置播放、歌词、均衡器、自动混音和扩展歌词显示，不会删除账号、下载或音乐数据。")
-                }
-            }
-
-            if !showsAccount && visibleSections.isEmpty && !showsReset {
-                ContentUnavailableView(
-                    "没有找到设置",
-                    systemImage: "magnifyingglass",
-                    description: Text("换个关键词再试。")
-                )
-                .frame(maxWidth: .infinity)
-                .listRowBackground(Color.clear)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 88)
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle("设置")
+        .background(
+            Color(uiColor: .systemGroupedBackground)
+                .ignoresSafeArea()
+        )
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索设置")
+        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: SettingsRoute.self) { route in
-            switch route {
-            case .accountHome:
-                if let profile = library.profile {
-                    AccountHomeView(
-                        initialProfile: profile,
-                        initialDetail: library.accountDetail,
-                        initialPlaylists: library.favoritePlaylists
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "账号信息不可用",
-                        systemImage: "person.crop.circle.badge.exclamationmark"
-                    )
-                }
-            case .privateMessages:
-                NeteasePrivateMessagesView()
-            case .playback:
-                PlaybackSettingsView()
-            case .playerAppearance:
-                PlayerAppearanceSettingsView()
-            case .lyrics:
-                LyricsSettingsView()
-            case .systemPlayback:
-                SystemPlaybackSettingsView()
-            case .general:
-                GeneralSettingsView()
-            case .content:
-                ContentSettingsView()
-            case .downloads:
-                DownloadsView()
-            case .skylineLyrics:
-                SkylineLyricsSettingsView()
-            case .floatingLyrics:
-                FloatingLyricsSettingsView()
-            case .developer:
-                DeveloperSettingsView()
-            case .about:
-                AboutView()
-            }
+            destination(for: route)
         }
         .confirmationDialog(
             "恢复播放器默认设置？",
@@ -164,6 +72,86 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var settingsContent: some View {
+        Group {
+            if showsAccount {
+                SettingsAccountSection()
+            }
+
+            ForEach(visibleSections) { section in
+                SettingsHomeSectionCard(
+                    section: section,
+                    value: value(for:)
+                )
+            }
+
+            if showsReset {
+                SettingsHomeResetCard(
+                    isResetting: isResettingSettings
+                ) {
+                    showsResetConfirmation = true
+                }
+            }
+
+            if !showsAccount && visibleSections.isEmpty && !showsReset {
+                ContentUnavailableView(
+                    "没有找到设置",
+                    systemImage: "magnifyingglass",
+                    description: Text("换个关键词再试。")
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 48)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func destination(
+        for route: SettingsRoute
+    ) -> some View {
+        switch route {
+        case .accountHome:
+            if let profile = library.profile {
+                AccountHomeView(
+                    initialProfile: profile,
+                    initialDetail: library.accountDetail,
+                    initialPlaylists: library.favoritePlaylists
+                )
+            } else {
+                ContentUnavailableView(
+                    "账号信息不可用",
+                    systemImage:
+                        "person.crop.circle.badge.exclamationmark"
+                )
+            }
+        case .playback:
+            PlaybackSettingsView()
+        case .playerAppearance:
+            PlayerAppearanceSettingsView()
+        case .lyrics:
+            LyricsSettingsView()
+        case .systemPlayback:
+            SystemPlaybackSettingsView()
+        case .general:
+            GeneralSettingsView()
+        case .tabLayout:
+            TabLayoutSettingsView()
+        case .content:
+            ContentSettingsView()
+        case .downloads:
+            DownloadsView()
+        case .skylineLyrics:
+            SkylineLyricsSettingsView()
+        case .floatingLyrics:
+            FloatingLyricsSettingsView()
+        case .developer:
+            DeveloperSettingsView()
+        case .about:
+            AboutView()
+        }
+    }
+
     private func value(for route: SettingsRoute) -> String? {
         switch route {
         case .playback:
@@ -174,6 +162,8 @@ struct SettingsView: View {
             systemPlaybackSummary
         case .downloads:
             downloads.totalByteCount.formatted(.byteCount(style: .file))
+        case .tabLayout:
+            "\(settings.visibleTabs.count) 个标签页"
         case .general:
             settings.appearance.title
         case .developer:
@@ -181,7 +171,6 @@ struct SettingsView: View {
         case .about:
             Bundle.main.appVersion
         case .accountHome,
-             .privateMessages,
              .playerAppearance,
              .content,
              .skylineLyrics,

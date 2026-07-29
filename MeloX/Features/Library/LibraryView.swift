@@ -1,64 +1,82 @@
 import SwiftUI
 
-private enum LibraryRoute: Hashable {
-    case privateMessages
-}
-
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(DownloadStore.self) private var downloads
 
-    @State private var section: LibraryPage = .songs
+    private let fixedPage: LibraryPage?
+
+    @State private var section: LibraryPage
     @State private var hasAppliedInitialPage = false
     @State private var showsLogin = false
 
+    init(fixedPage: LibraryPage? = nil) {
+        self.fixedPage = fixedPage
+        _section = State(initialValue: fixedPage ?? .songs)
+    }
+
+    private var availablePages: [LibraryPage] {
+        fixedPage.map { [$0] } ?? settings.embeddedLibraryPages
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("音乐库分类", selection: $section) {
-                ForEach(LibraryPage.allCases) { item in
-                    Text(item.title).tag(item)
+            if fixedPage == nil, availablePages.count > 1 {
+                Picker("音乐库分类", selection: $section) {
+                    ForEach(availablePages) { item in
+                        Text(item.title).tag(item)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .padding()
             }
-            .pickerStyle(.segmented)
-            .padding()
 
-            if section == .downloads {
+            if availablePages.isEmpty {
+                ContentUnavailableView(
+                    "音乐库页面均已拆分",
+                    systemImage: "rectangle.3.group",
+                    description: Text("可在“标签页与音乐库”设置中调整页面归属。")
+                )
+            } else if section == .downloads {
                 downloadedSongList
             } else if !library.isLoggedIn {
                 loginUnavailableView
+            } else if section == .cloud {
+                CloudMusicView()
             } else {
                 libraryContent
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle("音乐库")
-        .toolbar {
-            if library.isLoggedIn {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink(value: LibraryRoute.privateMessages) {
-                        Image(
-                            systemName: "bubble.left.and.bubble.right"
-                        )
-                    }
-                    .accessibilityLabel("私信")
-                }
-            }
-        }
-        .navigationDestination(for: LibraryRoute.self) { route in
-            switch route {
-            case .privateMessages:
-                NeteasePrivateMessagesView()
-            }
-        }
+        .navigationTitle(
+            fixedPage.map { AppTab(libraryPage: $0).title }
+                ?? "音乐库"
+        )
         .onAppear {
             guard !hasAppliedInitialPage else { return }
             hasAppliedInitialPage = true
-            section = settings.initialLibraryPage
+            if let fixedPage {
+                section = fixedPage
+            } else {
+                section = availablePages.contains(settings.initialLibraryPage)
+                    ? settings.initialLibraryPage
+                    : availablePages.first ?? .songs
+            }
         }
         .onChange(of: section) { _, page in
-            settings.lastLibraryPage = page
+            if fixedPage == nil {
+                settings.lastLibraryPage = page
+            }
+        }
+        .onChange(of: availablePages) { _, pages in
+            guard fixedPage == nil,
+                  let firstPage = pages.first,
+                  !pages.contains(section) else {
+                return
+            }
+            section = firstPage
         }
         .sheet(isPresented: $showsLogin) {
             NavigationStack {

@@ -2,12 +2,12 @@ import Foundation
 
 enum SettingsRoute: Hashable {
     case accountHome
-    case privateMessages
     case playback
     case playerAppearance
     case lyrics
     case systemPlayback
     case general
+    case tabLayout
     case content
     case downloads
     case skylineLyrics
@@ -41,7 +41,7 @@ struct SettingsCatalogItem {
 enum SettingsCatalog {
     static let sections = [
         SettingsCatalogSection(
-            title: "播放与歌词",
+            title: "播放与声音",
             items: [
                 SettingsCatalogItem(
                     route: .playback,
@@ -69,6 +69,11 @@ enum SettingsCatalog {
                         "自动锁屏",
                     ]
                 ),
+            ]
+        ),
+        SettingsCatalogSection(
+            title: "歌词与显示",
+            items: [
                 SettingsCatalogItem(
                     route: .lyrics,
                     title: "歌词",
@@ -85,11 +90,6 @@ enum SettingsCatalog {
                         "刷新率",
                     ]
                 ),
-            ]
-        ),
-        SettingsCatalogSection(
-            title: "系统与扩展显示",
-            items: [
                 SettingsCatalogItem(
                     route: .systemPlayback,
                     title: "系统歌词显示",
@@ -172,8 +172,24 @@ enum SettingsCatalog {
             ]
         ),
         SettingsCatalogSection(
-            title: "MeloX",
+            title: "界面与应用",
             items: [
+                SettingsCatalogItem(
+                    route: .tabLayout,
+                    title: "标签页与音乐库",
+                    subtitle: "拆分音乐库分类并调整标签栏顺序",
+                    systemImage: "rectangle.3.group",
+                    keywords: [
+                        "TabView",
+                        "标签栏",
+                        "排序",
+                        "云盘",
+                        "歌曲",
+                        "歌单",
+                        "下载",
+                        "历史",
+                    ]
+                ),
                 SettingsCatalogItem(
                     route: .general,
                     title: "通用",
@@ -192,6 +208,24 @@ enum SettingsCatalog {
                         "搜索",
                     ]
                 ),
+            ]
+        ),
+        SettingsCatalogSection(
+            title: "关于与开发",
+            items: [
+                SettingsCatalogItem(
+                    route: .about,
+                    title: "关于 MeloX",
+                    subtitle: "版本、更新、社区与开源许可",
+                    systemImage: "info.circle",
+                    keywords: [
+                        "GitHub",
+                        "Telegram",
+                        "更新日志",
+                        "检查更新",
+                        "声明",
+                    ]
+                ),
                 SettingsCatalogItem(
                     route: .developer,
                     title: "开发者选项",
@@ -205,19 +239,6 @@ enum SettingsCatalog {
                         "调试",
                         "Core ML",
                         "全曲分析",
-                    ]
-                ),
-                SettingsCatalogItem(
-                    route: .about,
-                    title: "关于 MeloX",
-                    subtitle: "版本、更新、社区与开源许可",
-                    systemImage: "info.circle",
-                    keywords: [
-                        "GitHub",
-                        "Telegram",
-                        "更新日志",
-                        "检查更新",
-                        "声明",
                     ]
                 ),
             ]
@@ -251,7 +272,6 @@ enum SettingsCatalog {
                 "退出登录",
                 "Cookie",
                 "个人主页",
-                "私信",
                 "用户 ID",
             ]
         )

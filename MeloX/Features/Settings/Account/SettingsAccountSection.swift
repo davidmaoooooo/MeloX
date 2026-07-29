@@ -14,24 +14,20 @@ struct SettingsAccountSection: View {
     @State private var showsLogoutConfirmation = false
 
     var body: some View {
-        Section {
-            if library.isLoggedIn {
-                loggedInContent
-            } else {
-                Button {
-                    presentedSheet = .neteaseLogin
-                } label: {
-                    Label(
-                        "登录网易云音乐",
-                        systemImage: "person.crop.circle.badge.plus"
-                    )
+        VStack(spacing: 32) {
+            VStack(alignment: .leading, spacing: 10) {
+                accountOverview
+
+                if !library.isLoggedIn {
+                    Text("登录 Cookie 仅保存在本机，用于同步收藏、云盘和账号内容。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
                 }
             }
-        } header: {
-            Text("网易云账号")
-        } footer: {
-            if !library.isLoggedIn {
-                Text("登录 Cookie 仅保存在本机，用于同步音乐库和账号相关内容。")
+
+            if library.isLoggedIn {
+                logoutCard
             }
         }
         .task(id: settings.cookie) {
@@ -58,43 +54,143 @@ struct SettingsAccountSection: View {
     }
 
     @ViewBuilder
-    private var loggedInContent: some View {
-        if let profile = library.profile {
+    private var accountOverviewContent: some View {
+        if library.isLoggedIn, let profile = library.profile {
             NavigationLink(value: SettingsRoute.accountHome) {
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     accountAvatar(profile)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(profile.nickname)
-                            .font(.headline)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
 
                         Text(accountSubtitle(profile))
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
+                    .layoutPriority(1)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.forward")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(.vertical, 4)
+                .contentShape(.rect)
             }
-            .accessibilityHint("打开个人主页")
-        } else {
-            HStack(spacing: 12) {
+            .buttonStyle(.plain)
+            .accessibilityHint("打开账号信息与个人主页")
+        } else if library.isLoggedIn {
+            HStack(spacing: 16) {
                 ProgressView()
-                Text("正在读取账号信息")
-                    .foregroundStyle(.secondary)
+                    .frame(width: 60, height: 60)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("网易云音乐账号")
+                        .font(.title3.weight(.semibold))
+                    Text("正在读取账号信息")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-        }
+        } else {
+            Button {
+                presentedSheet = .neteaseLogin
+            } label: {
+                HStack(spacing: 16) {
+                    Image(
+                        systemName:
+                            "person.crop.circle.badge.plus"
+                    )
+                    .font(.system(size: 36))
+                    .foregroundStyle(.tint)
+                    .frame(width: 60, height: 60)
+                    .background(.quaternary, in: .circle)
 
-        NavigationLink(value: SettingsRoute.privateMessages) {
-            Label(
-                "私信",
-                systemImage: "bubble.left.and.bubble.right"
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("登录网易云音乐")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("同步收藏、云盘与播放记录")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .layoutPriority(1)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.forward")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var accountOverview: some View {
+        accountOverviewContent
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: 100,
+                alignment: .leading
             )
-        }
+            .background {
+                RoundedRectangle(
+                    cornerRadius: 28,
+                    style: .continuous
+                )
+                .fill(
+                    Color(
+                        uiColor:
+                            .secondarySystemGroupedBackground
+                    )
+                )
+            }
+    }
 
-        Button("退出登录", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+    private var logoutCard: some View {
+        Button(role: .destructive) {
             showsLogoutConfirmation = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(
+                    systemName:
+                        "rectangle.portrait.and.arrow.right"
+                )
+                .font(.title3.weight(.medium))
+                .frame(width: 30)
+
+                Text("退出登录")
+                    .font(.body.weight(.medium))
+
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .frame(minHeight: 60)
+            .contentShape(.rect)
+            .foregroundStyle(.red)
+        }
+        .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(
+                cornerRadius: 26,
+                style: .continuous
+            )
+            .fill(
+                Color(
+                    uiColor:
+                        .secondarySystemGroupedBackground
+                )
+            )
         }
     }
 
@@ -110,7 +206,7 @@ struct SettingsAccountSection: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 52, height: 52)
+        .frame(width: 60, height: 60)
         .background(.quaternary, in: .circle)
         .clipShape(.circle)
         .accessibilityHidden(true)
@@ -120,7 +216,7 @@ struct SettingsAccountSection: View {
         if let detail = library.accountDetail, detail.level > 0 {
             return "Lv.\(detail.level) · 用户 ID \(profile.id)"
         }
-        return "用户 ID \(profile.id) · 查看个人主页"
+        return "用户 ID \(profile.id) · 账号信息与同步"
     }
 
     private func logout() {
