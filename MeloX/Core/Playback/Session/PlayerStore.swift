@@ -47,6 +47,7 @@ final class PlayerStore {
     private(set) var playbackIssue: PlaybackIssue?
     private(set) var volume: Double = 1
     private(set) var isListenTogetherSessionActive = false
+    private(set) var isHeartModeActive = false
     private(set) var repeatMode: RepeatMode = .off
     private(set) var isAutoplayEnabled = false
     private(set) var isAutoMixEnabled = false
@@ -260,6 +261,7 @@ final class PlayerStore {
         repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
         volume = min(max(snapshot.volume, 0), 1)
         historySourceID = snapshot.historySourceID
+        isHeartModeActive = snapshot.heartModeEnabled ?? false
         isAutoplayEnabled = snapshot.autoplayEnabled ?? false
         isAutoMixEnabled = snapshot.autoMixEnabled ?? false
         updateQueueModeIndicator(
@@ -291,6 +293,7 @@ final class PlayerStore {
         }
         isAutoplayEnabled = false
         isAutoMixEnabled = false
+        isHeartModeActive = false
         cancelAutoMixPreparation()
         updateQueueModeIndicator()
         persistSnapshot()
@@ -328,6 +331,7 @@ final class PlayerStore {
             return
         }
 
+        isHeartModeActive = false
         applyListenTogetherPlayMode(playMode)
         let queueChanged = songs.map(\.id) != queue.map(\.id)
         let songChanged = currentSong?.id != targetSongID
@@ -405,6 +409,7 @@ final class PlayerStore {
         startAt: TimeInterval = 0
     ) async {
         recordCurrentPlayback()
+        isHeartModeActive = false
         if let songs, !songs.isEmpty {
             let index = songs.firstIndex(where: { $0.id == song.id }) ?? 0
             playbackQueue.replace(with: songs, startingAt: index)
@@ -427,10 +432,45 @@ final class PlayerStore {
     }
 
     func playAll(_ songs: [Song], sourceID: Int? = nil) async {
+        await replaceQueueAndPlay(
+            songs,
+            sourceID: sourceID,
+            activatesHeartMode: false
+        )
+    }
+
+    func playHeartMode(
+        playlistID: Int,
+        seedSongID: Int
+    ) async throws {
+        let songs = try await api.intelligenceModeSongs(
+            seedSongID: seedSongID,
+            playlistID: playlistID
+        )
+        try Task.checkCancellation()
+        await replaceQueueAndPlay(
+            songs,
+            sourceID: playlistID,
+            activatesHeartMode: true
+        )
+    }
+
+    func disableHeartMode() {
+        guard isHeartModeActive else { return }
+        isHeartModeActive = false
+        persistSnapshot()
+    }
+
+    private func replaceQueueAndPlay(
+        _ songs: [Song],
+        sourceID: Int?,
+        activatesHeartMode: Bool
+    ) async {
         guard !songs.isEmpty else { return }
         recordCurrentPlayback()
         playbackQueue.replace(with: songs, startingAt: 0)
         historySourceID = sourceID
+        isHeartModeActive = activatesHeartMode
         hasRecordedCurrentStart = false
         await loadCurrentSong(autoplay: true)
     }
@@ -1375,6 +1415,7 @@ final class PlayerStore {
                 shuffledOrder: playbackQueue.persistedShuffleOrder,
                 volume: volume,
                 historySourceID: historySourceID,
+                heartModeEnabled: isHeartModeActive,
                 autoplayEnabled: isAutoplayEnabled,
                 autoMixEnabled: isAutoMixEnabled,
                 queueModeIndicator: queueModeIndicator?.rawValue

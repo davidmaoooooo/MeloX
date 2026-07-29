@@ -9,6 +9,7 @@ struct PlaybackSnapshot: Codable {
     let shuffledOrder: [Int]
     let volume: Double
     let historySourceID: Int?
+    let heartModeEnabled: Bool?
     let autoplayEnabled: Bool?
     let autoMixEnabled: Bool?
     let queueModeIndicator: String?

@@ -11,6 +11,12 @@ private enum ContentRoute: Hashable {
     case songRecognition
 }
 
+private struct HeartModeLaunchReadiness: Equatable {
+    let hasRestoredPlayback: Bool
+    let isLoggedIn: Bool
+    let canStartHeartMode: Bool
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(PlayerStore.self) private var player
@@ -32,6 +38,9 @@ struct ContentView: View {
     @State private var nowPlayingSharePresentation: NeteaseSharePresentation?
     @State private var pendingMusicRoute: MusicRoute?
     @State private var isTabViewBottomAccessorySuppressed = false
+    @State private var hasRestoredPlayback = false
+    @State private var hasHandledHeartModeLaunch = false
+    @State private var heartModeLaunchErrorMessage: String?
     @Namespace private var playerTransitionNamespace
     @Namespace private var musicNavigationNamespace
 
@@ -120,6 +129,17 @@ struct ContentView: View {
             }
             .task {
                 await player.restore()
+                guard !Task.isCancelled else { return }
+                hasRestoredPlayback = true
+            }
+            .task(
+                id: HeartModeLaunchReadiness(
+                    hasRestoredPlayback: hasRestoredPlayback,
+                    isLoggedIn: library.isLoggedIn,
+                    canStartHeartMode: library.canStartHeartMode
+                )
+            ) {
+                await startHeartModeOnLaunchIfNeeded()
             }
             .task(id: player.currentSong?.id) {
                 let songID = player.currentSong?.id
@@ -202,6 +222,23 @@ struct ContentView: View {
                 Text(player.playbackIssue?.message ?? "当前歌曲暂时无法播放。")
             }
             .alert(
+                "无法自动启动心动模式",
+                isPresented: Binding(
+                    get: { heartModeLaunchErrorMessage != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            heartModeLaunchErrorMessage = nil
+                        }
+                    }
+                )
+            ) {
+                Button("好", role: .cancel) {
+                    heartModeLaunchErrorMessage = nil
+                }
+            } message: {
+                Text(heartModeLaunchErrorMessage ?? "请稍后重试。")
+            }
+            .alert(
                 "下载操作失败",
                 isPresented: Binding(
                     get: { downloads.errorMessage != nil },
@@ -240,6 +277,38 @@ struct ContentView: View {
             }
             .coordinateListenTogether()
             .appLaunchExperience()
+    }
+
+    private func startHeartModeOnLaunchIfNeeded() async {
+        guard !hasHandledHeartModeLaunch,
+              hasRestoredPlayback else {
+            return
+        }
+        guard settings.startsHeartModeOnLaunch else {
+            hasHandledHeartModeLaunch = true
+            return
+        }
+        guard library.isLoggedIn else {
+            hasHandledHeartModeLaunch = true
+            return
+        }
+        guard library.canStartHeartMode,
+              let playlistID = library.likedPlaylistID,
+              let seedSongID = library.randomHeartModeSeedSongID() else {
+            return
+        }
+
+        hasHandledHeartModeLaunch = true
+        do {
+            try await player.playHeartMode(
+                playlistID: playlistID,
+                seedSongID: seedSongID
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            heartModeLaunchErrorMessage = error.localizedDescription
+        }
     }
 
     @ViewBuilder

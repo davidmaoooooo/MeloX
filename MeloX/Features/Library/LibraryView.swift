@@ -11,6 +11,8 @@ struct LibraryView: View {
     @State private var section: LibraryPage
     @State private var hasAppliedInitialPage = false
     @State private var showsLogin = false
+    @State private var isStartingHeartMode = false
+    @State private var heartModeErrorMessage: String?
 
     init(fixedPage: LibraryPage? = nil) {
         self.fixedPage = fixedPage
@@ -102,6 +104,23 @@ struct LibraryView: View {
             }
         } message: {
             Text(library.errorMessage ?? "未知错误")
+        }
+        .alert(
+            "无法启动心动模式",
+            isPresented: Binding(
+                get: { heartModeErrorMessage != nil },
+                set: { presented in
+                    if !presented {
+                        heartModeErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {
+                heartModeErrorMessage = nil
+            }
+        } message: {
+            Text(heartModeErrorMessage ?? "请稍后重试。")
         }
     }
 
@@ -255,6 +274,28 @@ struct LibraryView: View {
                 } label: {
                     Label("播放全部", systemImage: "play.fill")
                 }
+
+                if section == .songs {
+                    Button(action: startHeartMode) {
+                        HStack {
+                            Label(
+                                "心动模式",
+                                systemImage: "heart.circle.fill"
+                            )
+
+                            Spacer()
+
+                            if isStartingHeartMode {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(
+                        !library.canStartHeartMode
+                            || isStartingHeartMode
+                    )
+                }
             }
             ForEach(songs) { song in
                 Button {
@@ -295,6 +336,31 @@ struct LibraryView: View {
                     systemImage: section == .history ? "clock" : "heart",
                     description: Text(section == .history ? "网易云音乐中的最近播放会显示在这里。" : "在歌曲列表左滑即可收藏到网易云音乐。")
                 )
+            }
+        }
+    }
+
+    private func startHeartMode() {
+        guard !isStartingHeartMode,
+              let playlistID = library.likedPlaylistID,
+              let seedSongID =
+                library.randomHeartModeSeedSongID() else {
+            return
+        }
+
+        isStartingHeartMode = true
+        heartModeErrorMessage = nil
+        Task { @MainActor in
+            defer { isStartingHeartMode = false }
+            do {
+                try await player.playHeartMode(
+                    playlistID: playlistID,
+                    seedSongID: seedSongID
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                heartModeErrorMessage = error.localizedDescription
             }
         }
     }

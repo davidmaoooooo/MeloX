@@ -9,6 +9,7 @@ final class LibraryStore {
     private(set) var favoriteSongs: [Song] = []
     private(set) var favoritePlaylists: [Playlist] = []
     private(set) var recentSongs: [Song] = []
+    private(set) var likedPlaylistID: Int?
     private(set) var favoriteSongTotalCount = 0
     private(set) var favoriteSongsNextOffset = 0
     private(set) var isLoadingMoreFavoriteSongs = false
@@ -53,6 +54,14 @@ final class LibraryStore {
 
     var hasMoreFavoriteSongs: Bool {
         favoriteSongsNextOffset < favoriteSongTotalCount
+    }
+
+    var canStartHeartMode: Bool {
+        likedPlaylistID != nil && favoriteSongTotalCount > 0
+    }
+
+    func randomHeartModeSeedSongID() -> Int? {
+        favoriteSongIDs.randomElement()
     }
 
     func contains(song: Song) -> Bool {
@@ -123,6 +132,7 @@ final class LibraryStore {
                 loadedPlaylists = try await api.userPlaylists(userID: loadedProfile.id)
                 // 网易云把“我喜欢的音乐”作为返回列表的第一项；参考项目
                 // 同样在歌单页隐藏这一项，歌曲页单独展示其中的歌曲。
+                likedPlaylistID = loadedPlaylists.first?.id
                 favoritePlaylists = Array(loadedPlaylists.dropFirst())
             } catch is CancellationError {
                 return
@@ -131,7 +141,6 @@ final class LibraryStore {
             }
 
             do {
-                let likedPlaylistID = loadedPlaylists.first?.id
                 let loadedSongIDs = try await api.likedSongIDs(
                     userID: loadedProfile.id,
                     likedPlaylistID: likedPlaylistID
@@ -300,6 +309,7 @@ final class LibraryStore {
         favoriteSongs = []
         favoritePlaylists = []
         recentSongs = []
+        likedPlaylistID = nil
         favoriteSongIDs = []
         favoriteSongIDSet = []
         favoriteSongTotalCount = 0

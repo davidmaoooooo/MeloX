@@ -132,6 +132,7 @@ struct NowPlayingArtworkPage: View {
                                 .lineLimit(1)
                                 .layoutPriority(1)
 
+                            HeartModeNowPlayingBadge()
                             ListenTogetherNowPlayingBadge()
                         }
 

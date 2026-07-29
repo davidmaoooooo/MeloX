@@ -38,6 +38,7 @@ final class AppSettings {
     static let defaultPlayerBackgroundMotionIntensity = 1.0
     static let defaultPlayerBackgroundBeatEffectsEnabled = false
     static let defaultBeatNetDebugEnabled = false
+    static let defaultStartsHeartModeOnLaunch = false
     static let defaultSystemNowPlayingLyricsEnabled = true
     static let defaultSystemNowPlayingLyricsTitleFormat = "{歌词}"
     static let defaultSystemNowPlayingLyricsSubtitleFormat =
@@ -251,6 +252,7 @@ final class AppSettings {
         static let rememberNowPlayingPage = "rememberNowPlayingPage"
         static let rememberedNowPlayingPage = "rememberedNowPlayingPage"
         static let previousRestartsCurrentSong = "previousRestartsCurrentSong"
+        static let startsHeartModeOnLaunch = "startsHeartModeOnLaunch"
         static let checksUpdatesOnLaunch = "checksUpdatesOnLaunch"
         static let automaticallyCachesFrequentlyPlayedSongs = "automaticallyCachesFrequentlyPlayedSongs"
         static let automaticCachePlaybackThreshold = "automaticCachePlaybackThreshold"
@@ -1025,6 +1027,15 @@ final class AppSettings {
         didSet { defaults.set(previousRestartsCurrentSong, forKey: Key.previousRestartsCurrentSong) }
     }
 
+    var startsHeartModeOnLaunch: Bool {
+        didSet {
+            defaults.set(
+                startsHeartModeOnLaunch,
+                forKey: Key.startsHeartModeOnLaunch
+            )
+        }
+    }
+
     var checksUpdatesOnLaunch: Bool {
         didSet { defaults.set(checksUpdatesOnLaunch, forKey: Key.checksUpdatesOnLaunch) }
     }
@@ -1520,6 +1531,9 @@ final class AppSettings {
         rememberNowPlayingPage = defaults.object(forKey: Key.rememberNowPlayingPage) as? Bool ?? false
         rememberedNowPlayingPage = defaults.string(forKey: Key.rememberedNowPlayingPage) ?? "artwork"
         previousRestartsCurrentSong = defaults.object(forKey: Key.previousRestartsCurrentSong) as? Bool ?? true
+        startsHeartModeOnLaunch = defaults.object(
+            forKey: Key.startsHeartModeOnLaunch
+        ) as? Bool ?? Self.defaultStartsHeartModeOnLaunch
         checksUpdatesOnLaunch = defaults.object(forKey: Key.checksUpdatesOnLaunch) as? Bool ?? true
         automaticallyCachesFrequentlyPlayedSongs = defaults.object(
             forKey: Key.automaticallyCachesFrequentlyPlayedSongs
@@ -1740,6 +1754,7 @@ final class AppSettings {
         rememberNowPlayingPage = false
         rememberedNowPlayingPage = "artwork"
         previousRestartsCurrentSong = true
+        startsHeartModeOnLaunch = Self.defaultStartsHeartModeOnLaunch
         skylineLyrics.reset()
     }
 }

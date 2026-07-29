@@ -60,6 +60,11 @@ struct PlaybackSettingsView: View {
 
             Section {
                 Toggle(
+                    "启动时自动从心动模式播放",
+                    isOn: $settings.startsHeartModeOnLaunch
+                )
+
+                Toggle(
                     "记住播放器页面",
                     isOn: $settings.rememberNowPlayingPage
                 )
@@ -72,7 +77,9 @@ struct PlaybackSettingsView: View {
                 Text("播放行为")
             } footer: {
                 Text(
-                    "页面记忆会恢复上次停留的封面、歌词或队列。"
+                    "自动心动模式需要登录网易云音乐；开启后会在下次启动时"
+                        + "载入“我喜欢的音乐”并开始播放。"
+                        + "页面记忆会恢复上次停留的封面、歌词或队列。"
                         + "开启“上一首优先回到歌曲开头”后，播放超过 5 秒会先回到本曲开头。"
                 )
             }

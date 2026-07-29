@@ -78,6 +78,7 @@ struct NowPlayingSongHeader: View {
                         .lineLimit(1)
                         .layoutPriority(1)
 
+                    HeartModeNowPlayingBadge()
                     ListenTogetherNowPlayingBadge()
                 }
 
@@ -144,6 +145,7 @@ struct NowPlayingLandscapeSongHeader: View {
                         .lineLimit(1)
                         .layoutPriority(1)
 
+                    HeartModeNowPlayingBadge()
                     ListenTogetherNowPlayingBadge()
                 }
 
