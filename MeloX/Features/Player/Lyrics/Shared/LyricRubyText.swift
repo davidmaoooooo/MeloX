@@ -12,6 +12,7 @@ struct LyricRubyText: View {
     let playbackTime: TimeInterval
     let rendererStyle: LyricGlowTextRenderer.Style
     let appliesTimingEffects: Bool
+    let timingEffectsStrength: Double
 
     var body: some View {
         VStack(
@@ -63,7 +64,8 @@ struct LyricRubyText: View {
                         trailingVisualOverflow:
                             row.originalTrailingVisualOverflow
                     ),
-                    appliesTimingEffects: appliesTimingEffects
+                    appliesTimingEffects: appliesTimingEffects,
+                    timingEffectsStrength: timingEffectsStrength
                 )
             )
             .frame(
@@ -92,7 +94,8 @@ struct LyricRubyText: View {
                     unplayedOpacity: rendererStyle.unplayedOpacity,
                     trailingVisualOverflow:
                         row.romanizationTrailingVisualOverflow,
-                    appliesTimingEffects: appliesTimingEffects
+                    appliesTimingEffects: appliesTimingEffects,
+                    timingEffectsStrength: timingEffectsStrength
                 )
             )
             .frame(

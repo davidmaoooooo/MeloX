@@ -7,10 +7,19 @@ struct LyricRomanizationTextRenderer: TextRenderer {
     let unplayedOpacity: Double
     let trailingVisualOverflow: CGFloat
     let appliesTimingEffects: Bool
+    var timingEffectsStrength: Double
 
-    var animatableData: Double {
-        get { playbackTime }
-        set { playbackTime = newValue }
+    var animatableData: AnimatablePair<Double, Double> {
+        get {
+            AnimatablePair(
+                playbackTime,
+                timingEffectsStrength
+            )
+        }
+        set {
+            playbackTime = newValue.first
+            timingEffectsStrength = newValue.second
+        }
     }
 
     var displayPadding: EdgeInsets {
@@ -26,6 +35,7 @@ struct LyricRomanizationTextRenderer: TextRenderer {
         layout: Text.Layout,
         in context: inout GraphicsContext
     ) {
+        let effectsStrength = effectiveTimingEffectsStrength
         for line in layout {
             for run in line {
                 let horizontalOffset =
@@ -39,7 +49,7 @@ struct LyricRomanizationTextRenderer: TextRenderer {
                     )
                 }
 
-                guard appliesTimingEffects,
+                guard effectsStrength > 0,
                       let timing =
                         run[LyricTimingTextAttribute.self],
                       !timing.isWhitespace else {
@@ -47,7 +57,11 @@ struct LyricRomanizationTextRenderer: TextRenderer {
                     continue
                 }
 
-                drawUnplayed(run, in: &runContext)
+                drawUnplayed(
+                    run,
+                    effectsStrength: effectsStrength,
+                    in: &runContext
+                )
                 drawPlayed(
                     run,
                     progress: playedProgress(for: timing),
@@ -59,13 +73,17 @@ struct LyricRomanizationTextRenderer: TextRenderer {
 
     private func drawUnplayed(
         _ run: Text.Layout.Run,
+        effectsStrength: Double,
         in context: inout GraphicsContext
     ) {
         var unplayedContext = context
-        unplayedContext.opacity = min(
+        let normalizedUnplayedOpacity = min(
             max(unplayedOpacity, 0),
             1
         )
+        unplayedContext.opacity =
+            1
+            - (1 - normalizedUnplayedOpacity) * effectsStrength
         unplayedContext.draw(run)
     }
 
@@ -152,6 +170,11 @@ struct LyricRomanizationTextRenderer: TextRenderer {
             ),
             1
         )
+    }
+
+    private var effectiveTimingEffectsStrength: Double {
+        guard appliesTimingEffects else { return 0 }
+        return min(max(timingEffectsStrength, 0), 1)
     }
 }
 

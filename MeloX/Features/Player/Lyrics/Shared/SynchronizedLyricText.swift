@@ -45,6 +45,7 @@ struct SynchronizedLyricText: View {
 
     let line: LyricLine
     let isPlaybackLine: Bool
+    let playbackFocusProgress: CGFloat?
     let usesPseudoTiming: Bool
     let fontSize: CGFloat
     let romanizationFontSize: CGFloat
@@ -77,6 +78,7 @@ struct SynchronizedLyricText: View {
     init(
         line: LyricLine,
         isPlaybackLine: Bool,
+        playbackFocusProgress: CGFloat? = nil,
         usesPseudoTiming: Bool,
         fontSize: CGFloat,
         romanizationFontSize: CGFloat? = nil,
@@ -102,6 +104,7 @@ struct SynchronizedLyricText: View {
     ) {
         self.line = line
         self.isPlaybackLine = isPlaybackLine
+        self.playbackFocusProgress = playbackFocusProgress
         self.usesPseudoTiming = usesPseudoTiming
         self.fontSize = fontSize
         self.romanizationFontSize = romanizationFontSize
@@ -196,7 +199,7 @@ struct SynchronizedLyricText: View {
             primaryLyric
                 .animation(
                     accessibilityReduceMotion ? nil : .easeInOut(duration: 0.28),
-                    value: usesTimedLyrics
+                    value: legacyTimedLyricAnimationValue
                 )
 
             annotationStack
@@ -312,9 +315,9 @@ struct SynchronizedLyricText: View {
 
     private var primaryLyric: some View {
         stablePrimaryLyric
-            .opacity(usesTimedLyrics ? 0 : 1)
+            .opacity(presentsTimedLyrics ? 0 : 1)
             .overlay(alignment: alignment.frameAlignment) {
-                if usesTimedLyrics {
+                if presentsTimedLyrics {
                     synchronizedPrimaryLyric
                 }
             }
@@ -371,7 +374,9 @@ struct SynchronizedLyricText: View {
                 if usesRubyLayout {
                     rubyText(
                         at: playbackTime,
-                        appliesTimingEffects: true
+                        appliesTimingEffects: true,
+                        timingEffectsStrength:
+                            timedLyricPresentationProgress
                     )
                 } else {
                     activeSynchronizedText
@@ -384,7 +389,11 @@ struct SynchronizedLyricText: View {
                             vertical: true
                         )
                         .textRenderer(
-                            lyricTextRenderer(at: playbackTime)
+                            lyricTextRenderer(
+                                at: playbackTime,
+                                timingEffectsStrength:
+                                    timedLyricPresentationProgress
+                            )
                         )
                 }
             }
@@ -397,7 +406,7 @@ struct SynchronizedLyricText: View {
                     alignment: alignment.frameAlignment
                 )
                 .scaleEffect(
-                    playbackScale(at: playbackTime),
+                    playbackPresentationScale(at: playbackTime),
                     anchor: .center
                 )
         }
@@ -411,7 +420,8 @@ struct SynchronizedLyricText: View {
 
     private func lyricTextRenderer(
         at playbackTime: TimeInterval,
-        appliesTimingEffects: Bool = true
+        appliesTimingEffects: Bool = true,
+        timingEffectsStrength: Double = 1
     ) -> LyricGlowTextRenderer {
         LyricGlowTextRenderer(
             playbackTime: playbackTime,
@@ -420,7 +430,8 @@ struct SynchronizedLyricText: View {
                 width: rendererLayoutWidth,
                 centersLines: alignment == .center
             ),
-            appliesTimingEffects: appliesTimingEffects
+            appliesTimingEffects: appliesTimingEffects,
+            timingEffectsStrength: timingEffectsStrength
         )
     }
 
@@ -451,7 +462,8 @@ struct SynchronizedLyricText: View {
 
     private func rubyText(
         at playbackTime: TimeInterval,
-        appliesTimingEffects: Bool
+        appliesTimingEffects: Bool,
+        timingEffectsStrength: Double = 1
     ) -> some View {
         LyricRubyText(
             rows: romanizationRows,
@@ -466,7 +478,8 @@ struct SynchronizedLyricText: View {
                 displaysRomanization ? 1 : 0,
             playbackTime: playbackTime,
             rendererStyle: lyricRendererStyle,
-            appliesTimingEffects: appliesTimingEffects
+            appliesTimingEffects: appliesTimingEffects,
+            timingEffectsStrength: timingEffectsStrength
         )
     }
 
@@ -485,6 +498,23 @@ struct SynchronizedLyricText: View {
 
     private var usesTimedLyrics: Bool {
         isPlaybackLine && supportsTimedLyrics
+    }
+
+    private var timedLyricPresentationProgress: Double {
+        guard supportsTimedLyrics else { return 0 }
+        guard let playbackFocusProgress else {
+            return usesTimedLyrics ? 1 : 0
+        }
+        return Double(min(max(playbackFocusProgress, 0), 1))
+    }
+
+    private var presentsTimedLyrics: Bool {
+        supportsTimedLyrics
+            && (isPlaybackLine || timedLyricPresentationProgress > 0)
+    }
+
+    private var legacyTimedLyricAnimationValue: Bool {
+        playbackFocusProgress == nil && usesTimedLyrics
     }
 
     private var activeSynchronizedText: Text {
@@ -627,5 +657,14 @@ struct SynchronizedLyricText: View {
         return playbackScaleRange.lowerBound
             + (playbackScaleRange.upperBound - playbackScaleRange.lowerBound)
                 * CGFloat(easedProgress)
+    }
+
+    private func playbackPresentationScale(
+        at playbackTime: TimeInterval
+    ) -> CGFloat {
+        let activeScale = playbackScale(at: playbackTime)
+        return 1
+            + (activeScale - 1)
+                * CGFloat(timedLyricPresentationProgress)
     }
 }

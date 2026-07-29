@@ -70,10 +70,19 @@ struct LyricGlowTextRenderer: TextRenderer {
     let style: Style
     let layoutConfiguration: LayoutConfiguration
     let appliesTimingEffects: Bool
+    var timingEffectsStrength: Double
 
-    var animatableData: Double {
-        get { playbackTime }
-        set { playbackTime = newValue }
+    var animatableData: AnimatablePair<Double, Double> {
+        get {
+            AnimatablePair(
+                playbackTime,
+                timingEffectsStrength
+            )
+        }
+        set {
+            playbackTime = newValue.first
+            timingEffectsStrength = newValue.second
+        }
     }
 
     var displayPadding: EdgeInsets {
@@ -91,6 +100,7 @@ struct LyricGlowTextRenderer: TextRenderer {
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let effectsStrength = effectiveTimingEffectsStrength
         if layoutConfiguration.centersLines {
             // TextRenderer offsets drawing by its leading display padding.
             // Left-aligned lyrics have their own inset, but centered Skyline
@@ -101,7 +111,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
         for line in layout {
             var lineContext = context
-            let revealMask = appliesTimingEffects
+            let revealMask = effectsStrength > 0
                 ? lineRevealMask(for: line)
                 : nil
             if let transform = LyricLineFitting.drawingTransform(
@@ -126,13 +136,14 @@ struct LyricGlowTextRenderer: TextRenderer {
                         y: 0
                     )
                 }
-                if appliesTimingEffects {
+                if effectsStrength > 0 {
                     draw(
                         run,
                         revealMask:
                             revealMask?.offsetBy(
                                 dx: -horizontalOffset
                             ),
+                        effectsStrength: effectsStrength,
                         in: &runContext
                     )
                 } else {
@@ -254,6 +265,7 @@ struct LyricGlowTextRenderer: TextRenderer {
     private func draw(
         _ run: Text.Layout.Run,
         revealMask: LineRevealMask?,
+        effectsStrength: Double,
         in context: inout GraphicsContext
     ) {
         guard let timing = run[LyricTimingTextAttribute.self] else {
@@ -266,25 +278,41 @@ struct LyricGlowTextRenderer: TextRenderer {
         var runContext = context
         applyLift(
             to: &runContext,
-            progress: state.liftProgress
+            progress: state.liftProgress,
+            effectsStrength: effectsStrength
         )
-        if state.expansionScale != 1
-            || state.emphasis.envelope > 0 {
+        let expansionScale =
+            1
+            + (state.expansionScale - 1)
+                * CGFloat(effectsStrength)
+        let rawExpansionOffset = expansionOffset(
+            layoutDirection: run.layoutDirection,
+            bounds: bounds,
+            emphasis: state.emphasis
+        )
+        let expansionOffset = CGSize(
+            width:
+                rawExpansionOffset.width
+                * CGFloat(effectsStrength),
+            height:
+                rawExpansionOffset.height
+                * CGFloat(effectsStrength)
+        )
+        if expansionScale != 1 || expansionOffset != .zero {
             applyExpansion(
                 to: &runContext,
-                scale: state.expansionScale,
+                scale: expansionScale,
                 anchor: CGPoint(x: bounds.midX, y: bounds.midY),
-                offset: expansionOffset(
-                    layoutDirection: run.layoutDirection,
-                    bounds: bounds,
-                    emphasis: state.emphasis
-                )
+                offset: expansionOffset
             )
         }
 
         drawUnplayed(
             run,
-            blurRadius: state.unplayedBlurRadius,
+            blurRadius:
+                state.unplayedBlurRadius
+                * CGFloat(effectsStrength),
+            effectsStrength: effectsStrength,
             in: &runContext
         )
         guard let revealMask else { return }
@@ -292,7 +320,8 @@ struct LyricGlowTextRenderer: TextRenderer {
         drawPlayed(
             run,
             revealMask: revealMask,
-            glowStrength: state.glowStrength,
+            glowStrength:
+                state.glowStrength * effectsStrength,
             in: &runContext
         )
     }
@@ -369,10 +398,17 @@ struct LyricGlowTextRenderer: TextRenderer {
     private func drawUnplayed(
         _ run: Text.Layout.Run,
         blurRadius: CGFloat,
+        effectsStrength: Double,
         in context: inout GraphicsContext
     ) {
         var unplayedContext = context
-        unplayedContext.opacity = style.unplayedOpacity
+        let unplayedOpacity = min(
+            max(style.unplayedOpacity, 0),
+            1
+        )
+        unplayedContext.opacity =
+            1
+            - (1 - unplayedOpacity) * effectsStrength
         if blurRadius > 0 {
             unplayedContext.addFilter(.blur(radius: blurRadius))
         }
@@ -406,9 +442,12 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func applyLift(
         to context: inout GraphicsContext,
-        progress: Double
+        progress: Double,
+        effectsStrength: Double
     ) {
-        let verticalOffset = liftOffset(at: progress)
+        let verticalOffset =
+            liftOffset(at: progress)
+            * CGFloat(effectsStrength)
         guard verticalOffset != 0 else { return }
         context.addFilter(
             .projectionTransform(
@@ -605,6 +644,11 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func unitProgress(_ value: Double) -> Double {
         min(max(value, 0), 1)
+    }
+
+    private var effectiveTimingEffectsStrength: Double {
+        guard appliesTimingEffects else { return 0 }
+        return unitProgress(timingEffectsStrength)
     }
 }
 
