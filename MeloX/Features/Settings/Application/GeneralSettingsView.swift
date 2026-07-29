@@ -34,7 +34,10 @@ struct GeneralSettingsView: View {
 
                 Picker("默认启动页面", selection: $settings.defaultLaunchTab) {
                     ForEach(settings.visibleTabs) { tab in
-                        Label(tab.title, systemImage: tab.systemImage)
+                        Label(
+                            tab.settingsTitle,
+                            systemImage: tab.systemImage
+                        )
                             .tag(tab)
                     }
                 }

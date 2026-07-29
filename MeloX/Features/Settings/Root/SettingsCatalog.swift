@@ -178,13 +178,16 @@ enum SettingsCatalog {
             items: [
                 SettingsCatalogItem(
                     route: .tabLayout,
-                    title: "标签页与音乐库",
-                    subtitle: "拆分音乐库分类并调整标签栏顺序",
+                    title: "页面与标签栏",
+                    subtitle: "调整首页、标签栏与音乐库中的页面",
                     systemImage: "rectangle.3.group",
                     keywords: [
+                        "首页",
                         "TabView",
                         "标签栏",
                         "排序",
+                        "推荐",
+                        "播客",
                         "云盘",
                         "歌曲",
                         "歌单",

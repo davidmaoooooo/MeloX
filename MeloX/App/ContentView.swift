@@ -176,7 +176,10 @@ struct ContentView: View {
             }
             .onChange(of: settings.visibleTabs) { _, tabs in
                 guard !tabs.contains(selectedTab) else { return }
-                if selectedTab.libraryPage != nil,
+                if settings.homeTabs.contains(selectedTab),
+                   tabs.contains(.home) {
+                    selectedTab = .home
+                } else if selectedTab.libraryPage != nil,
                    tabs.contains(.library) {
                     selectedTab = .library
                 } else {
@@ -384,6 +387,14 @@ struct ContentView: View {
         switch tab {
         case .home:
             HomeView()
+        case .recommended:
+            HomeRecommendedView()
+                .navigationTitle("推荐")
+                .navigationBarTitleDisplayMode(.large)
+        case .music:
+            ExploreView(navigationTitle: "音乐")
+        case .podcasts:
+            PodcastHomeView()
         case .explore:
             ExploreView()
         case .library:

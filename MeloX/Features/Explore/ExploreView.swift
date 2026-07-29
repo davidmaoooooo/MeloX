@@ -5,6 +5,7 @@ struct ExploreView: View {
     @Environment(AppSettings.self) private var settings
 
     let showsNavigationTitle: Bool
+    let navigationTitle: String
 
     @State private var category = "推荐歌单"
     @State private var playlists: [Playlist] = []
@@ -21,15 +22,19 @@ struct ExploreView: View {
         GridItem(.adaptive(minimum: 148, maximum: 220), spacing: 16),
     ]
 
-    init(showsNavigationTitle: Bool = true) {
+    init(
+        showsNavigationTitle: Bool = true,
+        navigationTitle: String = "发现"
+    ) {
         self.showsNavigationTitle = showsNavigationTitle
+        self.navigationTitle = navigationTitle
     }
 
     @ViewBuilder
     var body: some View {
         if showsNavigationTitle {
             content
-                .navigationTitle("发现")
+                .navigationTitle(navigationTitle)
         } else {
             content
         }

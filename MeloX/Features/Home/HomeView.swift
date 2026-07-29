@@ -1,32 +1,43 @@
 import SwiftUI
 
-private enum HomeSection: String, CaseIterable, Identifiable {
-    case recommended
-    case music
-    case podcasts
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .recommended:
-            "推荐"
-        case .music:
-            "音乐"
-        case .podcasts:
-            "播客"
-        }
-    }
-}
-
 struct HomeView: View {
-    @State private var section = HomeSection.recommended
+    @Environment(AppSettings.self) private var settings
+
+    @State private var section = AppTab.recommended
+
+    private var availableSections: [AppTab] {
+        settings.homeTabs
+    }
+
+    private var activeSection: AppTab {
+        availableSections.contains(section)
+            ? section
+            : availableSections.first ?? .recommended
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            if availableSections.count > 1 {
+                sectionPicker
+            }
+
+            sectionContent(for: activeSection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .navigationTitle("首页")
+        .navigationBarTitleDisplayMode(.large)
+        .onChange(of: availableSections) { _, sections in
+            guard !sections.contains(section) else { return }
+            section = sections.first ?? .recommended
+        }
+    }
+
+    @ViewBuilder
+    private var sectionPicker: some View {
+        if availableSections.count <= 4 {
             Picker("首页板块", selection: $section) {
-                ForEach(HomeSection.allCases) { section in
-                    Text(section.title)
+                ForEach(availableSections) { section in
+                    Text(section.settingsTitle)
                         .tag(section)
                 }
             }
@@ -34,16 +45,28 @@ struct HomeView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(.background)
-
-            sectionContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Picker("首页板块", selection: $section) {
+                ForEach(availableSections) { section in
+                    Label(
+                        section.settingsTitle,
+                        systemImage: section.systemImage
+                    )
+                    .tag(section)
+                }
+            }
+            .pickerStyle(.menu)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background)
         }
-        .navigationTitle("首页")
-        .navigationBarTitleDisplayMode(.large)
     }
 
     @ViewBuilder
-    private var sectionContent: some View {
+    private func sectionContent(
+        for section: AppTab
+    ) -> some View {
         switch section {
         case .recommended:
             HomeRecommendedView()
@@ -51,6 +74,25 @@ struct HomeView: View {
             ExploreView(showsNavigationTitle: false)
         case .podcasts:
             PodcastHomeView(showsNavigationTitle: false)
+        case .explore:
+            ExploreView(showsNavigationTitle: false)
+        case .library:
+            LibraryView(showsNavigationTitle: false)
+        case .librarySongs,
+             .libraryPlaylists,
+             .libraryPodcasts,
+             .libraryDownloads,
+             .libraryCloud,
+             .libraryHistory:
+            if let page = section.libraryPage {
+                LibraryView(
+                    fixedPage: page,
+                    showsNavigationTitle: false
+                )
+            }
+        case .home,
+             .search:
+            EmptyView()
         }
     }
 }

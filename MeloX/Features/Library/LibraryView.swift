@@ -7,6 +7,7 @@ struct LibraryView: View {
     @Environment(DownloadStore.self) private var downloads
 
     private let fixedPage: LibraryPage?
+    private let showsNavigationTitle: Bool
 
     @State private var section: LibraryPage
     @State private var hasAppliedInitialPage = false
@@ -14,8 +15,12 @@ struct LibraryView: View {
     @State private var isStartingHeartMode = false
     @State private var heartModeErrorMessage: String?
 
-    init(fixedPage: LibraryPage? = nil) {
+    init(
+        fixedPage: LibraryPage? = nil,
+        showsNavigationTitle: Bool = true
+    ) {
         self.fixedPage = fixedPage
+        self.showsNavigationTitle = showsNavigationTitle
         _section = State(initialValue: fixedPage ?? .songs)
     }
 
@@ -39,7 +44,7 @@ struct LibraryView: View {
                 ContentUnavailableView(
                     "音乐库页面均已拆分",
                     systemImage: "rectangle.3.group",
-                    description: Text("可在“标签页与音乐库”设置中调整页面归属。")
+                    description: Text("可在“页面与标签栏”设置中调整页面归属。")
                 )
             } else if section == .downloads {
                 downloadedSongList
@@ -52,9 +57,10 @@ struct LibraryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .navigationTitle(
+        .libraryNavigationTitle(
             fixedPage.map { AppTab(libraryPage: $0).title }
-                ?? "音乐库"
+                ?? "音乐库",
+            isPresented: showsNavigationTitle
         )
         .onAppear {
             guard !hasAppliedInitialPage else { return }
@@ -395,6 +401,20 @@ struct LibraryView: View {
                     description: Text("打开歌单详情后，轻点收藏按钮。")
                 )
             }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func libraryNavigationTitle(
+        _ title: String,
+        isPresented: Bool
+    ) -> some View {
+        if isPresented {
+            navigationTitle(title)
+        } else {
+            self
         }
     }
 }

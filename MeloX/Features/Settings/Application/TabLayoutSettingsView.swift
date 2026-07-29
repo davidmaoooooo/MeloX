@@ -8,48 +8,74 @@ struct TabLayoutSettingsView: View {
     var body: some View {
         List {
             Section {
-                ForEach(LibraryPage.allCases) { page in
-                    Toggle(
-                        isOn: Binding(
-                            get: {
-                                settings.isLibraryPageSeparated(page)
-                            },
-                            set: {
-                                settings.setLibraryPage(
-                                    page,
-                                    isSeparated: $0
-                                )
-                            }
-                        )
-                    ) {
-                        Label(page.title, systemImage: page.systemImage)
-                    }
+                HStack(spacing: 12) {
+                    Label(
+                        AppTab.recommended.settingsTitle,
+                        systemImage: AppTab.recommended.systemImage
+                    )
+
+                    Spacer(minLength: 8)
+
+                    Text("固定在首页")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } header: {
-                Text("独立标签页")
+                Text("推荐")
             } footer: {
-                Text("开启后，该页面会从音乐库分类中移出，并显示为单独的标签页。关闭后会回到音乐库。")
+                Text("推荐固定在首页首位，不参与移动。")
+            }
+
+            Section {
+                ForEach(AppTab.movablePrimaryContentPages) { tab in
+                    placementPicker(for: tab)
+                }
+            } header: {
+                Text("内容页面")
+            } footer: {
+                Text("可将首页内容移到底部标签栏，也可把发现和音乐库移入首页。")
+            }
+
+            Section {
+                ForEach(AppTab.libraryContentPages) { tab in
+                    placementPicker(for: tab)
+                }
+            } header: {
+                Text("收藏与本地")
+            } footer: {
+                Text("这些页面可放在首页、底部标签栏，或保留在音乐库内。")
+            }
+
+            Section {
+                ForEach(settings.homeTabs) { tab in
+                    orderRow(
+                        for: tab,
+                        trailingText:
+                            tab == .recommended ? "固定" : nil
+                    )
+                    .moveDisabled(tab == .recommended)
+                }
+                .onMove { source, destination in
+                    var tabs = settings.homeTabs
+                    tabs.move(
+                        fromOffsets: source,
+                        toOffset: destination
+                    )
+                    settings.setHomeTabOrder(tabs)
+                }
+            } header: {
+                Text("首页顺序")
+            } footer: {
+                Text("首页只剩推荐时，不会显示页面切换条。")
             }
 
             Section {
                 ForEach(settings.visibleTabs) { tab in
-                    HStack(spacing: 12) {
-                        Label(tab.title, systemImage: tab.systemImage)
-
-                        Spacer(minLength: 8)
-
-                        if tab == .search {
-                            Text("系统固定")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if tab.libraryPage != nil {
-                            Text("已拆分")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .contentShape(.rect)
-                    .moveDisabled(tab == .search)
+                    orderRow(
+                        for: tab,
+                        trailingText: fixedTabDescription(for: tab)
+                    )
+                    .moveDisabled(tab == .home || tab == .search)
                 }
                 .onMove { source, destination in
                     var tabs = settings.visibleTabs
@@ -60,14 +86,14 @@ struct TabLayoutSettingsView: View {
                     settings.setVisibleTabOrder(tabs)
                 }
             } header: {
-                Text("标签栏顺序")
+                Text("底部标签栏顺序")
             } footer: {
-                Text("轻点右上角“编辑”，再拖动标签页。搜索标签使用系统搜索角色，因此固定在末尾；为了便于快速切换，建议在 iPhone 上保留不超过 5 个标签页。")
+                Text("首页入口固定在首位，系统搜索标签固定在末尾；轻点右上角“编辑”可拖动其他项目。")
             }
 
             Section {
                 Button(
-                    "恢复默认标签布局",
+                    "恢复默认页面布局",
                     systemImage: "arrow.counterclockwise",
                     role: .destructive
                 ) {
@@ -76,13 +102,13 @@ struct TabLayoutSettingsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("标签页与音乐库")
+        .navigationTitle("页面与标签栏")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             EditButton()
         }
         .confirmationDialog(
-            "恢复默认标签布局？",
+            "恢复默认页面布局？",
             isPresented: $showsResetConfirmation,
             titleVisibility: .visible
         ) {
@@ -91,7 +117,57 @@ struct TabLayoutSettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("云盘会恢复为独立标签页，其他分类回到音乐库，标签顺序也会还原。")
+            Text("推荐、音乐和播客会回到首页；云盘会放到底部标签栏，其他收藏与本地页面会回到音乐库。")
+        }
+    }
+
+    private func placementPicker(
+        for tab: AppTab
+    ) -> some View {
+        Picker(
+            selection: Binding(
+                get: { settings.placement(for: tab) },
+                set: { settings.setPage(tab, placement: $0) }
+            )
+        ) {
+            ForEach(tab.allowedPlacements) { placement in
+                Text(placement.title)
+                    .tag(placement)
+            }
+        } label: {
+            Label(tab.settingsTitle, systemImage: tab.systemImage)
+        }
+        .pickerStyle(.menu)
+    }
+
+    private func orderRow(
+        for tab: AppTab,
+        trailingText: String?
+    ) -> some View {
+        HStack(spacing: 12) {
+            Label(tab.settingsTitle, systemImage: tab.systemImage)
+
+            Spacer(minLength: 8)
+
+            if let trailingText {
+                Text(trailingText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(.rect)
+    }
+
+    private func fixedTabDescription(
+        for tab: AppTab
+    ) -> String? {
+        switch tab {
+        case .home:
+            "固定入口"
+        case .search:
+            "系统固定"
+        default:
+            nil
         }
     }
 }

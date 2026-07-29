@@ -2,6 +2,9 @@ import Foundation
 
 enum AppTab: String, CaseIterable, Identifiable {
     case home
+    case recommended
+    case music
+    case podcasts
     case explore
     case library
     case librarySongs
@@ -17,6 +20,9 @@ enum AppTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "首页"
+        case .recommended: "推荐"
+        case .music: "音乐"
+        case .podcasts: "播客"
         case .explore: "发现"
         case .library: "音乐库"
         case .librarySongs: "收藏歌曲"
@@ -32,6 +38,9 @@ enum AppTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .home: "house"
+        case .recommended: "sparkles"
+        case .music: "music.note"
+        case .podcasts: "dot.radiowaves.left.and.right"
         case .explore: "safari"
         case .library: "music.note.list"
         case .librarySongs: "heart"
@@ -52,10 +61,48 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .libraryDownloads: .downloads
         case .libraryCloud: .cloud
         case .libraryHistory: .history
-        case .home, .explore, .library, .search:
+        case .home,
+             .recommended,
+             .music,
+             .podcasts,
+             .explore,
+             .library,
+             .search:
             nil
         }
     }
+
+    var settingsTitle: String {
+        libraryPage?.settingsTitle ?? title
+    }
+
+    var allowedPlacements: [AppPagePlacement] {
+        if self == .recommended {
+            return [.home]
+        }
+        return libraryPage == nil
+            ? [.home, .tabBar]
+            : AppPagePlacement.allCases
+    }
+
+    static let movablePrimaryContentPages: [AppTab] = [
+        .music,
+        .podcasts,
+        .explore,
+        .library,
+    ]
+
+    static let libraryContentPages: [AppTab] = [
+        .librarySongs,
+        .libraryPlaylists,
+        .libraryPodcasts,
+        .libraryDownloads,
+        .libraryCloud,
+        .libraryHistory,
+    ]
+
+    static let configurablePages =
+        movablePrimaryContentPages + libraryContentPages
 
     init(libraryPage: LibraryPage) {
         switch libraryPage {
@@ -71,6 +118,22 @@ enum AppTab: String, CaseIterable, Identifiable {
             self = .libraryCloud
         case .history:
             self = .libraryHistory
+        }
+    }
+}
+
+enum AppPagePlacement: String, CaseIterable, Identifiable {
+    case home
+    case tabBar
+    case library
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .home: "首页"
+        case .tabBar: "底部标签栏"
+        case .library: "音乐库"
         }
     }
 }
@@ -104,6 +167,17 @@ enum LibraryPage: String, CaseIterable, Identifiable {
         case .downloads: "arrow.down.circle"
         case .cloud: "icloud"
         case .history: "clock"
+        }
+    }
+
+    var settingsTitle: String {
+        switch self {
+        case .songs: "歌曲（收藏）"
+        case .playlists: "歌单（收藏）"
+        case .podcasts: "播客（收藏）"
+        case .downloads: "下载"
+        case .cloud: "云盘"
+        case .history: "最近播放"
         }
     }
 }
