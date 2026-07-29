@@ -22,7 +22,8 @@ struct PlaylistDetailView: View {
     @State private var loadedTrackOffset = 0
     @State private var isLoadingMoreTracks = false
     @State private var loadMoreTracksError: String?
-    @State private var downloadCoordinator = PlaylistDownloadCoordinator()
+    @State private var downloadCoordinator =
+        MusicCollectionDownloadCoordinator()
 
     private let trackPageSize = 100
 
@@ -165,7 +166,10 @@ struct PlaylistDetailView: View {
                 downloadCoordinator.clearError()
             }
         } message: {
-            Text(downloadCoordinator.errorMessage ?? "无法读取歌单歌曲。")
+            Text(
+                downloadCoordinator.errorMessage
+                    ?? "无法读取\(collectionTitle)歌曲。"
+            )
         }
     }
 
@@ -175,6 +179,10 @@ struct PlaylistDetailView: View {
 
     private var artworkURL: URL? {
         displayedPlaylist.artworkURL ?? initialPlaylist.artworkURL
+    }
+
+    private var collectionTitle: String {
+        prefersToplistLayout ? "排行榜" : "歌单"
     }
 
     private var resolvedPalette: ArtworkDetailPalette {
@@ -213,24 +221,13 @@ struct PlaylistDetailView: View {
     }
 
     private var downloadableSongIDs: [Int] {
+        guard let playlist else { return [] }
         let unavailableSongIDs = Set(downloads.downloads.map(\.id))
             .union(downloads.activeDownloads.keys)
-        return PlaylistDownloadCoordinator.songIDs(in: displayedPlaylist)
-            .filter { !unavailableSongIDs.contains($0) }
-    }
-
-    private var selectedDownloadCount: Int {
-        downloadCoordinator.selectedSongIDs
-            .intersection(downloadableSongIDs)
-            .count
-    }
-
-    private var hasSelectedAllDownloadableSongs: Bool {
-        let downloadableSongIDSet = Set(downloadableSongIDs)
-        return !downloadableSongIDSet.isEmpty
-            && downloadableSongIDSet.isSubset(
-                of: downloadCoordinator.selectedSongIDs
-            )
+        return MusicCollectionDownloadCoordinator.songIDs(
+            in: playlist
+        )
+        .filter { !unavailableSongIDs.contains($0) }
     }
 
     private func updateTabViewBottomAccessoryVisibility() {
@@ -254,36 +251,16 @@ struct PlaylistDetailView: View {
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
-            .accessibilityLabel("分享歌单")
+            .accessibilityLabel("分享\(collectionTitle)")
 
             Menu {
-                Menu {
-                    ForEach(MusicQuality.allCases) { quality in
-                        Button(quality.title) {
-                            startDownloadAll(quality: quality)
-                        }
+                MusicCollectionDownloadMenuContent(
+                    coordinator: downloadCoordinator,
+                    downloadableSongCount:
+                        downloadableSongIDs.count,
+                    onDownloadAll: { quality in
+                        startDownloadAll(quality: quality)
                     }
-                } label: {
-                    Label(
-                        "下载全部（\(downloadableSongIDs.count) 首）",
-                        systemImage: "arrow.down.circle"
-                    )
-                }
-                .disabled(
-                    downloadableSongIDs.isEmpty
-                        || downloadCoordinator.isPreparing
-                )
-
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        downloadCoordinator.beginSelection()
-                    }
-                } label: {
-                    Label("多选", systemImage: "checklist")
-                }
-                .disabled(
-                    downloadableSongIDs.isEmpty
-                        || downloadCoordinator.isPreparing
                 )
 
                 Divider()
@@ -312,62 +289,17 @@ struct PlaylistDetailView: View {
 
     @ToolbarContentBuilder
     private var downloadSelectionToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("完成") {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    downloadCoordinator.finishSelection()
-                }
+        MusicCollectionDownloadSelectionToolbar(
+            coordinator: downloadCoordinator,
+            downloadableSongIDs: downloadableSongIDs,
+            onDownloadSelection: { quality in
+                startSelectedDownloads(quality: quality)
             }
-            .disabled(downloadCoordinator.isPreparing)
-        }
-
-        ToolbarItemGroup(placement: .bottomBar) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    downloadCoordinator.toggleAll(
-                        songIDs: Set(downloadableSongIDs)
-                    )
-                }
-            } label: {
-                Label(
-                    hasSelectedAllDownloadableSongs ? "取消全选" : "全选",
-                    systemImage: hasSelectedAllDownloadableSongs
-                        ? "checkmark.circle.fill"
-                        : "checkmark.circle"
-                )
-            }
-            .disabled(
-                downloadableSongIDs.isEmpty
-                    || downloadCoordinator.isPreparing
-            )
-
-            Spacer()
-
-            if downloadCoordinator.isPreparing {
-                ProgressView()
-                    .accessibilityLabel(
-                        "正在准备下载 \(downloadCoordinator.preparingSongCount) 首歌曲"
-                    )
-            } else {
-                Menu {
-                    ForEach(MusicQuality.allCases) { quality in
-                        Button(quality.title) {
-                            startSelectedDownloads(quality: quality)
-                        }
-                    }
-                } label: {
-                    Label(
-                        "下载 \(selectedDownloadCount) 首",
-                        systemImage: "arrow.down.circle"
-                    )
-                }
-                .disabled(selectedDownloadCount == 0)
-            }
-        }
+        )
     }
 
     private func startDownloadAll(quality: MusicQuality) {
-        let playlist = displayedPlaylist
+        guard let playlist else { return }
         Task {
             await downloadCoordinator.downloadAll(
                 in: playlist,
@@ -379,7 +311,7 @@ struct PlaylistDetailView: View {
     }
 
     private func startSelectedDownloads(quality: MusicQuality) {
-        let playlist = displayedPlaylist
+        guard let playlist else { return }
         Task {
             await downloadCoordinator.downloadSelection(
                 in: playlist,

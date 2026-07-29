@@ -6,8 +6,11 @@ struct AlbumDetailView: View {
 
     @Environment(NeteaseAPI.self) private var api
     @Environment(LibraryStore.self) private var library
+    @Environment(DownloadStore.self) private var downloads
     @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.setTabViewBottomAccessorySuppressed)
+    private var setTabViewBottomAccessorySuppressed
 
     @State private var album: Album?
     @State private var songs: [Song] = []
@@ -19,6 +22,8 @@ struct AlbumDetailView: View {
     @State private var artworkPalette: ArtworkDetailPalette?
     @State private var blurredBackdropImage: CGImage?
     @State private var searchQuery = ""
+    @State private var downloadCoordinator =
+        MusicCollectionDownloadCoordinator()
 
     init(context: AlbumRouteContext) {
         let cachedAssets = ArtworkAccentColorProvider.cachedDetailAssets(
@@ -42,6 +47,7 @@ struct AlbumDetailView: View {
             isLoading: isInitialLoading,
             failureMessage: initialFailureMessage,
             isSubscribed: isSubscribed,
+            downloadCoordinator: downloadCoordinator,
             onToggleSubscription: toggleSubscription,
             onRetry: { reloadToken += 1 },
             onRefresh: { await load() }
@@ -56,9 +62,30 @@ struct AlbumDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(interfaceColorScheme, for: .navigationBar, .tabBar)
         .toolbar {
-            albumToolbar
+            if downloadCoordinator.isSelecting {
+                downloadSelectionToolbar
+            } else {
+                albumToolbar
+            }
         }
+        .toolbarVisibility(
+            downloadCoordinator.isSelecting ? .hidden : .automatic,
+            for: .tabBar
+        )
         .environment(\.colorScheme, interfaceColorScheme)
+        .onAppear {
+            updateTabViewBottomAccessoryVisibility()
+        }
+        .onChange(of: downloadCoordinator.isSelecting) {
+            updateTabViewBottomAccessoryVisibility()
+        }
+        .onDisappear {
+            setTabViewBottomAccessorySuppressed(false)
+        }
+        .onChange(of: downloadableSongIDs) { _, songIDs in
+            guard downloadCoordinator.isSelecting else { return }
+            downloadCoordinator.retainSelection(in: Set(songIDs))
+        }
         .task(id: reloadToken) {
             guard album == nil else { return }
             await load(waitingForNavigationTransition: true)
@@ -105,6 +132,26 @@ struct AlbumDetailView: View {
         } message: {
             Text(operationError ?? "未知错误")
         }
+        .alert(
+            "无法准备下载",
+            isPresented: Binding(
+                get: { downloadCoordinator.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        downloadCoordinator.clearError()
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {
+                downloadCoordinator.clearError()
+            }
+        } message: {
+            Text(
+                downloadCoordinator.errorMessage
+                    ?? "无法读取专辑歌曲。"
+            )
+        }
     }
 
     private var displayedAlbum: Album {
@@ -137,9 +184,29 @@ struct AlbumDetailView: View {
         return message
     }
 
+    private var downloadableSongIDs: [Int] {
+        let unavailableSongIDs = Set(downloads.downloads.map(\.id))
+            .union(downloads.activeDownloads.keys)
+        return MusicCollectionDownloadCoordinator.songIDs(in: songs)
+            .filter { !unavailableSongIDs.contains($0) }
+    }
+
+    private func updateTabViewBottomAccessoryVisibility() {
+        setTabViewBottomAccessorySuppressed(
+            downloadCoordinator.isSelecting
+        )
+    }
+
     @ToolbarContentBuilder
     private var albumToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
+            if downloadCoordinator.isPreparing {
+                ProgressView()
+                    .accessibilityLabel(
+                        "正在准备下载 \(downloadCoordinator.preparingSongCount) 首歌曲"
+                    )
+            }
+
             Menu {
                 NeteaseShareMenuContent(resource: .album(displayedAlbum))
             } label: {
@@ -148,6 +215,17 @@ struct AlbumDetailView: View {
             .accessibilityLabel("分享专辑")
 
             Menu {
+                MusicCollectionDownloadMenuContent(
+                    coordinator: downloadCoordinator,
+                    downloadableSongCount:
+                        downloadableSongIDs.count,
+                    onDownloadAll: { quality in
+                        startDownloadAll(quality: quality)
+                    }
+                )
+
+                Divider()
+
                 if let artist = displayedAlbum.artists.first {
                     NavigationLink(value: MusicRoute.artist(artist.id)) {
                         Label("查看歌手", systemImage: "person")
@@ -165,6 +243,41 @@ struct AlbumDetailView: View {
             .accessibilityLabel("更多")
         }
         .sharedBackgroundVisibility(.visible)
+    }
+
+    @ToolbarContentBuilder
+    private var downloadSelectionToolbar: some ToolbarContent {
+        MusicCollectionDownloadSelectionToolbar(
+            coordinator: downloadCoordinator,
+            downloadableSongIDs: downloadableSongIDs,
+            onDownloadSelection: { quality in
+                startSelectedDownloads(quality: quality)
+            }
+        )
+    }
+
+    private func startDownloadAll(quality: MusicQuality) {
+        let songs = songs
+        Task {
+            await downloadCoordinator.downloadAll(
+                in: songs,
+                quality: quality,
+                api: api,
+                downloads: downloads
+            )
+        }
+    }
+
+    private func startSelectedDownloads(quality: MusicQuality) {
+        let songs = songs
+        Task {
+            await downloadCoordinator.downloadSelection(
+                in: songs,
+                quality: quality,
+                api: api,
+                downloads: downloads
+            )
+        }
     }
 
     private func toggleSubscription() {

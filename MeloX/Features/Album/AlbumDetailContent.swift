@@ -9,6 +9,7 @@ struct AlbumDetailContent: View {
     let isLoading: Bool
     let failureMessage: String?
     let isSubscribed: Bool
+    let downloadCoordinator: MusicCollectionDownloadCoordinator
     let onToggleSubscription: () -> Void
     let onRetry: () -> Void
     let onRefresh: () async -> Void
@@ -40,6 +41,7 @@ struct AlbumDetailContent: View {
                         loadingTitle: "正在载入专辑",
                         isLoading: isLoading,
                         failureMessage: failureMessage,
+                        downloadSelection: downloadCoordinator,
                         onRetry: onRetry
                     )
                 }

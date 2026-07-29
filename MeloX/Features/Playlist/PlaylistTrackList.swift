@@ -4,7 +4,7 @@ struct PlaylistTrackList: View {
     let tracks: [Song]
     let sourceID: Int
     let showsArtwork: Bool
-    var downloadSelection: PlaylistDownloadCoordinator?
+    var downloadSelection: MusicCollectionDownloadCoordinator?
 
     var body: some View {
         if tracks.isEmpty {
@@ -49,7 +49,7 @@ private struct PlaylistTrackRow: View {
     let sourceID: Int
     let index: Int
     let showsArtwork: Bool
-    let downloadSelection: PlaylistDownloadCoordinator?
+    let downloadSelection: MusicCollectionDownloadCoordinator?
 
     @Environment(\.openMusicRoute) private var openMusicRoute
     @Environment(PlayerStore.self) private var player

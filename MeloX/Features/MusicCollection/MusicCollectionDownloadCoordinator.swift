@@ -3,7 +3,7 @@ import Observation
 
 @MainActor
 @Observable
-final class PlaylistDownloadCoordinator {
+final class MusicCollectionDownloadCoordinator {
     private(set) var isSelecting = false
     private(set) var selectedSongIDs: Set<Int> = []
     private(set) var isPreparing = false
@@ -52,7 +52,8 @@ final class PlaylistDownloadCoordinator {
         downloads: DownloadStore
     ) async {
         await prepareDownloads(
-            in: playlist,
+            songIDs: Self.songIDs(in: playlist),
+            loadedSongs: playlist.tracks,
             requestedSongIDs: nil,
             quality: quality,
             finishesSelection: false,
@@ -68,7 +69,42 @@ final class PlaylistDownloadCoordinator {
         downloads: DownloadStore
     ) async {
         await prepareDownloads(
-            in: playlist,
+            songIDs: Self.songIDs(in: playlist),
+            loadedSongs: playlist.tracks,
+            requestedSongIDs: selectedSongIDs,
+            quality: quality,
+            finishesSelection: true,
+            api: api,
+            downloads: downloads
+        )
+    }
+
+    func downloadAll(
+        in songs: [Song],
+        quality: MusicQuality,
+        api: NeteaseAPI,
+        downloads: DownloadStore
+    ) async {
+        await prepareDownloads(
+            songIDs: Self.songIDs(in: songs),
+            loadedSongs: songs,
+            requestedSongIDs: nil,
+            quality: quality,
+            finishesSelection: false,
+            api: api,
+            downloads: downloads
+        )
+    }
+
+    func downloadSelection(
+        in songs: [Song],
+        quality: MusicQuality,
+        api: NeteaseAPI,
+        downloads: DownloadStore
+    ) async {
+        await prepareDownloads(
+            songIDs: Self.songIDs(in: songs),
+            loadedSongs: songs,
             requestedSongIDs: selectedSongIDs,
             quality: quality,
             finishesSelection: true,
@@ -78,15 +114,27 @@ final class PlaylistDownloadCoordinator {
     }
 
     static func songIDs(in playlist: Playlist) -> [Int] {
+        uniqueSongIDs(
+            playlist.trackIDs.map(\.id) + playlist.tracks.map(\.id)
+        )
+    }
+
+    static func songIDs(in songs: [Song]) -> [Int] {
+        uniqueSongIDs(songs.map(\.id))
+    }
+
+    private static func uniqueSongIDs(
+        _ songIDs: [Int]
+    ) -> [Int] {
         var seenSongIDs: Set<Int> = []
-        return (playlist.trackIDs.map(\.id) + playlist.tracks.map(\.id))
-            .filter { songID in
-                songID > 0 && seenSongIDs.insert(songID).inserted
-            }
+        return songIDs.filter { songID in
+            songID > 0 && seenSongIDs.insert(songID).inserted
+        }
     }
 
     private func prepareDownloads(
-        in playlist: Playlist,
+        songIDs: [Int],
+        loadedSongs: [Song],
         requestedSongIDs: Set<Int>?,
         quality: MusicQuality,
         finishesSelection: Bool,
@@ -97,7 +145,7 @@ final class PlaylistDownloadCoordinator {
 
         let unavailableSongIDs = Set(downloads.downloads.map(\.id))
             .union(downloads.activeDownloads.keys)
-        let orderedSongIDs = Self.songIDs(in: playlist).filter { songID in
+        let orderedSongIDs = songIDs.filter { songID in
             requestedSongIDs?.contains(songID) ?? true
         }
         let downloadableSongIDs = orderedSongIDs.filter {
@@ -122,12 +170,12 @@ final class PlaylistDownloadCoordinator {
         do {
             let songs = try await resolveSongs(
                 withIDs: downloadableSongIDs,
-                loadedSongs: playlist.tracks,
+                loadedSongs: loadedSongs,
                 api: api
             )
             try Task.checkCancellation()
             guard !songs.isEmpty else {
-                throw PlaylistDownloadPreparationError.noAvailableSongs
+                throw MusicCollectionDownloadPreparationError.noAvailableSongs
             }
 
             downloads.start(songs, quality: quality)
@@ -165,10 +213,10 @@ final class PlaylistDownloadCoordinator {
     }
 }
 
-private enum PlaylistDownloadPreparationError: LocalizedError {
+private enum MusicCollectionDownloadPreparationError: LocalizedError {
     case noAvailableSongs
 
     var errorDescription: String? {
-        "歌单中没有可下载的歌曲。"
+        "当前列表中没有可下载的歌曲。"
     }
 }
