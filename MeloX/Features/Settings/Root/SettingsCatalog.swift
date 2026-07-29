@@ -142,7 +142,7 @@ enum SettingsCatalog {
                 SettingsCatalogItem(
                     route: .content,
                     title: "发现内容",
-                    subtitle: "新碟地区与歌单信息显示",
+                    subtitle: "新碟地区、歌单信息与听歌识曲",
                     systemImage: "rectangle.stack",
                     keywords: [
                         "华语",
@@ -150,6 +150,10 @@ enum SettingsCatalog {
                         "韩国",
                         "日本",
                         "播放量",
+                        "听歌识曲",
+                        "麦克风",
+                        "识别时长",
+                        "持续识别",
                     ]
                 ),
                 SettingsCatalogItem(

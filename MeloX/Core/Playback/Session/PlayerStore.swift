@@ -401,7 +401,8 @@ final class PlayerStore {
     func play(
         _ song: Song,
         in songs: [Song]? = nil,
-        sourceID: Int? = nil
+        sourceID: Int? = nil,
+        startAt: TimeInterval = 0
     ) async {
         recordCurrentPlayback()
         if let songs, !songs.isEmpty {
@@ -415,7 +416,14 @@ final class PlayerStore {
             historySourceID = sourceID
         }
         hasRecordedCurrentStart = false
-        await loadCurrentSong(autoplay: true)
+        let maximumPosition = TimeInterval(song.durationMS) / 1_000
+        let playbackPosition = maximumPosition > 0
+            ? max(0, min(startAt, maximumPosition))
+            : max(0, startAt)
+        await loadCurrentSong(
+            autoplay: true,
+            startAt: playbackPosition
+        )
     }
 
     func playAll(_ songs: [Song], sourceID: Int? = nil) async {

@@ -200,6 +200,40 @@ final class NeteaseAPI {
         return response.songs
     }
 
+    func audioMatches(
+        fingerprint: String,
+        duration: Int
+    ) async throws -> [AudioMatchCandidate] {
+        guard !fingerprint.isEmpty,
+              (1...15).contains(duration),
+              let encodedFingerprint = fingerprint.addingPercentEncoding(
+                withAllowedCharacters: Self.audioMatchQueryValueAllowed
+              ) else {
+            throw APIError.requestEncoding
+        }
+
+        // Mirrors @neteaseapireborn/api/module/audio_match.js exactly:
+        // this is NetEase's original public matcher, not a proxy route.
+        var components = URLComponents(
+            string: "https://interface.music.163.com/api/music/audio/match"
+        )
+        components?.percentEncodedQuery = [
+            "sessionId=0123456789abcdef",
+            "algorithmCode=shazam_v2",
+            "duration=\(duration)",
+            "rawdata=\(encodedFingerprint)",
+            "times=1",
+            "decrypt=1",
+        ].joined(separator: "&")
+        guard let url = components?.url else {
+            throw APIError.requestEncoding
+        }
+
+        let response: AudioMatchResponse = try await client.get(url)
+        try validate(responseCode: response.code)
+        return response.data?.result ?? []
+    }
+
     func songDetailsPage(
         ids: [Int],
         offset: Int,
@@ -805,4 +839,10 @@ final class NeteaseAPI {
         }
         return components.url
     }
+
+    private static let audioMatchQueryValueAllowed: CharacterSet = {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-_.!~*'()")
+        return allowed
+    }()
 }

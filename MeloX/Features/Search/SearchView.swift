@@ -33,6 +33,15 @@ struct SearchView: View {
                 Text(kind.title).tag(kind)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    SongRecognitionView()
+                } label: {
+                    Label("听歌识曲", systemImage: "waveform")
+                }
+            }
+        }
         .overlay {
             if !trimmedQuery.isEmpty, case .failed(let message) = phase {
                 ContentUnavailableView(

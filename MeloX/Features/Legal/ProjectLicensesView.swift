@@ -39,6 +39,11 @@ struct ProjectLicensesView: View {
                     document: .yesPlayMusic
                 )
                 licenseLink(
+                    title: "@neteaseapireborn/api 音频指纹",
+                    license: "MIT License",
+                    document: .neteaseAPI
+                )
+                licenseLink(
                     title: "PV Tool",
                     license: "Non-Commercial License",
                     document: .pvTool
@@ -70,6 +75,11 @@ struct ProjectLicensesView: View {
                     name: "qier222/YesPlayMusic",
                     contribution: "网易云接口与播放器实现参考",
                     url: URL(string: "https://github.com/qier222/YesPlayMusic")!
+                )
+                projectLink(
+                    name: "neteasecloudmusicapienhanced/api-enhanced",
+                    contribution: "听歌识曲路由与音频指纹运行时",
+                    url: URL(string: "https://github.com/neteasecloudmusicapienhanced/api-enhanced")!
                 )
                 projectLink(
                     name: "DanteAlighieri13210914/pv-tool",
@@ -143,6 +153,7 @@ struct ProjectLicensesView: View {
 enum LegalDocument: String, Identifiable {
     case melox
     case yesPlayMusic
+    case neteaseAPI
     case pvTool
     case sourceHanSerif
     case beatNet
@@ -153,6 +164,7 @@ enum LegalDocument: String, Identifiable {
         switch self {
         case .melox: "MeloX 许可证"
         case .yesPlayMusic: "YesPlayMusic 许可证"
+        case .neteaseAPI: "音频指纹运行时许可证"
         case .pvTool: "PV Tool 许可与声明"
         case .sourceHanSerif: "思源宋体许可证"
         case .beatNet: "BeatNet 模型许可"
@@ -165,6 +177,8 @@ enum LegalDocument: String, Identifiable {
             "MeloX 应用主体以 GNU General Public License version 3 发布。复制、修改或分发时，应保留版权与许可声明，并遵守 GPLv3 的源代码提供及同许可证分发要求。第三方代码和资源的单独许可证仍然有效。"
         case .yesPlayMusic:
             "MeloX 的网易云接口和播放器实现参考了 qier222/YesPlayMusic。YesPlayMusic 以 MIT License 发布，Copyright © 2020–2023 qier222；使用其软件或重要部分时需保留原版权和许可声明。"
+        case .neteaseAPI:
+            Self.neteaseAPIText
         case .pvTool:
             Self.pvToolText
         case .sourceHanSerif:
@@ -185,6 +199,8 @@ enum LegalDocument: String, Identifiable {
             URL(string: "https://github.com/youshen2/MeloX/blob/master/LICENSE")
         case .yesPlayMusic:
             URL(string: "https://github.com/qier222/YesPlayMusic/blob/main/LICENSE")
+        case .neteaseAPI:
+            URL(string: "https://github.com/neteasecloudmusicapienhanced/api-enhanced")
         case .pvTool:
             URL(string: "https://github.com/DanteAlighieri13210914/pv-tool")
         case .sourceHanSerif:
@@ -212,14 +228,57 @@ enum LegalDocument: String, Identifiable {
         return contents.joined(separator: "\n\n──────────\n\n")
     }
 
+    private static var neteaseAPIText: String {
+        let documents = [
+            (
+                "Audio Fingerprint NOTICE",
+                "NeteaseAudioFingerprint-NOTICE",
+                "txt"
+            ),
+            (
+                "MIT License",
+                "NeteaseAPI-LICENSE",
+                "txt"
+            ),
+        ]
+        let contents = documents.compactMap {
+            title,
+            name,
+            fileExtension in
+            bundledText(
+                named: name,
+                extension: fileExtension
+            ).map {
+                "\(title)\n\n\($0)"
+            }
+        }
+        guard !contents.isEmpty else {
+            return "@neteaseapireborn/api 的音频指纹运行时以 MIT License 分发。"
+        }
+        return contents.joined(separator: "\n\n──────────\n\n")
+    }
+
     private static func bundledText(
         named name: String,
         extension fileExtension: String
     ) -> String? {
-        guard let url = Bundle.main.url(
-            forResource: name,
-            withExtension: fileExtension
-        ) else {
+        let candidateURLs = [
+            Bundle.main.url(
+                forResource: name,
+                withExtension: fileExtension
+            ),
+            Bundle.main.url(
+                forResource: name,
+                withExtension: fileExtension,
+                subdirectory: "AudioFingerprint"
+            ),
+            Bundle.main.url(
+                forResource: name,
+                withExtension: fileExtension,
+                subdirectory: "Resources/AudioFingerprint"
+            ),
+        ]
+        guard let url = candidateURLs.compactMap({ $0 }).first else {
             return nil
         }
         return try? String(contentsOf: url, encoding: .utf8)

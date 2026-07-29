@@ -112,7 +112,7 @@ struct AboutView: View {
             } header: {
                 Text("开源与许可")
             } footer: {
-                Text("查看 MeloX、参考项目、内置资源和 PV Tool 的许可与归属说明。")
+                Text("查看 MeloX、参考项目、音频指纹运行时、内置资源和 PV Tool 的许可与归属说明。")
             }
 
             Section("声明") {

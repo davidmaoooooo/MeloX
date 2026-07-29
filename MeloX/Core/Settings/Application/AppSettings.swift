@@ -971,6 +971,7 @@ final class AppSettings {
     let autoMix: AutoMixPreferences
     let floatingLyrics: FloatingLyricsPreferences
     let lyricsNotifications: LyricsNotificationPreferences
+    let songRecognition: SongRecognitionPreferences
 
     @ObservationIgnored
     private let defaults: UserDefaults
@@ -985,6 +986,7 @@ final class AppSettings {
         lyricsNotifications = LyricsNotificationPreferences(
             defaults: defaults
         )
+        songRecognition = SongRecognitionPreferences(defaults: defaults)
         hasCompletedOnboarding = defaults.bool(
             forKey: Key.hasCompletedOnboarding
         )
