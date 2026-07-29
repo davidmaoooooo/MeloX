@@ -128,7 +128,7 @@ struct LibraryView: View {
         ContentUnavailableView {
             Label("需要登录", systemImage: "person.crop.circle.badge.exclamationmark")
         } description: {
-            Text("登录后可读取收藏歌曲、歌单、音乐云盘和播放记录；已下载歌曲无需登录。")
+            Text("登录后可读取收藏歌曲、歌单、订阅播客、音乐云盘和播放记录；已下载歌曲无需登录。")
         } actions: {
             Button("登录网易云音乐") {
                 showsLogin = true
@@ -162,6 +162,8 @@ struct LibraryView: View {
                 )
             case .playlists:
                 playlistList
+            case .podcasts:
+                SubscribedPodcastsView()
             case .downloads:
                 downloadedSongList
             case .cloud:

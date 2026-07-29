@@ -6,6 +6,7 @@ enum SearchKind: Int, CaseIterable, Identifiable {
     case albums = 10
     case artists = 100
     case playlists = 1_000
+    case podcasts = 1_009
 
     var id: Int { rawValue }
 
@@ -15,6 +16,7 @@ enum SearchKind: Int, CaseIterable, Identifiable {
         case .albums: "专辑"
         case .artists: "歌手"
         case .playlists: "歌单"
+        case .podcasts: "播客"
         }
     }
 }
@@ -386,7 +388,13 @@ final class NeteaseAPI {
             "/api/search/get",
             data: ["s": keywords, "type": kind.rawValue, "limit": limit, "offset": 0]
         )
-        return response.result ?? SearchPayload(songs: nil, albums: nil, artists: nil, playlists: nil)
+        return response.result ?? SearchPayload(
+            songs: nil,
+            albums: nil,
+            artists: nil,
+            playlists: nil,
+            podcasts: nil
+        )
     }
 
     func dailySongs() async throws -> [Song] {

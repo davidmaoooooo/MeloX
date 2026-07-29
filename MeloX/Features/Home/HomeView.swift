@@ -102,6 +102,17 @@ struct HomeView: View {
                 }
                 .homeFeaturedWidth()
 
+                NavigationLink(value: MusicRoute.podcasts) {
+                    HomeEditorialCard(
+                        eyebrow: "好声音",
+                        title: "播客",
+                        subtitle: "发现值得一听的节目",
+                        systemImage: "mic.fill",
+                        colors: [.indigo, .purple]
+                    )
+                }
+                .homeFeaturedWidth()
+
                 ForEach(recommended.prefix(3)) { playlist in
                     NavigationLink(value: MusicRoute.playlist(playlist)) {
                         HomeFeaturedPlaylistCard(playlist: playlist)

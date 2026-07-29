@@ -89,6 +89,12 @@ struct SearchPayload: Decodable {
     let albums: [Album]?
     let artists: [Artist]?
     let playlists: [Playlist]?
+    let podcasts: [Podcast]?
+
+    enum CodingKeys: String, CodingKey {
+        case songs, albums, artists, playlists
+        case podcasts = "djRadios"
+    }
 }
 
 struct DailySongsResponse: Decodable {
@@ -152,5 +158,138 @@ struct APIStatusResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case code, message
+    }
+}
+
+struct PodcastCategoriesResponse: Decodable {
+    let code: Int
+    let categories: [PodcastCategory]
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case code, categories, message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code) ?? 200
+        categories = try container.decodeIfPresent(
+            [PodcastCategory].self,
+            forKey: .categories
+        ) ?? []
+        message = try container.decodeIfPresent(
+            String.self,
+            forKey: .message
+        )
+    }
+}
+
+struct PodcastCollectionResponse: Decodable {
+    let code: Int
+    let podcasts: [Podcast]
+    let hasMore: Bool?
+    let count: Int?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case code
+        case podcasts = "djRadios"
+        case hasMore, count, message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code) ?? 200
+        podcasts = try container.decodeIfPresent(
+            [Podcast].self,
+            forKey: .podcasts
+        ) ?? []
+        hasMore = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .hasMore
+        )
+        count = try container.decodeIfPresent(Int.self, forKey: .count)
+        message = try container.decodeIfPresent(
+            String.self,
+            forKey: .message
+        )
+    }
+}
+
+struct PodcastPersonalizedResponse: Decodable {
+    let code: Int
+    let podcasts: [Podcast]
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case code
+        case podcasts = "data"
+        case message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code) ?? 200
+        podcasts = try container.decodeIfPresent(
+            [Podcast].self,
+            forKey: .podcasts
+        ) ?? []
+        message = try container.decodeIfPresent(
+            String.self,
+            forKey: .message
+        )
+    }
+}
+
+struct PodcastDetailResponse: Decodable {
+    let code: Int
+    let podcast: Podcast?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case code
+        case podcast = "data"
+        case message
+        case msg
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code) ?? 200
+        podcast = try container.decodeIfPresent(
+            Podcast.self,
+            forKey: .podcast
+        )
+        message =
+            try container.decodeIfPresent(String.self, forKey: .message)
+            ?? container.decodeIfPresent(String.self, forKey: .msg)
+    }
+}
+
+struct PodcastProgramsResponse: Decodable {
+    let code: Int
+    let programs: [PodcastProgram]
+    let count: Int
+    let more: Bool?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case code, programs, count, more, message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code) ?? 200
+        programs = try container.decodeIfPresent(
+            [PodcastProgram].self,
+            forKey: .programs
+        ) ?? []
+        count = try container.decodeIfPresent(Int.self, forKey: .count)
+            ?? programs.count
+        more = try container.decodeIfPresent(Bool.self, forKey: .more)
+        message = try container.decodeIfPresent(
+            String.self,
+            forKey: .message
+        )
     }
 }

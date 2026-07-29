@@ -211,6 +211,7 @@ struct Song: Codable, Hashable, Identifiable {
     let publishTime: Double?
     let copyright: Int?
     let musicVideoID: Int?
+    let podcastMetadata: PodcastPlaybackMetadata?
 
     var artistText: String {
         artists.map(\.name).joined(separator: " / ")
@@ -221,12 +222,17 @@ struct Song: Codable, Hashable, Identifiable {
         return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
     }
 
+    var isPodcastProgram: Bool {
+        podcastMetadata != nil
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, name, ar, artists, al, album, dt, duration, no, cd, fee
         case aliases = "alia"
         case popularity = "pop"
         case publishTime, copyright
         case musicVideoID = "mv"
+        case podcastMetadata = "_meloxPodcastMetadata"
     }
 
     init(
@@ -242,7 +248,8 @@ struct Song: Codable, Hashable, Identifiable {
         popularity: Int? = nil,
         publishTime: Double? = nil,
         copyright: Int? = nil,
-        musicVideoID: Int? = nil
+        musicVideoID: Int? = nil,
+        podcastMetadata: PodcastPlaybackMetadata? = nil
     ) {
         self.id = id
         self.name = name
@@ -257,6 +264,7 @@ struct Song: Codable, Hashable, Identifiable {
         self.publishTime = publishTime
         self.copyright = copyright
         self.musicVideoID = musicVideoID
+        self.podcastMetadata = podcastMetadata
     }
 
     init(from decoder: Decoder) throws {
@@ -279,6 +287,10 @@ struct Song: Codable, Hashable, Identifiable {
         publishTime = try container.decodeIfPresent(Double.self, forKey: .publishTime)
         copyright = try container.decodeIfPresent(Int.self, forKey: .copyright)
         musicVideoID = try container.decodeIfPresent(Int.self, forKey: .musicVideoID)
+        podcastMetadata = try container.decodeIfPresent(
+            PodcastPlaybackMetadata.self,
+            forKey: .podcastMetadata
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -296,6 +308,10 @@ struct Song: Codable, Hashable, Identifiable {
         try container.encodeIfPresent(publishTime, forKey: .publishTime)
         try container.encodeIfPresent(copyright, forKey: .copyright)
         try container.encodeIfPresent(musicVideoID, forKey: .musicVideoID)
+        try container.encodeIfPresent(
+            podcastMetadata,
+            forKey: .podcastMetadata
+        )
     }
 }
 

@@ -14,7 +14,7 @@ struct NowPlayingSongActions: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if showsFavoriteButton {
+            if showsFavoriteButton, !song.isPodcastProgram {
                 favoriteButton
             }
 
@@ -62,96 +62,123 @@ struct NowPlayingSongActions: View {
 
     private var songMenu: some View {
         Menu {
-            ControlGroup {
+            if let podcast = song.podcastMetadata {
                 Button {
-                    presentedSheet = .addToPlaylist(song)
+                    player.addToPlaybackQueue(song)
                 } label: {
                     Label(
-                        "添加到歌单",
-                        systemImage: "plus.circle"
+                        "添加到播放列表",
+                        systemImage: "text.badge.plus"
                     )
                 }
 
                 Button {
-                    library.toggle(song: song)
+                    openMusicRoute(
+                        .podcast(podcast.podcastSummary)
+                    )
                 } label: {
                     Label(
-                        library.contains(song: song)
-                            ? "取消喜爱"
-                            : "喜爱",
-                        systemImage: library.contains(song: song)
-                            ? "star.fill"
-                            : "star"
+                        "前往播客：\(podcast.radioName)",
+                        systemImage: "mic"
                     )
                 }
+            } else {
+                ControlGroup {
+                    Button {
+                        presentedSheet = .addToPlaylist(song)
+                    } label: {
+                        Label(
+                            "添加到歌单",
+                            systemImage: "plus.circle"
+                        )
+                    }
 
-                Menu {
-                    NeteaseShareMenuContent(resource: .song(song))
-                } label: {
-                    Label("分享", systemImage: "square.and.arrow.up")
+                    Button {
+                        library.toggle(song: song)
+                    } label: {
+                        Label(
+                            library.contains(song: song)
+                                ? "取消喜爱"
+                                : "喜爱",
+                            systemImage: library.contains(song: song)
+                                ? "star.fill"
+                                : "star"
+                        )
+                    }
+
+                    Menu {
+                        NeteaseShareMenuContent(resource: .song(song))
+                    } label: {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
                 }
-            }
 
-            Button {
-                presentedSheet = .comments(song)
-            } label: {
-                Label(
-                    "查看评论",
-                    systemImage: "bubble.left.and.bubble.right"
-                )
-            }
-
-            Button {
-                presentedSheet = .listenTogether
-            } label: {
-                Label(
-                    listenTogether.isInRoom ? "一起听房间" : "发起一起听",
-                    systemImage: "person.2.wave.2"
-                )
-            }
-
-            Divider()
-
-            Button {
-                player.addToPlaybackQueue(song)
-            } label: {
-                Label("添加到播放列表", systemImage: "text.badge.plus")
-            }
-
-            Divider()
-
-            if let album = song.album {
                 Button {
-                    openMusicRoute(.album(album))
+                    presentedSheet = .comments(song)
                 } label: {
                     Label(
-                        "前往专辑：\(album.name)",
-                        systemImage: "music.note.list"
+                        "查看评论",
+                        systemImage: "bubble.left.and.bubble.right"
                     )
                 }
-            }
 
-            if let artist = song.artists.first {
                 Button {
-                    openMusicRoute(.artist(artist.id))
+                    presentedSheet = .listenTogether
                 } label: {
                     Label(
-                        "前往艺人：\(song.artists.map(\.name).joined(separator: " & "))",
-                        systemImage: "music.microphone"
+                        listenTogether.isInRoom
+                            ? "一起听房间"
+                            : "发起一起听",
+                        systemImage: "person.2.wave.2"
                     )
                 }
-            }
 
-            if settings.beatNetDebugEnabled {
                 Divider()
 
                 Button {
-                    presentedSheet = .beatNetDebug
+                    player.addToPlaybackQueue(song)
                 } label: {
                     Label(
-                        "BeatNet 调试",
-                        systemImage: "waveform.path.ecg"
+                        "添加到播放列表",
+                        systemImage: "text.badge.plus"
                     )
+                }
+
+                Divider()
+
+                if let album = song.album {
+                    Button {
+                        openMusicRoute(.album(album))
+                    } label: {
+                        Label(
+                            "前往专辑：\(album.name)",
+                            systemImage: "music.note.list"
+                        )
+                    }
+                }
+
+                if let artist = song.artists.first {
+                    Button {
+                        openMusicRoute(.artist(artist.id))
+                    } label: {
+                        Label(
+                            "前往艺人：\(song.artists.map(\.name).joined(separator: " & "))",
+                            systemImage: "music.microphone"
+                        )
+                    }
+                }
+
+                if settings.beatNetDebugEnabled {
+                    Divider()
+
+                    Button {
+                        presentedSheet = .beatNetDebug
+                    } label: {
+                        Label(
+                            "BeatNet 调试",
+                            systemImage: "waveform.path.ecg"
+                        )
+                    }
                 }
             }
         } label: {

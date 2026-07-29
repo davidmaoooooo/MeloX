@@ -142,7 +142,10 @@ struct ContentView: View {
                 await startHeartModeOnLaunchIfNeeded()
             }
             .task(id: player.currentSong?.id) {
-                let songID = player.currentSong?.id
+                let song = player.currentSong
+                let songID = song?.isPodcastProgram == true
+                    ? nil
+                    : song?.id
                 await lyrics.load(for: songID)
                 guard !Task.isCancelled else { return }
                 player.setNowPlayingLyrics(lyrics.lyrics, for: songID)
@@ -389,6 +392,7 @@ struct ContentView: View {
             SearchView()
         case .librarySongs,
              .libraryPlaylists,
+             .libraryPodcasts,
              .libraryDownloads,
              .libraryCloud,
              .libraryHistory:

@@ -12,6 +12,7 @@ struct SearchView: View {
     @State private var albums: [Album] = []
     @State private var artists: [Artist] = []
     @State private var playlists: [Playlist] = []
+    @State private var podcasts: [Podcast] = []
     @State private var completedRequest: SearchRequest?
 
     var body: some View {
@@ -26,7 +27,7 @@ struct SearchView: View {
         .searchable(
             text: $query,
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "歌曲、歌手、专辑或歌单"
+            prompt: "歌曲、歌手、专辑、歌单或播客"
         )
         .searchScopes($scope) {
             ForEach(SearchKind.allCases) { kind in
@@ -131,6 +132,14 @@ struct SearchView: View {
                     }
                     .musicMatchedTransitionSource(for: MusicRoute.playlist(playlist))
                 }
+            case .podcasts:
+                ForEach(podcasts) { podcast in
+                    NavigationLink(
+                        value: MusicRoute.podcast(podcast)
+                    ) {
+                        PodcastListRow(podcast: podcast)
+                    }
+                }
             }
         }
         .listStyle(.plain)
@@ -146,6 +155,7 @@ struct SearchView: View {
         case .albums: albums.isEmpty
         case .artists: artists.isEmpty
         case .playlists: playlists.isEmpty
+        case .podcasts: podcasts.isEmpty
         }
     }
 
@@ -168,6 +178,7 @@ struct SearchView: View {
             albums = result.albums ?? []
             artists = result.artists ?? []
             playlists = result.playlists ?? []
+            podcasts = result.podcasts ?? []
 
             if request.kind == .songs, !songs.isEmpty {
                 let details = try? await api.songDetails(ids: songs.map(\.id))
@@ -190,6 +201,7 @@ struct SearchView: View {
         albums = []
         artists = []
         playlists = []
+        podcasts = []
     }
 }
 

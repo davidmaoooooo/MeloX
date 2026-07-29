@@ -143,11 +143,19 @@ private struct SearchMusicCategory: Identifiable {
     var id: String { name }
 
     var route: MusicRoute {
-        name == "排行榜" ? .toplists : .playlistCategory(name)
+        switch name {
+        case "排行榜":
+            .toplists
+        case "播客":
+            .podcasts
+        default:
+            .playlistCategory(name)
+        }
     }
 
     static let all: [SearchMusicCategory] = [
         .init(name: "排行榜", systemImage: "chart.bar.fill", colors: [.orange, .red]),
+        .init(name: "播客", systemImage: "mic.fill", colors: [.purple, .indigo]),
         .init(name: "华语", systemImage: "character.book.closed.fill", colors: [.pink, .red]),
         .init(name: "欧美", systemImage: "globe.americas.fill", colors: [.blue, .indigo]),
         .init(name: "日语", systemImage: "sun.max.fill", colors: [.orange, .pink]),

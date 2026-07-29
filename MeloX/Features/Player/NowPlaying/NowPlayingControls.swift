@@ -342,28 +342,48 @@ struct NowPlayingPageSelector: View {
     @Binding var page: NowPlayingPage
 
     var body: some View {
-        HStack {
-            pageButton(
-                page: .lyrics,
-                systemImage: "quote.bubble",
-                accessibilityLabel: "歌词"
-            )
+        Group {
+            if player.currentSong?.isPodcastProgram == true {
+                HStack {
+                    Spacer()
 
-            Spacer()
+                    pageButton(
+                        page: .queue,
+                        systemImage: "list.bullet",
+                        accessibilityLabel: "播放队列",
+                        badgeSystemImage:
+                            page == .queue
+                                ? nil
+                                : player.queueModeBadgeSystemImage
+                    )
 
-            FloatingLyricsButton()
+                    Spacer()
+                }
+            } else {
+                HStack {
+                    pageButton(
+                        page: .lyrics,
+                        systemImage: "quote.bubble",
+                        accessibilityLabel: "歌词"
+                    )
 
-            Spacer()
+                    Spacer()
 
-            pageButton(
-                page: .queue,
-                systemImage: "list.bullet",
-                accessibilityLabel: "播放队列",
-                badgeSystemImage:
-                    page == .queue
-                        ? nil
-                        : player.queueModeBadgeSystemImage
-            )
+                    FloatingLyricsButton()
+
+                    Spacer()
+
+                    pageButton(
+                        page: .queue,
+                        systemImage: "list.bullet",
+                        accessibilityLabel: "播放队列",
+                        badgeSystemImage:
+                            page == .queue
+                                ? nil
+                                : player.queueModeBadgeSystemImage
+                    )
+                }
+            }
         }
         .padding(.horizontal, 32)
         .foregroundStyle(.white.opacity(0.72))

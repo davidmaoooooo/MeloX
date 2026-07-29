@@ -218,6 +218,12 @@ struct NowPlayingView: View {
         ) {
             registerAppleMusicControlsActivity()
         }
+        .onAppear {
+            resetPodcastPageIfNeeded()
+        }
+        .onChange(of: player.currentSong?.id) {
+            resetPodcastPageIfNeeded()
+        }
     }
 
     private var beatAnalysisTaskID:
@@ -230,6 +236,7 @@ struct NowPlayingView: View {
                     == .flowingLight
                     && settings
                         .playerBackgroundBeatEffectsEnabled
+                    && player.currentSong?.isPodcastProgram != true
         )
     }
 
@@ -246,6 +253,16 @@ struct NowPlayingView: View {
         }
 
         await player.analyzeCurrentSongBeats()
+    }
+
+    private func resetPodcastPageIfNeeded() {
+        guard player.currentSong?.isPodcastProgram == true,
+              page == .lyrics else {
+            return
+        }
+        page = .artwork
+        transitionSourcePage = .artwork
+        transitionDestinationPage = .artwork
     }
 
     private func portraitContent(for song: Song) -> some View {

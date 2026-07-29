@@ -8,12 +8,18 @@ final class LibraryStore {
     private(set) var accountDetail: AccountDetail?
     private(set) var favoriteSongs: [Song] = []
     private(set) var favoritePlaylists: [Playlist] = []
+    private(set) var subscribedPodcasts: [Podcast] = []
     private(set) var recentSongs: [Song] = []
     private(set) var likedPlaylistID: Int?
     private(set) var favoriteSongTotalCount = 0
     private(set) var favoriteSongsNextOffset = 0
     private(set) var isLoadingMoreFavoriteSongs = false
     private(set) var favoriteSongsLoadMoreError: String?
+    private(set) var subscribedPodcastTotalCount = 0
+    private(set) var subscribedPodcastsNextOffset = 0
+    private(set) var hasMoreSubscribedPodcasts = false
+    private(set) var isLoadingMoreSubscribedPodcasts = false
+    private(set) var subscribedPodcastsLoadMoreError: String?
     private(set) var phase: LoadingPhase = .loaded
     private(set) var errorMessage: String?
 
@@ -37,6 +43,9 @@ final class LibraryStore {
 
     @ObservationIgnored
     private let favoriteSongPageSize = 100
+
+    @ObservationIgnored
+    private let subscribedPodcastPageSize = 50
 
     init(api: NeteaseAPI, settings: AppSettings) {
         self.api = api
@@ -72,6 +81,10 @@ final class LibraryStore {
         favoritePlaylists.contains { $0.id == playlist.id }
     }
 
+    func contains(podcast: Podcast) -> Bool {
+        subscribedPodcasts.contains { $0.id == podcast.id }
+    }
+
     func recordRecentlyPlayed(_ song: Song) {
         recentSongs.removeAll { $0.id == song.id }
         recentSongs.insert(song, at: 0)
@@ -105,6 +118,7 @@ final class LibraryStore {
         phase = .loading
         errorMessage = nil
         favoriteSongsLoadMoreError = nil
+        subscribedPodcastsLoadMoreError = nil
 
         do {
             let loadedProfile = try await api.accountProfile()
@@ -138,6 +152,29 @@ final class LibraryStore {
                 return
             } catch {
                 partialFailures.append("歌单：\(error.localizedDescription)")
+            }
+
+            do {
+                let page = try await api.subscribedPodcasts(
+                    limit: subscribedPodcastPageSize
+                )
+                try Task.checkCancellation()
+                subscribedPodcasts = normalizedSubscribedPodcasts(
+                    page.podcasts
+                )
+                subscribedPodcastTotalCount = max(
+                    page.totalCount ?? subscribedPodcasts.count,
+                    subscribedPodcasts.count
+                )
+                subscribedPodcastsNextOffset = page.podcasts.count
+                hasMoreSubscribedPodcasts = page.hasMore
+                subscribedPodcastsLoadMoreError = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                partialFailures.append(
+                    "订阅播客：\(error.localizedDescription)"
+                )
             }
 
             do {
@@ -230,6 +267,53 @@ final class LibraryStore {
         }
     }
 
+    func loadMoreSubscribedPodcasts() async {
+        guard !isLoadingMoreSubscribedPodcasts,
+              hasMoreSubscribedPodcasts else {
+            return
+        }
+
+        let requestedOffset = subscribedPodcastsNextOffset
+        isLoadingMoreSubscribedPodcasts = true
+        subscribedPodcastsLoadMoreError = nil
+        defer {
+            isLoadingMoreSubscribedPodcasts = false
+        }
+
+        do {
+            let page = try await api.subscribedPodcasts(
+                offset: requestedOffset,
+                limit: subscribedPodcastPageSize
+            )
+            try Task.checkCancellation()
+            guard subscribedPodcastsNextOffset == requestedOffset else {
+                return
+            }
+
+            var loadedIDs = Set(subscribedPodcasts.map(\.id))
+            subscribedPodcasts.append(
+                contentsOf: normalizedSubscribedPodcasts(
+                    page.podcasts
+                ).filter {
+                    loadedIDs.insert($0.id).inserted
+                }
+            )
+            subscribedPodcastsNextOffset =
+                requestedOffset + page.podcasts.count
+            subscribedPodcastTotalCount = max(
+                page.totalCount ?? subscribedPodcastTotalCount,
+                subscribedPodcasts.count
+            )
+            hasMoreSubscribedPodcasts =
+                page.hasMore && !page.podcasts.isEmpty
+        } catch is CancellationError {
+            return
+        } catch {
+            subscribedPodcastsLoadMoreError =
+                error.localizedDescription
+        }
+    }
+
     func toggle(song: Song) {
         guard isLoggedIn else {
             errorMessage = APIError.notLoggedIn.localizedDescription
@@ -284,6 +368,54 @@ final class LibraryStore {
         }
     }
 
+    func toggle(podcast: Podcast) {
+        guard isLoggedIn else {
+            errorMessage = APIError.notLoggedIn.localizedDescription
+            return
+        }
+
+        let desiredState = !contains(podcast: podcast)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.setPodcastSubscribed(
+                    podcast,
+                    isSubscribed: desiredState
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func setPodcastSubscribed(
+        _ podcast: Podcast,
+        isSubscribed: Bool
+    ) async throws {
+        guard isLoggedIn else { throw APIError.notLoggedIn }
+
+        let previousPodcasts = subscribedPodcasts
+        let previousTotalCount = subscribedPodcastTotalCount
+        let previousNextOffset = subscribedPodcastsNextOffset
+        let previousHasMore = hasMoreSubscribedPodcasts
+        setLocalPodcast(podcast, isSubscribed: isSubscribed)
+
+        do {
+            try await api.setPodcastSubscribed(
+                id: podcast.id,
+                isSubscribed: isSubscribed
+            )
+        } catch {
+            subscribedPodcasts = previousPodcasts
+            subscribedPodcastTotalCount = previousTotalCount
+            subscribedPodcastsNextOffset = previousNextOffset
+            hasMoreSubscribedPodcasts = previousHasMore
+            throw error
+        }
+    }
+
     func add(song: Song, to playlist: Playlist) async throws {
         guard isLoggedIn else { throw APIError.notLoggedIn }
         guard playlist.creator?.userID == profile?.id else {
@@ -308,6 +440,7 @@ final class LibraryStore {
         accountDetail = nil
         favoriteSongs = []
         favoritePlaylists = []
+        subscribedPodcasts = []
         recentSongs = []
         likedPlaylistID = nil
         favoriteSongIDs = []
@@ -316,6 +449,11 @@ final class LibraryStore {
         favoriteSongsNextOffset = 0
         isLoadingMoreFavoriteSongs = false
         favoriteSongsLoadMoreError = nil
+        subscribedPodcastTotalCount = 0
+        subscribedPodcastsNextOffset = 0
+        hasMoreSubscribedPodcasts = false
+        isLoadingMoreSubscribedPodcasts = false
+        subscribedPodcastsLoadMoreError = nil
     }
 
     private func setLocalSong(
@@ -338,6 +476,47 @@ final class LibraryStore {
             favoriteSongsNextOffset += 1
         }
         favoriteSongTotalCount = favoriteSongIDs.count
+    }
+
+    private func setLocalPodcast(
+        _ podcast: Podcast,
+        isSubscribed: Bool
+    ) {
+        let wasSubscribed =
+            contains(podcast: podcast) || podcast.isSubscribed
+        subscribedPodcasts.removeAll { $0.id == podcast.id }
+
+        if isSubscribed {
+            var summary = podcast
+            summary.isSubscribed = true
+            subscribedPodcasts.insert(summary, at: 0)
+        }
+
+        if wasSubscribed != isSubscribed {
+            subscribedPodcastTotalCount += isSubscribed ? 1 : -1
+        }
+        subscribedPodcastTotalCount = max(
+            subscribedPodcastTotalCount,
+            subscribedPodcasts.count
+        )
+        subscribedPodcastsNextOffset = subscribedPodcasts.count
+        hasMoreSubscribedPodcasts =
+            subscribedPodcastsNextOffset < subscribedPodcastTotalCount
+    }
+
+    private func normalizedSubscribedPodcasts(
+        _ podcasts: [Podcast]
+    ) -> [Podcast] {
+        var identifiers = Set<Int>()
+        return podcasts.compactMap { podcast in
+            guard podcast.id > 0,
+                  identifiers.insert(podcast.id).inserted else {
+                return nil
+            }
+            var subscribedPodcast = podcast
+            subscribedPodcast.isSubscribed = true
+            return subscribedPodcast
+        }
     }
 }
 

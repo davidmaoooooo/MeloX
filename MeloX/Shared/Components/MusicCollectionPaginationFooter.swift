@@ -4,6 +4,7 @@ struct MusicCollectionPaginationFooter: View {
     let isLoading: Bool
     let failureMessage: String?
     let loadToken: Int
+    var loadingTitle = "正在加载更多歌曲"
     let action: () async -> Void
 
     var body: some View {
@@ -25,7 +26,7 @@ struct MusicCollectionPaginationFooter: View {
             } else {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("正在加载更多歌曲")
+                    Text(loadingTitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

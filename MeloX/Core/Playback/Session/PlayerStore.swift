@@ -664,6 +664,7 @@ final class PlayerStore {
     @discardableResult
     func analyzeCurrentSongBeats() async -> PlaybackBeatTimeline? {
         guard let song = currentSong,
+              !song.isPodcastProgram,
               let source = currentPlaybackSource else {
             currentBeatTimeline = nil
             beatAnalysisStatus = .idle
@@ -747,7 +748,7 @@ final class PlayerStore {
             == .flowingLight,
             settings
                 .playerBackgroundBeatEffectsEnabled,
-            currentSong != nil,
+            currentSong?.isPodcastProgram == false,
             currentPlaybackSource != nil,
             currentBeatTimeline == nil else {
             return
@@ -1374,14 +1375,20 @@ final class PlayerStore {
     private var nowPlayingLyricsDisplaySettings:
         NowPlayingLyricsDisplaySettings {
         NowPlayingLyricsDisplaySettings(
-            isEnabled: settings.systemNowPlayingLyricsEnabled,
+            isEnabled:
+                settings.systemNowPlayingLyricsEnabled
+                && currentSong?.isPodcastProgram != true,
             titleFormat: settings.systemNowPlayingLyricsTitleFormat,
             subtitleFormat: settings.systemNowPlayingLyricsSubtitleFormat
         )
     }
 
     private func recordCurrentPlayback(completed: Bool = false) {
-        guard hasRecordedCurrentStart, let currentSong else { return }
+        guard hasRecordedCurrentStart,
+              let currentSong,
+              !currentSong.isPodcastProgram else {
+            return
+        }
         historyRecorder.recordPlaybackDuration(
             song: currentSong,
             sourceID: historySourceID,
@@ -1393,6 +1400,7 @@ final class PlayerStore {
     private func recordCurrentPlaybackStartIfNeeded() {
         guard !hasRecordedCurrentStart, let currentSong else { return }
         hasRecordedCurrentStart = true
+        guard !currentSong.isPodcastProgram else { return }
         historyRecorder.recordRecentPlayback(
             song: currentSong,
             sourceID: historySourceID
@@ -1467,7 +1475,8 @@ final class PlayerStore {
         guard isAutoplayEnabled,
               !isLoadingAutoplayRecommendations,
               playbackQueue.upcomingIndices(wraps: false).isEmpty,
-              let currentSong else {
+              let currentSong,
+              !currentSong.isPodcastProgram else {
             return
         }
 
@@ -1501,7 +1510,10 @@ final class PlayerStore {
                 : nil
         }
         autoMixCoordinator.prepareIfNeeded(
-            isEnabled: isAutoMixEnabled,
+            isEnabled:
+                isAutoMixEnabled
+                && currentSong?.isPodcastProgram != true
+                && nextSong?.isPodcastProgram != true,
             isPlaying: isPlaying,
             repeatsCurrentSong: repeatMode == .one,
             outgoingSong: currentSong,

@@ -56,17 +56,28 @@ final class NowPlayingSession {
         nowPlayingInfo = [
             MPMediaItemPropertyTitle: metadata.title,
             MPMediaItemPropertyArtist: metadata.subtitle,
-            MPMediaItemPropertyAlbumTitle: song.album?.name ?? "",
+            MPMediaItemPropertyAlbumTitle:
+                song.podcastMetadata?.radioName
+                ?? song.album?.name
+                ?? "",
             MPMediaItemPropertyPersistentID: NSNumber(value: UInt64(max(song.id, 0))),
             MPMediaItemPropertyPlaybackDuration: max(duration, 0),
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             MPNowPlayingInfoPropertyIsLiveStream: false,
-            MPNowPlayingInfoPropertyExternalContentIdentifier: "netease:song:\(song.id)",
+            MPNowPlayingInfoPropertyExternalContentIdentifier:
+                song.podcastMetadata.map {
+                    "netease:djprogram:\($0.programID)"
+                } ?? "netease:song:\(song.id)",
             MPNowPlayingInfoPropertyServiceIdentifier: "netease-cloud-music",
             MPNowPlayingInfoPropertyPlaybackQueueIndex: max(queueIndex, 0),
             MPNowPlayingInfoPropertyPlaybackQueueCount: max(queueCount, 1),
         ]
-        if let albumID = song.album?.id {
+        if let podcast = song.podcastMetadata {
+            nowPlayingInfo[MPMediaItemPropertyPodcastTitle] =
+                podcast.radioName
+            nowPlayingInfo[MPNowPlayingInfoCollectionIdentifier] =
+                "netease:djradio:\(podcast.radioID)"
+        } else if let albumID = song.album?.id {
             nowPlayingInfo[MPNowPlayingInfoCollectionIdentifier] = "netease:album:\(albumID)"
         }
         nowPlayingCenter.nowPlayingInfo = nowPlayingInfo
