@@ -628,12 +628,15 @@ final class PlayerStore {
 
     func presentLyricsNotificationPreview() {
         let song = currentSong
+        let lyrics = currentSongLyrics
         lyricsNotificationController.presentPreview(
             song: song,
-            lyrics: currentSongLyrics,
+            lyrics: lyrics,
             playbackTime:
                 estimatedProgress()
-                    + settings.lyricsAdvanceTime
+                    + settings.effectiveLyricsAdvanceTime(
+                        for: lyrics
+                    )
         )
     }
 
@@ -1135,9 +1138,12 @@ final class PlayerStore {
     ) {
         guard let song = currentSong else { return }
         let lyrics = currentSongLyrics
+        let advanceTime = settings.effectiveLyricsAdvanceTime(
+            for: lyrics
+        )
         let highlightedLyricID = settings.systemNowPlayingLyricsEnabled
             ? LyricPlaybackTimeline.position(
-                at: estimatedProgress() + settings.lyricsAdvanceTime,
+                at: estimatedProgress() + advanceTime,
                 in: lyrics
             ).highlightedLyricID
             : nil
@@ -1178,8 +1184,8 @@ final class PlayerStore {
         }
 
         let lyrics = currentSongLyrics
-        let adjustedProgress =
-            estimatedProgress() + settings.lyricsAdvanceTime
+        let adjustedProgress = estimatedProgress()
+            + settings.effectiveLyricsAdvanceTime(for: lyrics)
         let position = LyricPlaybackTimeline.position(
             at: adjustedProgress,
             in: lyrics
@@ -1256,12 +1262,15 @@ final class PlayerStore {
     }
 
     private func updateLyricsNotification(force: Bool = false) {
+        let lyrics = currentSongLyrics
         lyricsNotificationController.update(
             song: currentSong,
-            lyrics: currentSongLyrics,
+            lyrics: lyrics,
             playbackTime:
                 estimatedProgress()
-                    + settings.lyricsAdvanceTime,
+                    + settings.effectiveLyricsAdvanceTime(
+                        for: lyrics
+                    ),
             isPlaying: isPlaying,
             force: force
         )

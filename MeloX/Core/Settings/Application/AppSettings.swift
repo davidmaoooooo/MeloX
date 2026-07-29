@@ -246,6 +246,8 @@ final class AppSettings {
             "lyricsFocusCascadeMinimumBounceDuration"
         static let lyricsFocusColorLeadTime = "lyricsFocusColorLeadTime"
         static let lyricsAdvanceTime = "lyricsAdvanceTime"
+        static let lyricsAdvanceTimeAppliesToWordByWord =
+            "lyricsAdvanceTimeAppliesToWordByWord"
         static let lyricsRefreshRate = "lyricsRefreshRate"
         static let playerScreenAwakeMode = "playerScreenAwakeMode"
         static let legacyLyricsKeepsScreenAwake = "lyricsKeepsScreenAwake"
@@ -997,6 +999,38 @@ final class AppSettings {
         didSet { defaults.set(lyricsAdvanceTime, forKey: Key.lyricsAdvanceTime) }
     }
 
+    var lyricsAdvanceTimeAppliesToWordByWord: Bool {
+        didSet {
+            defaults.set(
+                lyricsAdvanceTimeAppliesToWordByWord,
+                forKey: Key.lyricsAdvanceTimeAppliesToWordByWord
+            )
+        }
+    }
+
+    var wordByWordLyricsAdvanceTime: TimeInterval {
+        lyricsAdvanceTimeAppliesToWordByWord
+            ? lyricsAdvanceTime
+            : 0
+    }
+
+    func effectiveLyricsAdvanceTime(
+        hasSyllableSyncedLyrics: Bool
+    ) -> TimeInterval {
+        hasSyllableSyncedLyrics
+            ? wordByWordLyricsAdvanceTime
+            : lyricsAdvanceTime
+    }
+
+    func effectiveLyricsAdvanceTime(
+        for lyrics: [LyricLine]
+    ) -> TimeInterval {
+        effectiveLyricsAdvanceTime(
+            hasSyllableSyncedLyrics:
+                lyrics.contains(where: \.isSyllableSynced)
+        )
+    }
+
     var lyricsRefreshRate: LyricsRefreshRate {
         didSet { defaults.set(lyricsRefreshRate.rawValue, forKey: Key.lyricsRefreshRate) }
     }
@@ -1511,6 +1545,10 @@ final class AppSettings {
             Self.lyricsFocusColorLeadTimeRange.upperBound
         )
         lyricsAdvanceTime = defaults.object(forKey: Key.lyricsAdvanceTime) as? Double ?? 0.2
+        lyricsAdvanceTimeAppliesToWordByWord =
+            defaults.object(
+                forKey: Key.lyricsAdvanceTimeAppliesToWordByWord
+            ) as? Bool ?? false
         lyricsRefreshRate = LyricsRefreshRate(
             rawValue: defaults.object(forKey: Key.lyricsRefreshRate) as? Int ?? 0
         ) ?? .defaultValue
@@ -1746,6 +1784,7 @@ final class AppSettings {
         lyricsFocusSnapThreshold = Self.defaultLyricsFocusSnapThreshold
         lyricsFocusColorLeadTime = Self.defaultLyricsFocusColorLeadTime
         lyricsAdvanceTime = 0.2
+        lyricsAdvanceTimeAppliesToWordByWord = false
         lyricsRefreshRate = .defaultValue
         textPV.reset()
         floatingLyrics.reset()

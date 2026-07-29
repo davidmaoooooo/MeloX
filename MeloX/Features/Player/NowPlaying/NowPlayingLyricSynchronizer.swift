@@ -20,11 +20,14 @@ struct NowPlayingLyricSynchronizer: View {
     }
 
     private var synchronizationTrigger: LyricSynchronizationTrigger {
-        LyricSynchronizationTrigger(
+        let advanceTime = settings.effectiveLyricsAdvanceTime(
+            for: lyrics
+        )
+        return LyricSynchronizationTrigger(
             songID: player.currentSong?.id,
             seekRevision: player.seekRevision,
             isPlaying: player.isPlaying,
-            advanceTime: settings.lyricsAdvanceTime,
+            advanceTime: advanceTime,
             lyricCount: lyrics.count,
             firstLyricID: lyrics.first?.id,
             lastLyricID: lyrics.last?.id
@@ -32,8 +35,11 @@ struct NowPlayingLyricSynchronizer: View {
     }
 
     private func synchronizeImmediately() {
+        let advanceTime = settings.effectiveLyricsAdvanceTime(
+            for: lyrics
+        )
         let position = LyricPlaybackTimeline.position(
-            at: player.estimatedProgress() + settings.lyricsAdvanceTime,
+            at: player.estimatedProgress() + advanceTime,
             in: lyrics
         )
         updateHighlightedLyric(to: position.highlightedLyricID)
@@ -41,7 +47,9 @@ struct NowPlayingLyricSynchronizer: View {
 
     private func synchronizeAtLyricTransitions() async {
         let synchronizedLyrics = lyrics
-        let advanceTime = settings.lyricsAdvanceTime
+        let advanceTime = settings.effectiveLyricsAdvanceTime(
+            for: synchronizedLyrics
+        )
 
         while !Task.isCancelled {
             let adjustedProgress = player.estimatedProgress() + advanceTime

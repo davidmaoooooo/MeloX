@@ -368,7 +368,7 @@ struct SynchronizedLyricText: View {
             )
         ) { context in
             let playbackTime = player.estimatedProgress(at: context.date)
-                + settings.lyricsAdvanceTime
+                + settings.wordByWordLyricsAdvanceTime
 
             Group {
                 if usesRubyLayout {

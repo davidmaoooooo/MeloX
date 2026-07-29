@@ -42,7 +42,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
             seekRevision: player.seekRevision,
             isPlaying: player.isPlaying,
             isEnabled: settings.lyricsInterludeCountdownEnabled,
-            advanceTime: settings.lyricsAdvanceTime,
+            advanceTime: advanceTime,
             lyricCount: lyrics.count,
             firstLyricID: lyrics.first?.id,
             lastLyricID: lyrics.last?.id,
@@ -55,7 +55,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
     private func synchronizeImmediately() {
         let position = playbackPosition(
             at: player.estimatedProgress()
-                + settings.lyricsAdvanceTime
+                + advanceTime
         )
         updatePlaybackFocus(to: position.focus)
     }
@@ -63,7 +63,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
     private func synchronizeAtTransitions() async {
         while !Task.isCancelled {
             let adjustedProgress = player.estimatedProgress()
-                + settings.lyricsAdvanceTime
+                + advanceTime
             let position = playbackPosition(at: adjustedProgress)
             updatePlaybackFocus(to: position.focus)
 
@@ -75,7 +75,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
             let remainingTime = nextTransitionTime
                 - (
                     player.estimatedProgress()
-                        + settings.lyricsAdvanceTime
+                        + advanceTime
                 )
             guard remainingTime > 0 else {
                 await Task.yield()
@@ -151,6 +151,10 @@ struct AppleMusicLyricsFocusCoordinator: View {
         guard playbackFocus != focus else { return }
         playbackFocus = focus
     }
+
+    private var advanceTime: TimeInterval {
+        settings.effectiveLyricsAdvanceTime(for: lyrics)
+    }
 }
 
 struct AppleMusicLyricInterludeView: View {
@@ -159,9 +163,9 @@ struct AppleMusicLyricInterludeView: View {
     @Environment(\.effectiveLyricsRefreshRate)
     private var effectiveLyricsRefreshRate
     @Environment(PlayerStore.self) private var player
-    @Environment(AppSettings.self) private var settings
 
     let interlude: LyricInterlude
+    let advanceTime: TimeInterval
     let fontSize: CGFloat
     let onInterfaceInteraction: (() -> Void)?
 
@@ -171,7 +175,7 @@ struct AppleMusicLyricInterludeView: View {
                 dots(
                     presentation: presentation(
                         at: player.estimatedProgress()
-                            + settings.lyricsAdvanceTime
+                            + advanceTime
                     )
                 )
             } else {
@@ -186,7 +190,7 @@ struct AppleMusicLyricInterludeView: View {
                         presentation: presentation(
                             at: player.estimatedProgress(
                                 at: timeline.date
-                            ) + settings.lyricsAdvanceTime
+                            ) + advanceTime
                         )
                     )
                 }

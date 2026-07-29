@@ -316,6 +316,8 @@ struct AppleMusicLyricsView: View {
                             if case let .interlude(interlude) = item {
                                 AppleMusicLyricInterludeView(
                                     interlude: interlude,
+                                    advanceTime:
+                                        effectiveLyricsAdvanceTime,
                                     fontSize: CGFloat(
                                         settings.lyricsFontSize
                                     ),
@@ -1421,13 +1423,20 @@ struct AppleMusicLyricsView: View {
         )
     }
 
+    private var effectiveLyricsAdvanceTime: TimeInterval {
+        settings.effectiveLyricsAdvanceTime(
+            hasSyllableSyncedLyrics: hasSyllableSyncedLyrics
+        )
+    }
+
     private func remainingFocusDuration(
         for highlightedLyricID: LyricLine.ID
     ) -> TimeInterval? {
         guard player.isPlaying else { return nil }
         return LyricPlaybackTimeline.remainingFocusDuration(
             for: highlightedLyricID,
-            at: player.estimatedProgress() + settings.lyricsAdvanceTime,
+            at: player.estimatedProgress()
+                + effectiveLyricsAdvanceTime,
             in: lyrics
         )
     }

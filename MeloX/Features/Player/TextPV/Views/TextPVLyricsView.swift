@@ -44,7 +44,9 @@ struct TextPVLyricsView: View {
                 stageFrame(
                     snapshot: snapshot,
                     playbackTime: player.estimatedProgress(at: timeline.date)
-                        + settings.lyricsAdvanceTime
+                        + settings.effectiveLyricsAdvanceTime(
+                            for: lyrics
+                        )
                 )
             }
         }

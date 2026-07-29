@@ -357,8 +357,14 @@ final class FloatingLyricsController: NSObject {
         let lyrics = lyricsStore.songID == song.id
             ? lyricsStore.lyrics
             : []
+        let hasSyllableSyncedLyrics = lyrics.contains(
+            where: \.isSyllableSynced
+        )
         let playbackTime = player.estimatedProgress()
-            + settings.lyricsAdvanceTime
+            + settings.effectiveLyricsAdvanceTime(
+                hasSyllableSyncedLyrics:
+                    hasSyllableSyncedLyrics
+            )
         let position = LyricPlaybackTimeline.position(
             at: playbackTime,
             in: lyrics
@@ -391,7 +397,7 @@ final class FloatingLyricsController: NSObject {
         }
 
         let usesPseudoTiming = settings.lyricsPseudoWordByWord
-            && !lyrics.contains(where: \.isSyllableSynced)
+            && !hasSyllableSyncedLyrics
         return FloatingLyricsPresentation(
             songID: song.id,
             title: song.name,

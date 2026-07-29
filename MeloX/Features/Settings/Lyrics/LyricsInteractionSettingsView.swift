@@ -51,10 +51,17 @@ struct LyricsInteractionSettingsView: View {
                     valueText:
                         "\(settings.lyricsAdvanceTime.formatted(.number.precision(.fractionLength(1)))) 秒"
                 )
+
+                Toggle(
+                    "同时应用于逐字歌词",
+                    isOn:
+                        $settings
+                            .lyricsAdvanceTimeAppliesToWordByWord
+                )
             } header: {
                 Text("同步")
             } footer: {
-                Text("让当前行、逐字高光和悬浮歌词提前显示，不会改变音频进度。")
+                Text("普通逐行歌词和悬浮歌词会提前显示，不会改变音频进度。开启后，逐字歌词的行切换和逐字高光也会使用相同提前量。")
             }
 
             if settings.lyricsStyle == .appleMusic {
