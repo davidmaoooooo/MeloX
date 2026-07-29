@@ -7,7 +7,7 @@ struct SongDetailView: View {
     @Environment(DownloadStore.self) private var downloads
 
     @State private var song: Song
-    @State private var commentSong: Song?
+    @State private var presentedSheet: SongDetailSheet?
 
     init(song: Song) {
         _song = State(initialValue: song)
@@ -55,7 +55,7 @@ struct SongDetailView: View {
                 .accessibilityLabel(downloads.contains(songID: song.id) ? "已下载" : "下载")
 
                 Button {
-                    commentSong = song
+                    presentedSheet = .comments(song)
                 } label: {
                     Image(systemName: "bubble.left.and.bubble.right")
                 }
@@ -69,8 +69,13 @@ struct SongDetailView: View {
                 .accessibilityLabel("分享歌曲")
             }
         }
-        .sheet(item: $commentSong) { selectedSong in
-            SongCommentsSheet(song: selectedSong)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .comments(let selectedSong):
+                SongCommentsSheet(song: selectedSong)
+            case .songWiki(let selectedSong):
+                SongWikiSheet(song: selectedSong)
+            }
         }
         .task(id: song.id) {
             await loadSongDetails()
@@ -142,6 +147,12 @@ struct SongDetailView: View {
 
     private var informationSection: some View {
         Section("歌曲资料") {
+            Button {
+                presentedSheet = .songWiki(song)
+            } label: {
+                Label("歌曲百科", systemImage: "book.pages")
+            }
+
             ForEach(song.artists) { artist in
                 NavigationLink(value: MusicRoute.artist(artist.id)) {
                     LabeledContent("歌手", value: artist.name)
@@ -177,6 +188,20 @@ struct SongDetailView: View {
             }
         } catch {
             // 列表传入的歌曲数据仍可完整展示基础资料。
+        }
+    }
+}
+
+private enum SongDetailSheet: Identifiable {
+    case comments(Song)
+    case songWiki(Song)
+
+    var id: String {
+        switch self {
+        case .comments(let song):
+            "comments-\(song.id)"
+        case .songWiki(let song):
+            "song-wiki-\(song.id)"
         }
     }
 }
