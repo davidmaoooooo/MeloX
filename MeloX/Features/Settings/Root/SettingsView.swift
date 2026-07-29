@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) private var settings
-    @Environment(DownloadStore.self) private var downloads
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
 
@@ -22,24 +22,9 @@ struct SettingsView: View {
         SettingsCatalog.matchesReset(searchText)
     }
 
-    private var systemPlaybackSummary: String {
-        let enabledCount = [
-            settings.systemNowPlayingLyricsEnabled,
-            settings.lyricsNotifications.isEnabled,
-            settings.lyricsLiveActivityEnabled,
-        ]
-        .filter { $0 }
-        .count
-
-        return enabledCount == 0 ? "均已关闭" : "\(enabledCount) 项开启"
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 32) {
-                SettingsHomeHeader()
-                    .padding(.bottom, 8)
-
                 settingsContent
             }
             .padding(.horizontal, 16)
@@ -51,12 +36,28 @@ struct SettingsView: View {
                 .ignoresSafeArea()
         )
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("")
+        .navigationTitle("MeloX")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索设置")
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                SettingsHomeToolbarTitle()
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("关闭")
+                .accessibilityHint("关闭账号与设置")
+            }
+        }
         .navigationDestination(for: SettingsRoute.self) { route in
             destination(for: route)
+                .toolbar(.visible, for: .navigationBar)
         }
         .confirmationDialog(
             "恢复播放器默认设置？",
@@ -80,10 +81,7 @@ struct SettingsView: View {
             }
 
             ForEach(visibleSections) { section in
-                SettingsHomeSectionCard(
-                    section: section,
-                    value: value(for:)
-                )
+                SettingsHomeSectionCard(section: section)
             }
 
             if showsReset {
@@ -150,39 +148,6 @@ struct SettingsView: View {
         case .about:
             AboutView()
         }
-    }
-
-    private func value(for route: SettingsRoute) -> String? {
-        switch route {
-        case .playback:
-            settings.quality.title
-        case .lyrics:
-            settings.lyricsStyle.title
-        case .systemPlayback:
-            systemPlaybackSummary
-        case .downloads:
-            downloads.totalByteCount.formatted(.byteCount(style: .file))
-        case .tabLayout:
-            "\(settings.visibleTabs.count) 个标签页"
-        case .general:
-            settings.appearance.title
-        case .developer:
-            developerSettingsSummary
-        case .about:
-            Bundle.main.appVersion
-        case .accountHome,
-             .playerAppearance,
-             .content,
-             .skylineLyrics,
-             .floatingLyrics:
-            nil
-        }
-    }
-
-    private var developerSettingsSummary: String {
-        settings.beatNetDebugEnabled
-            ? "调试面板已开启"
-            : "调试面板已关闭"
     }
 
     private func resetPlayerSettings() {

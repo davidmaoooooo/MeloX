@@ -1,47 +1,23 @@
 import SwiftUI
 
-struct SettingsHomeHeader: View {
-    @Environment(\.dismiss) private var dismiss
-
+struct SettingsHomeToolbarTitle: View {
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image("MeloXLogo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 34, height: 34)
-                .clipShape(.rect(cornerRadius: 9, style: .continuous))
+                .frame(width: 28, height: 28)
+                .clipShape(.rect(cornerRadius: 7, style: .continuous))
                 .accessibilityHidden(true)
 
             Text("MeloX")
-                .font(.title2.weight(.bold))
-
-            Spacer(minLength: 16)
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.title2.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 48, height: 48)
-                    .background(.regularMaterial, in: .circle)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .shadow(
-                color: .black.opacity(0.08),
-                radius: 18,
-                y: 8
-            )
-            .accessibilityLabel("关闭")
-            .accessibilityHint("关闭账号与设置")
+                .font(.headline)
         }
     }
 }
 
 struct SettingsHomeSectionCard: View {
     let section: SettingsCatalogSection
-    let value: (SettingsRoute) -> String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -101,13 +77,6 @@ struct SettingsHomeSectionCard: View {
                 .layoutPriority(1)
 
                 Spacer(minLength: 8)
-
-                if let value = value(item.route) {
-                    Text(value)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
 
                 Image(systemName: "chevron.forward")
                     .font(.caption.weight(.semibold))
