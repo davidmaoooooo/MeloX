@@ -4,6 +4,8 @@ struct PodcastHomeView: View {
     @Environment(NeteaseAPI.self) private var api
     @Environment(LibraryStore.self) private var library
 
+    let showsNavigationTitle: Bool
+
     @State private var recommended: [Podcast] = []
     @State private var categories: [PodcastCategory] = []
     @State private var subscriptions: [Podcast] = []
@@ -14,7 +16,22 @@ struct PodcastHomeView: View {
         GridItem(.adaptive(minimum: 154), spacing: 12),
     ]
 
+    init(showsNavigationTitle: Bool = true) {
+        self.showsNavigationTitle = showsNavigationTitle
+    }
+
+    @ViewBuilder
     var body: some View {
+        if showsNavigationTitle {
+            pageContent
+                .navigationTitle("播客")
+                .navigationBarTitleDisplayMode(.large)
+        } else {
+            pageContent
+        }
+    }
+
+    private var pageContent: some View {
         Group {
             if hasLoadedContent {
                 content
@@ -22,8 +39,6 @@ struct PodcastHomeView: View {
                 initialState
             }
         }
-        .navigationTitle("播客")
-        .navigationBarTitleDisplayMode(.large)
         .task(
             id: PodcastHomeLoadRequest(
                 reloadToken: reloadToken,

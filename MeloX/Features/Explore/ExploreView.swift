@@ -4,6 +4,8 @@ struct ExploreView: View {
     @Environment(NeteaseAPI.self) private var api
     @Environment(AppSettings.self) private var settings
 
+    let showsNavigationTitle: Bool
+
     @State private var category = "推荐歌单"
     @State private var playlists: [Playlist] = []
     @State private var playlistsByCategory: [String: [Playlist]] = [:]
@@ -19,7 +21,21 @@ struct ExploreView: View {
         GridItem(.adaptive(minimum: 148, maximum: 220), spacing: 16),
     ]
 
+    init(showsNavigationTitle: Bool = true) {
+        self.showsNavigationTitle = showsNavigationTitle
+    }
+
+    @ViewBuilder
     var body: some View {
+        if showsNavigationTitle {
+            content
+                .navigationTitle("发现")
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
                 ExploreCategoryPicker(
@@ -33,7 +49,6 @@ struct ExploreView: View {
             .padding(.horizontal)
             .padding(.bottom, 28)
         }
-        .navigationTitle("发现")
         .refreshable {
             await load(category: category, force: true)
         }
