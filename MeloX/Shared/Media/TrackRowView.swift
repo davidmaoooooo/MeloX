@@ -3,6 +3,7 @@ import SwiftUI
 struct TrackRowView: View {
     @Environment(\.openMusicRoute) private var openMusicRoute
     @Environment(PlayerStore.self) private var player
+    @Environment(LibraryStore.self) private var library
     @Environment(DownloadStore.self) private var downloads
 
     let song: Song
@@ -68,6 +69,17 @@ struct TrackRowView: View {
                 Label("添加到歌单", systemImage: "text.badge.plus")
             }
 
+            if !song.isPodcastProgram {
+                Button {
+                    library.toggle(song: song)
+                } label: {
+                    Label(
+                        favoriteActionTitle,
+                        systemImage: favoriteActionSystemImage
+                    )
+                }
+            }
+
             if downloads.isDownloading(songID: song.id) {
                 Button {
                     downloads.cancel(songID: song.id)
@@ -131,9 +143,21 @@ struct TrackRowView: View {
         .accessibilityAction(named: "添加到歌单") {
             presentedSheet = .addToPlaylist(song)
         }
+        .songFavoriteAccessibilityAction(
+            song: song,
+            library: library
+        )
         .accessibilityAction(named: "查看评论") {
             presentedSheet = .comments(song)
         }
+    }
+
+    private var favoriteActionTitle: String {
+        library.contains(song: song) ? "取消喜欢" : "喜欢歌曲"
+    }
+
+    private var favoriteActionSystemImage: String {
+        library.contains(song: song) ? "heart.slash" : "heart"
     }
 }
 
@@ -147,6 +171,27 @@ private enum TrackRowSheet: Identifiable {
             "comments-\(song.id)"
         case .addToPlaylist(let song):
             "add-to-playlist-\(song.id)"
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func songFavoriteAccessibilityAction(
+        song: Song,
+        library: LibraryStore
+    ) -> some View {
+        if song.isPodcastProgram {
+            self
+        } else {
+            accessibilityAction(
+                named:
+                    library.contains(song: song)
+                        ? "取消喜欢"
+                        : "喜欢歌曲"
+            ) {
+                library.toggle(song: song)
+            }
         }
     }
 }

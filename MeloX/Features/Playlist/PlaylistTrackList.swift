@@ -175,7 +175,7 @@ private struct PlaylistTrackRow: View {
                         library.toggle(song: song)
                     } label: {
                         Label(
-                            library.contains(song: song) ? "取消收藏" : "收藏歌曲",
+                            library.contains(song: song) ? "取消喜欢" : "喜欢歌曲",
                             systemImage: library.contains(song: song) ? "heart.slash" : "heart"
                         )
                     }
