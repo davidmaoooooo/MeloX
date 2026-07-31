@@ -9,7 +9,7 @@ enum SettingsRoute: Hashable {
     case general
     case tabLayout
     case content
-    case downloads
+    case storage
     case skylineLyrics
     case floatingLyrics
     case developer
@@ -159,13 +159,18 @@ enum SettingsCatalog {
                     ]
                 ),
                 SettingsCatalogItem(
-                    route: .downloads,
-                    title: "下载与缓存",
-                    subtitle: "自动缓存、下载任务与本地歌曲",
-                    systemImage: "arrow.down.circle",
+                    route: .storage,
+                    title: "存储管理",
+                    subtitle: "空间统计、下载管理与缓存清理",
+                    systemImage: "internaldrive",
                     keywords: [
+                        "下载",
+                        "自动缓存",
                         "存储",
                         "空间",
+                        "清理",
+                        "临时文件",
+                        "数据库",
                         "触发次数",
                         "缓存音质",
                         "删除下载",

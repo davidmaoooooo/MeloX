@@ -129,7 +129,7 @@ struct DownloadsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("已下载")
+        .navigationTitle("下载与缓存")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("全部删除", role: .destructive) {

@@ -64,6 +64,10 @@ private nonisolated final class ArtworkDetailAssetsCache: @unchecked Sendable {
             cost: pixelCost
         )
     }
+
+    func removeAll() {
+        storage.removeAllObjects()
+    }
 }
 
 actor ArtworkAccentColorProvider {
@@ -79,6 +83,10 @@ actor ArtworkAccentColorProvider {
     ) -> ArtworkDetailAssets? {
         guard let artworkURL else { return nil }
         return assetsCache.assets(for: artworkURL)
+    }
+
+    nonisolated static func clearCache() {
+        assetsCache.removeAll()
     }
 
     func accentColor(for artworkURL: URL?) async -> SIMD3<Double> {

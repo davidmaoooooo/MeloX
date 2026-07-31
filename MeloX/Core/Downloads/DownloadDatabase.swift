@@ -8,15 +8,10 @@ final class DownloadDatabase {
         fileManager: FileManager = .default,
         databaseURL: URL? = nil
     ) throws {
-        let applicationSupportURL = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? fileManager.temporaryDirectory
         let resolvedURL = databaseURL
-            ?? applicationSupportURL
-                .appending(path: "MeloX", directoryHint: .isDirectory)
-                .appending(path: "Database", directoryHint: .isDirectory)
-                .appending(path: "downloads.sqlite", directoryHint: .notDirectory)
+            ?? AppStorageLocations.downloadDatabaseURL(
+                fileManager: fileManager
+            )
 
         try fileManager.createDirectory(
             at: resolvedURL.deletingLastPathComponent(),
@@ -53,10 +48,35 @@ final class DownloadDatabase {
         }
     }
 
+    func removeDownloads(songIDs: Set<Int>) throws {
+        guard !songIDs.isEmpty else { return }
+        try databaseQueue.write { database in
+            for songID in songIDs {
+                _ = try DownloadRecord.deleteOne(
+                    database,
+                    key: songID
+                )
+            }
+        }
+    }
+
     func removeAllDownloads() throws {
         try databaseQueue.write { database in
             _ = try DownloadRecord.deleteAll(database)
         }
+    }
+
+    func clearPlaybackCounts() throws {
+        try databaseQueue.write { database in
+            try database.execute(
+                sql: "DELETE FROM playbackCounts"
+            )
+        }
+        try databaseQueue.vacuum()
+    }
+
+    func optimizeStorage() throws {
+        try databaseQueue.vacuum()
     }
 
     @discardableResult

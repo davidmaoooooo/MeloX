@@ -8,10 +8,6 @@ final class LyricsNotificationAttachmentStager {
     private static let stagedAttachmentLifetime: TimeInterval =
         60 * 60
     private static let maximumStagedAttachmentCount = 8
-    private static let legacyCacheDirectoryName =
-        "LyricsNotificationArtwork"
-    private static let stagedAttachmentDirectoryName =
-        "LyricsNotificationAttachments"
     private static let logger = Logger(
         subsystem: "moye.MeloX",
         category: "LyricsNotificationAttachment"
@@ -67,10 +63,8 @@ final class LyricsNotificationAttachmentStager {
     }
 
     private var stagedAttachmentDirectoryURL: URL {
-        FileManager.default.temporaryDirectory.appending(
-            path: Self.stagedAttachmentDirectoryName,
-            directoryHint: .isDirectory
-        )
+        AppStorageLocations
+            .lyricsNotificationAttachmentDirectory()
     }
 
     private func cleanStagedAttachments(
@@ -127,17 +121,11 @@ final class LyricsNotificationAttachmentStager {
     }
 
     private func removeLegacyDiskCache() {
-        guard let cacheDirectory =
-            FileManager.default.urls(
-                for: .cachesDirectory,
-                in: .userDomainMask
-            ).first else {
+        guard let directory =
+            AppStorageLocations
+                .legacyLyricsNotificationArtworkDirectory() else {
             return
         }
-        let directory = cacheDirectory.appending(
-            path: Self.legacyCacheDirectoryName,
-            directoryHint: .isDirectory
-        )
         guard FileManager.default.fileExists(
             atPath: directory.path
         ) else {

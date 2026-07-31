@@ -250,7 +250,7 @@ actor AutoMixAudioAnalyzer {
             FileManager.default.temporaryDirectory
                 .appending(
                     path:
-                        "MeloX-BeatNet-\(UUID().uuidString)",
+                        "\(AppStorageLocations.beatAnalysisDirectoryPrefix)\(UUID().uuidString)",
                     directoryHint: .isDirectory
                 )
         try? FileManager.default.createDirectory(

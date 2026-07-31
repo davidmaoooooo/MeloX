@@ -9,14 +9,10 @@ final class DownloadStorage {
         directoryURL: URL? = nil
     ) {
         self.fileManager = fileManager
-        let applicationSupportURL = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? fileManager.temporaryDirectory
         self.directoryURL = directoryURL
-            ?? applicationSupportURL
-                .appending(path: "MeloX", directoryHint: .isDirectory)
-                .appending(path: "Downloads", directoryHint: .isDirectory)
+            ?? AppStorageLocations.downloadsDirectory(
+                fileManager: fileManager
+            )
     }
 
     func installDownloadedFile(
@@ -52,6 +48,42 @@ final class DownloadStorage {
     func removeAllFiles() throws {
         guard fileManager.fileExists(atPath: directoryURL.path) else { return }
         try fileManager.removeItem(at: directoryURL)
+    }
+
+    @discardableResult
+    func removeUntrackedFiles(
+        keeping fileNames: Set<String>
+    ) throws -> Int64 {
+        guard fileManager.fileExists(
+            atPath: directoryURL.path
+        ) else {
+            return 0
+        }
+        let contents = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [
+                .fileSizeKey,
+                .totalFileAllocatedSizeKey,
+            ],
+            options: [.skipsHiddenFiles]
+        )
+        var removedByteCount = Int64(0)
+        for url in contents
+        where !fileNames.contains(url.lastPathComponent) {
+            let values = try? url.resourceValues(
+                forKeys: [
+                    .fileSizeKey,
+                    .totalFileAllocatedSizeKey,
+                ]
+            )
+            removedByteCount += Int64(
+                values?.totalFileAllocatedSize
+                    ?? values?.fileSize
+                    ?? 0
+            )
+            try fileManager.removeItem(at: url)
+        }
+        return removedByteCount
     }
 
     func containsFile(named fileName: String) -> Bool {

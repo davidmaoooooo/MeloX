@@ -137,8 +137,8 @@ struct SettingsView: View {
             TabLayoutSettingsView()
         case .content:
             ContentSettingsView()
-        case .downloads:
-            DownloadsView()
+        case .storage:
+            StorageManagementView()
         case .skylineLyrics:
             SkylineLyricsSettingsView()
         case .floatingLyrics:

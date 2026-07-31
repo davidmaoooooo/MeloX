@@ -676,6 +676,14 @@ final class PlayerStore {
         resetBeatAnalysis()
     }
 
+    func clearPlaybackAnalysisCache() async {
+        cancelAutoMixPreparation()
+        resetBeatAnalysis()
+        await beatAnalyzer.clearCache()
+        scheduleBeatAnalysisIfNeeded()
+        prepareAutoMixIfNeeded()
+    }
+
     @discardableResult
     func analyzeCurrentSongBeats() async -> PlaybackBeatTimeline? {
         guard let song = currentSong,

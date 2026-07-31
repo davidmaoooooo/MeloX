@@ -1,6 +1,21 @@
 import Foundation
 import Observation
 
+nonisolated struct DownloadStorageRepairResult: Sendable {
+    static let empty = DownloadStorageRepairResult(
+        removedMissingRecordCount: 0,
+        removedUntrackedByteCount: 0
+    )
+
+    let removedMissingRecordCount: Int
+    let removedUntrackedByteCount: Int64
+
+    var repairedAnything: Bool {
+        removedMissingRecordCount > 0
+            || removedUntrackedByteCount > 0
+    }
+}
+
 @MainActor
 @Observable
 final class DownloadStore {
@@ -237,6 +252,74 @@ final class DownloadStore {
             try storage.removeAllFiles()
         } catch {
             errorMessage = "无法清除下载内容：\(error.localizedDescription)"
+        }
+    }
+
+    @discardableResult
+    func repairStorage() -> DownloadStorageRepairResult {
+        errorMessage = nil
+        do {
+            guard let database else {
+                throw DownloadDatabaseError.unavailable
+            }
+
+            let missingDownloads = downloads.filter {
+                !storage.containsFile(named: $0.fileName)
+            }
+            let missingSongIDs = Set(
+                missingDownloads.map(\.id)
+            )
+            try database.removeDownloads(
+                songIDs: missingSongIDs
+            )
+            if !missingDownloads.isEmpty {
+                downloads.removeAll {
+                    missingSongIDs.contains($0.id)
+                }
+            }
+
+            let removedByteCount =
+                try storage.removeUntrackedFiles(
+                    keeping: Set(
+                        downloads.map(\.fileName)
+                    )
+                )
+            return DownloadStorageRepairResult(
+                removedMissingRecordCount:
+                    missingDownloads.count,
+                removedUntrackedByteCount:
+                    removedByteCount
+            )
+        } catch {
+            errorMessage =
+                "无法修复下载存储：\(error.localizedDescription)"
+            return .empty
+        }
+    }
+
+    func resetAutomaticCacheHistory() {
+        errorMessage = nil
+        do {
+            guard let database else {
+                throw DownloadDatabaseError.unavailable
+            }
+            try database.clearPlaybackCounts()
+        } catch {
+            errorMessage =
+                "无法重置自动缓存计数：\(error.localizedDescription)"
+        }
+    }
+
+    func optimizeStorageDatabase() {
+        errorMessage = nil
+        do {
+            guard let database else {
+                throw DownloadDatabaseError.unavailable
+            }
+            try database.optimizeStorage()
+        } catch {
+            errorMessage =
+                "无法优化本地数据库：\(error.localizedDescription)"
         }
     }
 
