@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrackRowView: View {
     @Environment(\.openMusicRoute) private var openMusicRoute
+    @Environment(PlayerStore.self) private var player
     @Environment(DownloadStore.self) private var downloads
 
     let song: Song
@@ -51,6 +52,16 @@ struct TrackRowView: View {
         .contentShape(.rect)
         .musicMatchedTransitionSource(for: .song(song))
         .contextMenu {
+            Button {
+                Task { await player.playNext(song) }
+            } label: {
+                Label(
+                    "下一首播放",
+                    systemImage:
+                        "text.line.first.and.arrowtriangle.forward"
+                )
+            }
+
             if downloads.isDownloading(songID: song.id) {
                 Button {
                     downloads.cancel(songID: song.id)
@@ -100,6 +111,9 @@ struct TrackRowView: View {
         .accessibilityLabel("\(song.name)，\(song.artistText)")
         .accessibilityAction(named: "查看歌曲资料") {
             openMusicRoute(.song(song))
+        }
+        .accessibilityAction(named: "下一首播放") {
+            Task { await player.playNext(song) }
         }
         .accessibilityAction(named: "查看评论") {
             commentSong = song

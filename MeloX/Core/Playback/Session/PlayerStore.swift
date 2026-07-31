@@ -572,6 +572,18 @@ final class PlayerStore {
         prepareAutoMixIfNeeded()
     }
 
+    func playNext(_ song: Song) async {
+        guard currentSong != nil, !queue.isEmpty else {
+            await play(song)
+            return
+        }
+
+        cancelAutoMixPreparation()
+        playbackQueue.insertNext(song)
+        persistSnapshot()
+        prepareAutoMixIfNeeded()
+    }
+
     func moveUpcomingQueueItems(
         fromOffsets source: IndexSet,
         toOffset destination: Int

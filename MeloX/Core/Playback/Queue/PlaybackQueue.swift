@@ -168,6 +168,30 @@ struct PlaybackQueue {
         shuffledOrder.append(contentsOf: newIndices)
     }
 
+    mutating func insertNext(_ song: Song) {
+        guard !songs.isEmpty else {
+            append(song)
+            return
+        }
+
+        let insertionIndex = min(currentIndex + 1, songs.endIndex)
+        songs.insert(song, at: insertionIndex)
+
+        guard isShuffled else { return }
+
+        shuffledOrder = shuffledOrder.map { index in
+            index >= insertionIndex ? index + 1 : index
+        }
+        let shuffledInsertionIndex = min(
+            shuffledPosition + 1,
+            shuffledOrder.endIndex
+        )
+        shuffledOrder.insert(
+            insertionIndex,
+            at: shuffledInsertionIndex
+        )
+    }
+
     mutating func moveUpcomingSongs(
         fromOffsets source: IndexSet,
         toOffset destination: Int,

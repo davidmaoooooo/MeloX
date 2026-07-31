@@ -131,6 +131,16 @@ private struct PlaylistTrackRow: View {
 
             if !isSelectingDownloads {
                 Menu {
+                    Button {
+                        Task { await player.playNext(song) }
+                    } label: {
+                        Label(
+                            "下一首播放",
+                            systemImage:
+                                "text.line.first.and.arrowtriangle.forward"
+                        )
+                    }
+
                     if downloads.isDownloading(songID: song.id) {
                         Button {
                             downloads.cancel(songID: song.id)
