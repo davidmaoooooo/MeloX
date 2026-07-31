@@ -10,6 +10,7 @@
 		A1D0AD000000000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0AD000000000000000003 /* GRDB */; };
 		B1000000000000000000000B /* MeloX Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* MeloX Watch App.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B10000000000000000000010 /* QRCode in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000012 /* QRCode */; };
+		C20000000000000000000001 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = C20000000000000000000003 /* NukeUI */; };
 		CDCDC02B263846DD93AAF886 /* MeloXLyricsWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2572AEB5A5B04809878AE645 /* MeloXLyricsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -135,6 +136,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1D0AD000000000000000001 /* GRDB in Frameworks */,
+				C20000000000000000000001 /* NukeUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -222,6 +224,7 @@
 			name = MeloX;
 			packageProductDependencies = (
 				A1D0AD000000000000000003 /* GRDB */,
+				C20000000000000000000003 /* NukeUI */,
 			);
 			productName = MeloX;
 			productReference = 6DB1D882300F5FA000FB3AEE /* MeloX.app */;
@@ -294,6 +297,7 @@
 			packageReferences = (
 				A1D0AD000000000000000002 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				B10000000000000000000011 /* XCRemoteSwiftPackageReference "QRCode" */,
+				C20000000000000000000002 /* XCRemoteSwiftPackageReference "Nuke" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6DB1D883300F5FA000FB3AEE /* Products */;
@@ -774,6 +778,14 @@
 				minimumVersion = 20.0.0;
 			};
 		};
+		C20000000000000000000002 /* XCRemoteSwiftPackageReference "Nuke" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kean/Nuke.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.0.6;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -786,6 +798,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B10000000000000000000011 /* XCRemoteSwiftPackageReference "QRCode" */;
 			productName = QRCode;
+		};
+		C20000000000000000000003 /* NukeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C20000000000000000000002 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = NukeUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
