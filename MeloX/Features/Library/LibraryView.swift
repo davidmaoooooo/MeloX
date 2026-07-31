@@ -2,9 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
-    @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
-    @Environment(DownloadStore.self) private var downloads
 
     private let fixedPage: LibraryPage?
     private let showsNavigationTitle: Bool
@@ -12,8 +10,7 @@ struct LibraryView: View {
     @State private var section: LibraryPage
     @State private var hasAppliedInitialPage = false
     @State private var showsLogin = false
-    @State private var isStartingHeartMode = false
-    @State private var heartModeErrorMessage: String?
+    @State private var searchQuery = ""
 
     init(
         fixedPage: LibraryPage? = nil,
@@ -37,7 +34,9 @@ struct LibraryView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.background)
             }
 
             if availablePages.isEmpty {
@@ -47,11 +46,11 @@ struct LibraryView: View {
                     description: Text("可在“页面与标签栏”设置中调整页面归属。")
                 )
             } else if section == .downloads {
-                downloadedSongList
+                LibraryDownloadsView(searchQuery: searchQuery)
             } else if !library.isLoggedIn {
                 loginUnavailableView
             } else if section == .cloud {
-                CloudMusicView()
+                CloudMusicView(searchQuery: searchQuery)
             } else {
                 libraryContent
             }
@@ -61,6 +60,11 @@ struct LibraryView: View {
             fixedPage.map { AppTab(libraryPage: $0).title }
                 ?? "音乐库",
             isPresented: showsNavigationTitle
+        )
+        .librarySearchable(
+            text: $searchQuery,
+            prompt: searchPrompt,
+            isEnabled: canSearchCurrentPage
         )
         .onAppear {
             guard !hasAppliedInitialPage else { return }
@@ -111,23 +115,6 @@ struct LibraryView: View {
         } message: {
             Text(library.errorMessage ?? "未知错误")
         }
-        .alert(
-            "无法启动心动模式",
-            isPresented: Binding(
-                get: { heartModeErrorMessage != nil },
-                set: { presented in
-                    if !presented {
-                        heartModeErrorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("好", role: .cancel) {
-                heartModeErrorMessage = nil
-            }
-        } message: {
-            Text(heartModeErrorMessage ?? "请稍后重试。")
-        }
     }
 
     private var loginUnavailableView: some View {
@@ -155,252 +142,40 @@ struct LibraryView: View {
         default:
             switch section {
             case .songs:
-                songList(
-                    library.favoriteSongs,
-                    emptyTitle: "还没有收藏歌曲",
-                    hasMore: library.hasMoreFavoriteSongs,
-                    isLoadingMore: library.isLoadingMoreFavoriteSongs,
-                    loadMoreFailure: library.favoriteSongsLoadMoreError,
-                    loadMoreToken: library.favoriteSongsNextOffset,
-                    onLoadMore: {
-                        await library.loadMoreFavoriteSongs()
-                    }
-                )
+                LibrarySongsView(searchQuery: searchQuery)
             case .playlists:
-                playlistList
+                LibraryPlaylistsView(searchQuery: searchQuery)
             case .podcasts:
-                SubscribedPodcastsView()
+                SubscribedPodcastsView(searchQuery: searchQuery)
             case .downloads:
-                downloadedSongList
+                LibraryDownloadsView(searchQuery: searchQuery)
             case .cloud:
-                CloudMusicView()
+                CloudMusicView(searchQuery: searchQuery)
             case .history:
-                songList(
-                    library.recentSongs,
-                    emptyTitle: "还没有播放记录"
-                )
+                LibraryHistoryView(searchQuery: searchQuery)
             }
         }
     }
 
-    private var downloadedSongList: some View {
-        List {
-            NavigationLink {
-                DownloadsView()
-            } label: {
-                HStack {
-                    Label("下载管理", systemImage: "arrow.down.circle")
-                    Spacer()
-                    Text(downloadManagementValue)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !activeDownloadSongs.isEmpty {
-                Section("正在下载") {
-                    ForEach(activeDownloadSongs) { song in
-                        TrackRowView(song: song, showsArtwork: true)
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                downloads.cancel(songID: song.id)
-                            } label: {
-                                Label("取消", systemImage: "xmark")
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !downloads.downloadedSongs.isEmpty {
-                Button {
-                    Task { await player.playAll(downloads.downloadedSongs) }
-                } label: {
-                    Label("播放全部", systemImage: "play.fill")
-                }
-            }
-
-            ForEach(downloads.downloads) { download in
-                Button {
-                    Task {
-                        await player.play(
-                            download.song,
-                            in: downloads.downloadedSongs
-                        )
-                    }
-                } label: {
-                    TrackRowView(song: download.song, showsArtwork: true)
-                }
-                .buttonStyle(.plain)
-                .swipeActions {
-                    Button(role: .destructive) {
-                        downloads.remove(songID: download.id)
-                    } label: {
-                        Label("删除下载", systemImage: "trash")
-                    }
-                }
-            }
-
-            if downloads.downloads.isEmpty && activeDownloadSongs.isEmpty {
-                ContentUnavailableView(
-                    "还没有下载歌曲",
-                    systemImage: "arrow.down.circle",
-                    description: Text("在歌曲的更多操作菜单中选择“下载歌曲”。")
-                )
-                .frame(maxWidth: .infinity)
-                .listRowBackground(Color.clear)
-            }
-        }
-        .listStyle(.plain)
+    private var canSearchCurrentPage: Bool {
+        !availablePages.isEmpty
+            && (section == .downloads || library.isLoggedIn)
     }
 
-    private var activeDownloadSongs: [Song] {
-        downloads.activeSongs.values.sorted {
-            $0.name.localizedCompare($1.name) == .orderedAscending
-        }
-    }
-
-    private var downloadManagementValue: String {
-        if !downloads.activeDownloads.isEmpty {
-            return "\(downloads.activeDownloads.count) 项进行中"
-        }
-        return downloads.totalByteCount.formatted(.byteCount(style: .file))
-    }
-
-    private func songList(
-        _ songs: [Song],
-        emptyTitle: String,
-        hasMore: Bool = false,
-        isLoadingMore: Bool = false,
-        loadMoreFailure: String? = nil,
-        loadMoreToken: Int = 0,
-        onLoadMore: @escaping () async -> Void = {}
-    ) -> some View {
-        List {
-            if !songs.isEmpty {
-                Button {
-                    Task { await player.playAll(songs) }
-                } label: {
-                    Label("播放全部", systemImage: "play.fill")
-                }
-
-                if section == .songs {
-                    Button(action: startHeartMode) {
-                        HStack {
-                            Label(
-                                "心动模式",
-                                systemImage: "heart.circle.fill"
-                            )
-
-                            Spacer()
-
-                            if isStartingHeartMode {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                    .disabled(
-                        !library.canStartHeartMode
-                            || isStartingHeartMode
-                    )
-                }
-            }
-            ForEach(songs) { song in
-                Button {
-                    Task { await player.play(song, in: songs) }
-                } label: {
-                    TrackRowView(song: song, showsArtwork: true)
-                }
-                .buttonStyle(.plain)
-                .swipeActions(edge: .trailing) {
-                    if section == .songs {
-                        Button(role: .destructive) {
-                            library.toggle(song: song)
-                        } label: {
-                            Label("取消收藏", systemImage: "heart.slash")
-                        }
-                    }
-                }
-            }
-
-            if hasMore {
-                MusicCollectionPaginationFooter(
-                    isLoading: isLoadingMore,
-                    failureMessage: loadMoreFailure,
-                    loadToken: loadMoreToken,
-                    action: onLoadMore
-                )
-                .listRowSeparator(.hidden)
-            }
-        }
-        .listStyle(.plain)
-        .refreshable {
-            await library.refresh(force: true)
-        }
-        .overlay {
-            if songs.isEmpty && !hasMore {
-                ContentUnavailableView(
-                    emptyTitle,
-                    systemImage: section == .history ? "clock" : "heart",
-                    description: Text(section == .history ? "网易云音乐中的最近播放会显示在这里。" : "在歌曲列表左滑即可收藏到网易云音乐。")
-                )
-            }
-        }
-    }
-
-    private func startHeartMode() {
-        guard !isStartingHeartMode,
-              let playlistID = library.likedPlaylistID,
-              let seedSongID =
-                library.randomHeartModeSeedSongID() else {
-            return
-        }
-
-        isStartingHeartMode = true
-        heartModeErrorMessage = nil
-        Task { @MainActor in
-            defer { isStartingHeartMode = false }
-            do {
-                try await player.playHeartMode(
-                    playlistID: playlistID,
-                    seedSongID: seedSongID
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                heartModeErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private var playlistList: some View {
-        List(library.favoritePlaylists) { playlist in
-            NavigationLink(value: MusicRoute.playlist(playlist)) {
-                SearchMediaRowForLibrary(playlist: playlist)
-            }
-            .musicMatchedTransitionSource(for: MusicRoute.playlist(playlist))
-            .swipeActions(edge: .trailing) {
-                if library.canUnsubscribe(playlist) {
-                    Button(role: .destructive) {
-                        library.toggle(playlist: playlist)
-                    } label: {
-                        Label("取消收藏", systemImage: "heart.slash")
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-        .refreshable {
-            await library.refresh(force: true)
-        }
-        .overlay {
-            if library.favoritePlaylists.isEmpty {
-                ContentUnavailableView(
-                    "还没有收藏歌单",
-                    systemImage: "music.note.list",
-                    description: Text("打开歌单详情后，轻点收藏按钮。")
-                )
-            }
+    private var searchPrompt: String {
+        switch section {
+        case .songs:
+            "在收藏歌曲中搜索"
+        case .playlists:
+            "在收藏歌单中搜索"
+        case .podcasts:
+            "在订阅播客中搜索"
+        case .downloads:
+            "在下载歌曲中搜索"
+        case .cloud:
+            "在云盘歌曲中搜索"
+        case .history:
+            "在播放历史中搜索"
         }
     }
 }
@@ -417,22 +192,21 @@ private extension View {
             self
         }
     }
-}
 
-private struct SearchMediaRowForLibrary: View {
-    let playlist: Playlist
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ArtworkImage(url: playlist.artworkURL, cornerRadius: 7)
-                .frame(width: 54, height: 54)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(playlist.name)
-                    .lineLimit(1)
-                Text("\(playlist.trackCount) 首歌曲")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+    @ViewBuilder
+    func librarySearchable(
+        text: Binding<String>,
+        prompt: String,
+        isEnabled: Bool
+    ) -> some View {
+        if isEnabled {
+            searchable(
+                text: text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: Text(prompt)
+            )
+        } else {
+            self
         }
     }
 }

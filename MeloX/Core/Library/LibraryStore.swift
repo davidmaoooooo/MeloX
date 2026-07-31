@@ -45,7 +45,19 @@ final class LibraryStore {
     private let favoriteSongPageSize = 100
 
     @ObservationIgnored
+    private var favoriteSongPageLoadTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var favoriteSongPageLoadID: UUID?
+
+    @ObservationIgnored
     private let subscribedPodcastPageSize = 50
+
+    @ObservationIgnored
+    private var subscribedPodcastPageLoadTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var subscribedPodcastPageLoadID: UUID?
 
     init(api: NeteaseAPI, settings: AppSettings) {
         self.api = api
@@ -228,18 +240,49 @@ final class LibraryStore {
     }
 
     func loadMoreFavoriteSongs() async {
-        guard !isLoadingMoreFavoriteSongs,
-              hasMoreFavoriteSongs else {
+        if let favoriteSongPageLoadTask {
+            await favoriteSongPageLoadTask.value
             return
         }
 
+        guard hasMoreFavoriteSongs else { return }
+
         let requestedOffset = favoriteSongsNextOffset
         let requestedIDs = favoriteSongIDs
+        let loadID = UUID()
+        let loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadFavoriteSongsPage(
+                ids: requestedIDs,
+                offset: requestedOffset
+            )
+        }
+        favoriteSongPageLoadID = loadID
+        favoriteSongPageLoadTask = loadTask
+
+        await loadTask.value
+
+        guard favoriteSongPageLoadID == loadID else { return }
+        favoriteSongPageLoadTask = nil
+        favoriteSongPageLoadID = nil
+    }
+
+    func loadRemainingFavoriteSongs() async {
+        while hasMoreFavoriteSongs {
+            guard !Task.isCancelled else { return }
+            let previousOffset = favoriteSongsNextOffset
+            await loadMoreFavoriteSongs()
+            guard favoriteSongsNextOffset > previousOffset else { return }
+        }
+    }
+
+    private func loadFavoriteSongsPage(
+        ids requestedIDs: [Int],
+        offset requestedOffset: Int
+    ) async {
         isLoadingMoreFavoriteSongs = true
         favoriteSongsLoadMoreError = nil
-        defer {
-            isLoadingMoreFavoriteSongs = false
-        }
+        defer { isLoadingMoreFavoriteSongs = false }
 
         do {
             let page = try await api.songDetailsPage(
@@ -268,17 +311,48 @@ final class LibraryStore {
     }
 
     func loadMoreSubscribedPodcasts() async {
-        guard !isLoadingMoreSubscribedPodcasts,
-              hasMoreSubscribedPodcasts else {
+        if let subscribedPodcastPageLoadTask {
+            await subscribedPodcastPageLoadTask.value
             return
         }
 
+        guard hasMoreSubscribedPodcasts else { return }
+
         let requestedOffset = subscribedPodcastsNextOffset
+        let loadID = UUID()
+        let loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadSubscribedPodcastPage(
+                offset: requestedOffset
+            )
+        }
+        subscribedPodcastPageLoadID = loadID
+        subscribedPodcastPageLoadTask = loadTask
+
+        await loadTask.value
+
+        guard subscribedPodcastPageLoadID == loadID else { return }
+        subscribedPodcastPageLoadTask = nil
+        subscribedPodcastPageLoadID = nil
+    }
+
+    func loadRemainingSubscribedPodcasts() async {
+        while hasMoreSubscribedPodcasts {
+            guard !Task.isCancelled else { return }
+            let previousOffset = subscribedPodcastsNextOffset
+            await loadMoreSubscribedPodcasts()
+            guard subscribedPodcastsNextOffset > previousOffset else {
+                return
+            }
+        }
+    }
+
+    private func loadSubscribedPodcastPage(
+        offset requestedOffset: Int
+    ) async {
         isLoadingMoreSubscribedPodcasts = true
         subscribedPodcastsLoadMoreError = nil
-        defer {
-            isLoadingMoreSubscribedPodcasts = false
-        }
+        defer { isLoadingMoreSubscribedPodcasts = false }
 
         do {
             let page = try await api.subscribedPodcasts(
@@ -436,6 +510,12 @@ final class LibraryStore {
     }
 
     private func clearRemoteContent() {
+        favoriteSongPageLoadTask?.cancel()
+        favoriteSongPageLoadTask = nil
+        favoriteSongPageLoadID = nil
+        subscribedPodcastPageLoadTask?.cancel()
+        subscribedPodcastPageLoadTask = nil
+        subscribedPodcastPageLoadID = nil
         profile = nil
         accountDetail = nil
         favoriteSongs = []

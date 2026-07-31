@@ -2,12 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct CloudMusicView: View {
+    let searchQuery: String
+
     @Environment(CloudMusicStore.self) private var cloud
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
     @State private var showsFileImporter = false
     @State private var pendingDeletion: CloudSong?
+    @State private var searchReloadToken = 0
+    @State private var searchPreparationID: UUID?
 
     var body: some View {
         content
@@ -102,15 +106,20 @@ struct CloudMusicView: View {
                 }
             }
 
-            if !cloud.items.isEmpty {
+            if !displayedItems.isEmpty {
                 Section {
                     Button {
-                        Task { await player.playAll(cloud.songs) }
+                        Task { await player.playAll(displayedSongs) }
                     } label: {
-                        Label("播放全部", systemImage: "play.fill")
+                        Label(
+                            isSearching ? "播放搜索结果" : "播放全部",
+                            systemImage: "play.fill"
+                        )
                     }
                 } header: {
-                    if let quota = cloud.quotaDescription {
+                    if isSearching {
+                        Text("\(displayedItems.count) 个搜索结果")
+                    } else if let quota = cloud.quotaDescription {
                         Text(quota)
                     } else {
                         Text("共 \(cloud.totalCount) 首歌曲")
@@ -118,9 +127,14 @@ struct CloudMusicView: View {
                 }
             }
 
-            ForEach(cloud.items) { item in
+            ForEach(displayedItems) { item in
                 Button {
-                    Task { await player.play(item.simpleSong, in: cloud.songs) }
+                    Task {
+                        await player.play(
+                            item.simpleSong,
+                            in: displayedSongs
+                        )
+                    }
                 } label: {
                     TrackRowView(song: item.simpleSong, showsArtwork: true)
                 }
@@ -138,31 +152,148 @@ struct CloudMusicView: View {
                 }
             }
 
-            if cloud.isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView("正在加载更多")
-                    Spacer()
-                }
-            }
+            paginationFooter
         }
         .listStyle(.plain)
         .refreshable {
             await cloud.refresh(force: true)
+            if isSearching {
+                await prepareSearchResults(debounced: false)
+            }
         }
         .overlay {
-            if cloud.items.isEmpty, !cloud.isUploading {
-                ContentUnavailableView {
-                    Label("音乐云盘是空的", systemImage: "externaldrive")
-                } description: {
-                    Text("上传本地音频后，可在所有网易云音乐客户端中播放。")
-                } actions: {
-                    Button("上传音乐") {
-                        showsFileImporter = true
+            if displayedItems.isEmpty,
+               !cloud.isUploading,
+               !isPreparingSearchResults,
+               !hasSearchLoadFailure {
+                if isSearching {
+                    ContentUnavailableView.search(
+                        text: normalizedSearchQuery
+                    )
+                } else {
+                    ContentUnavailableView {
+                        Label(
+                            "音乐云盘是空的",
+                            systemImage: "externaldrive"
+                        )
+                    } description: {
+                        Text(
+                            "上传本地音频后，可在所有网易云音乐客户端中播放。"
+                        )
+                    } actions: {
+                        Button("上传音乐") {
+                            showsFileImporter = true
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             }
         }
+        .task(
+            id: CloudMusicSearchRequest(
+                query: normalizedSearchQuery,
+                reloadToken: searchReloadToken
+            )
+        ) {
+            await prepareSearchResults(debounced: true)
+        }
     }
+
+    private var normalizedSearchQuery: String {
+        normalizedLibrarySearchQuery(searchQuery)
+    }
+
+    private var isSearching: Bool {
+        !normalizedSearchQuery.isEmpty
+    }
+
+    private var displayedItems: [CloudSong] {
+        filterCloudSongs(cloud.items, query: normalizedSearchQuery)
+    }
+
+    private var displayedSongs: [Song] {
+        displayedItems.map(\.simpleSong)
+    }
+
+    private var isPreparingSearchResults: Bool {
+        searchPreparationID != nil
+    }
+
+    private var hasSearchLoadFailure: Bool {
+        isSearching && cloud.loadMoreError != nil && cloud.hasMore
+    }
+
+    @ViewBuilder
+    private var paginationFooter: some View {
+        if isSearching, isPreparingSearchResults {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("正在搜索全部云盘歌曲")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .listRowSeparator(.hidden)
+        } else if let failureMessage = cloud.loadMoreError,
+                  cloud.hasMore {
+            VStack(spacing: 8) {
+                Text(failureMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button(isSearching ? "重新搜索" : "重新加载") {
+                    if isSearching {
+                        searchReloadToken += 1
+                    } else {
+                        Task { await cloud.loadMore() }
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .listRowSeparator(.hidden)
+        } else if !isSearching, cloud.isLoadingMore {
+            HStack {
+                Spacer()
+                ProgressView("正在加载更多")
+                Spacer()
+            }
+        }
+    }
+
+    private func prepareSearchResults(debounced: Bool) async {
+        guard isSearching else {
+            searchPreparationID = nil
+            return
+        }
+
+        guard cloud.hasMore else { return }
+
+        let preparationID = UUID()
+        searchPreparationID = preparationID
+        defer {
+            if searchPreparationID == preparationID {
+                searchPreparationID = nil
+            }
+        }
+
+        if debounced {
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+            } catch {
+                return
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+        await cloud.loadRemaining()
+    }
+}
+
+private struct CloudMusicSearchRequest: Hashable {
+    let query: String
+    let reloadToken: Int
 }

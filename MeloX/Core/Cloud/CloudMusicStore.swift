@@ -11,6 +11,7 @@ final class CloudMusicStore {
     private(set) var maxSize: Int64 = 0
     private(set) var hasMore = false
     private(set) var isLoadingMore = false
+    private(set) var loadMoreError: String?
     private(set) var isUploading = false
     private(set) var deletingSongIDs: Set<Int> = []
     private(set) var errorMessage: String?
@@ -26,6 +27,12 @@ final class CloudMusicStore {
 
     @ObservationIgnored
     private var refreshingCookie: String?
+
+    @ObservationIgnored
+    private var pageLoadTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var pageLoadID: UUID?
 
     private let pageSize = 200
 
@@ -65,6 +72,7 @@ final class CloudMusicStore {
         }
         phase = .loading
         errorMessage = nil
+        loadMoreError = nil
 
         do {
             let page = try await api.cloudSongs(limit: pageSize)
@@ -87,18 +95,60 @@ final class CloudMusicStore {
     }
 
     func loadMoreIfNeeded(after item: CloudSong) async {
-        guard item.id == items.last?.id, hasMore, !isLoadingMore else { return }
+        guard item.id == items.last?.id else { return }
+        await loadMore()
+    }
+
+    func loadMore() async {
+        if let pageLoadTask {
+            await pageLoadTask.value
+            return
+        }
+
+        guard hasMore else { return }
+
+        let requestedOffset = items.count
+        let loadID = UUID()
+        let loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadPage(offset: requestedOffset)
+        }
+        pageLoadID = loadID
+        pageLoadTask = loadTask
+
+        await loadTask.value
+
+        guard pageLoadID == loadID else { return }
+        pageLoadTask = nil
+        pageLoadID = nil
+    }
+
+    func loadRemaining() async {
+        while hasMore {
+            guard !Task.isCancelled else { return }
+            let previousCount = items.count
+            await loadMore()
+            guard items.count > previousCount else { return }
+        }
+    }
+
+    private func loadPage(offset requestedOffset: Int) async {
         isLoadingMore = true
+        loadMoreError = nil
         defer { isLoadingMore = false }
 
         do {
-            let page = try await api.cloudSongs(limit: pageSize, offset: items.count)
+            let page = try await api.cloudSongs(
+                limit: pageSize,
+                offset: requestedOffset
+            )
             try Task.checkCancellation()
+            guard items.count == requestedOffset else { return }
             apply(page, replacing: false)
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = error.localizedDescription
+            loadMoreError = error.localizedDescription
         }
     }
 
@@ -177,10 +227,15 @@ final class CloudMusicStore {
     }
 
     private func clearRemoteContent() {
+        pageLoadTask?.cancel()
+        pageLoadTask = nil
+        pageLoadID = nil
         items = []
         totalCount = 0
         usedSize = 0
         maxSize = 0
         hasMore = false
+        isLoadingMore = false
+        loadMoreError = nil
     }
 }
