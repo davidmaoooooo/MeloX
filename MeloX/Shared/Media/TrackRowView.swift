@@ -9,7 +9,7 @@ struct TrackRowView: View {
     var index: Int?
     var showsArtwork = false
 
-    @State private var commentSong: Song?
+    @State private var presentedSheet: TrackRowSheet?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -62,6 +62,12 @@ struct TrackRowView: View {
                 )
             }
 
+            Button {
+                presentedSheet = .addToPlaylist(song)
+            } label: {
+                Label("添加到歌单", systemImage: "text.badge.plus")
+            }
+
             if downloads.isDownloading(songID: song.id) {
                 Button {
                     downloads.cancel(songID: song.id)
@@ -93,7 +99,7 @@ struct TrackRowView: View {
             }
 
             Button {
-                commentSong = song
+                presentedSheet = .comments(song)
             } label: {
                 Label("评论", systemImage: "bubble.left.and.bubble.right")
             }
@@ -104,8 +110,15 @@ struct TrackRowView: View {
                 Label("分享", systemImage: "square.and.arrow.up")
             }
         }
-        .sheet(item: $commentSong) { selectedSong in
-            SongCommentsSheet(song: selectedSong)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .comments(let selectedSong):
+                SongCommentsSheet(song: selectedSong)
+            case .addToPlaylist(let selectedSong):
+                AddToPlaylistSheet(song: selectedSong)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(song.name)，\(song.artistText)")
@@ -115,8 +128,25 @@ struct TrackRowView: View {
         .accessibilityAction(named: "下一首播放") {
             Task { await player.playNext(song) }
         }
+        .accessibilityAction(named: "添加到歌单") {
+            presentedSheet = .addToPlaylist(song)
+        }
         .accessibilityAction(named: "查看评论") {
-            commentSong = song
+            presentedSheet = .comments(song)
+        }
+    }
+}
+
+private enum TrackRowSheet: Identifiable {
+    case comments(Song)
+    case addToPlaylist(Song)
+
+    var id: String {
+        switch self {
+        case .comments(let song):
+            "comments-\(song.id)"
+        case .addToPlaylist(let song):
+            "add-to-playlist-\(song.id)"
         }
     }
 }
