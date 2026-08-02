@@ -321,24 +321,42 @@ final class NeteaseAPI {
     func playbackSource(id: Int) async throws -> PlaybackSource {
         try await playbackSource(
             id: id,
-            bitrate: Int(settings.quality.bitrate) ?? 320_000
+            quality: settings.quality,
+            availability: .unknown
         )
     }
 
-    private func playbackSource(id: Int, bitrate: Int) async throws -> PlaybackSource {
+    func playbackSource(for song: Song) async throws -> PlaybackSource {
+        try await playbackSource(
+            id: song.id,
+            quality: settings.quality,
+            availability: song.audioAvailability
+        )
+    }
+
+    private func playbackSource(
+        id: Int,
+        quality: MusicQuality,
+        availability: SongAudioAvailability
+    ) async throws -> PlaybackSource {
         do {
-            let response: SongURLResponse = try await client.eapi(
-                "/api/song/enhance/player/url",
-                data: ["ids": "[\"\(id)\"]", "br": bitrate]
-            )
-            guard let source = response.data.first(where: { $0.id == id }) else {
-                throw APIError.noPlayableSource
+            for candidate in quality.playbackCandidates(
+                for: availability
+            ) {
+                do {
+                    return try await requestPlaybackSource(
+                        id: id,
+                        quality: candidate
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch APIError.noPlayableSource {
+                    continue
+                }
             }
-            guard let string = source.url,
-                  let url = securePlaybackURL(from: string) else {
-                throw APIError.noPlayableSource
-            }
-            return PlaybackSource(url: url, bitrate: source.bitrate, format: source.format)
+            throw APIError.noPlayableSource
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             // YesPlayMusic 在未登录时使用网易云官方外链。iOS 先尝试上面的
             // HTTPS 化原始音源，仅在失败时保留这个官方兜底，避免静默卡在 00:00。
@@ -346,37 +364,108 @@ final class NeteaseAPI {
                   let url = URL(string: "https://music.163.com/song/media/outer/url?id=\(id)") else {
                 throw error
             }
-            return PlaybackSource(url: url, bitrate: nil, format: "mp3")
+            return PlaybackSource(
+                url: url,
+                bitrate: nil,
+                format: "mp3",
+                quality: nil
+            )
         }
     }
 
-    func downloadSource(id: Int, quality: MusicQuality) async throws -> PlaybackSource {
+    private func requestPlaybackSource(
+        id: Int,
+        quality: MusicQuality
+    ) async throws -> PlaybackSource {
+        // Mirrors @neteaseapireborn/api/module/song_url_v1.js.
+        var data: [String: Any] = [
+            "ids": "[\(id)]",
+            "level": quality.apiLevel,
+            "encodeType": "flac",
+        ]
+        if quality.requiresImmersiveType {
+            data["immerseType"] = "c51"
+        }
+        let response: SongURLResponse = try await client.eapi(
+            "/api/song/enhance/player/url/v1",
+            data: data
+        )
+        guard let source = response.data.first(where: { $0.id == id }),
+              let string = source.url,
+              let url = securePlaybackURL(from: string) else {
+            throw APIError.noPlayableSource
+        }
+        return PlaybackSource(
+            url: url,
+            bitrate: source.bitrate,
+            format: source.format,
+            quality: source.level.flatMap(MusicQuality.init(apiLevel:))
+        )
+    }
+
+    func downloadSource(
+        for song: Song,
+        quality: MusicQuality
+    ) async throws -> PlaybackSource {
         do {
-            // Mirrors @neteaseapireborn/api/module/song_download_url.js.
-            let response: SongDownloadURLResponse = try await client.eapi(
-                "/api/song/enhance/download/url",
-                data: ["id": id, "br": quality.downloadBitrate]
-            )
-            guard let source = response.data,
-                  source.id == id,
-                  source.freeTrialInfo == nil,
-                  let string = source.url,
-                  let url = securePlaybackURL(from: string) else {
-                throw APIError.noPlayableSource
+            for candidate in quality.playbackCandidates(
+                for: song.audioAvailability
+            ) {
+                do {
+                    return try await requestDownloadSource(
+                        id: song.id,
+                        quality: candidate
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch APIError.noPlayableSource {
+                    continue
+                }
             }
-            return PlaybackSource(
-                url: url,
-                bitrate: source.bitrate,
-                format: source.format
-            )
+            throw APIError.noPlayableSource
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             // The dedicated download route can require account privileges.
             // The reference player caches the original player URL as its
             // compatibility path, so preserve that behavior here as well.
-            return try await playbackSource(id: id, bitrate: quality.downloadBitrate)
+            return try await playbackSource(
+                id: song.id,
+                quality: quality,
+                availability: song.audioAvailability
+            )
         }
+    }
+
+    private func requestDownloadSource(
+        id: Int,
+        quality: MusicQuality
+    ) async throws -> PlaybackSource {
+        // Mirrors @neteaseapireborn/api/module/song_download_url_v1.js.
+        var data: [String: Any] = [
+            "id": id,
+            "level": quality.apiLevel,
+        ]
+        if quality.requiresImmersiveType {
+            data["immerseType"] = "c51"
+        }
+        let response: SongDownloadURLResponse = try await client.eapi(
+            "/api/song/enhance/download/url/v1",
+            data: data
+        )
+        guard let source = response.data,
+              source.id == id,
+              source.freeTrialInfo == nil,
+              let string = source.url,
+              let url = securePlaybackURL(from: string) else {
+            throw APIError.noPlayableSource
+        }
+        return PlaybackSource(
+            url: url,
+            bitrate: source.bitrate,
+            format: source.format,
+            quality: source.level.flatMap(MusicQuality.init(apiLevel:))
+        )
     }
 
     func songURL(id: Int) async throws -> URL {

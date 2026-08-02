@@ -48,6 +48,20 @@ struct WatchNowPlayingView: View {
         .background(.clear)
         .ignoresSafeArea(.container, edges: .all)
         .scrollDisabled(true)
+        .overlay(alignment: .topTrailing) {
+            if let quality = coordinator.effectiveStreamingQuality {
+                Label(quality.title, systemImage: "waveform")
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.thinMaterial, in: .capsule)
+                    .padding(.top, 5)
+                    .padding(.trailing, 6)
+                    .accessibilityLabel("当前实际音质")
+                    .accessibilityValue(quality.title)
+            }
+        }
     }
 
     private func artwork(size: CGFloat) -> some View {

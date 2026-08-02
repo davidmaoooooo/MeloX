@@ -17,7 +17,11 @@ struct WatchAudioSettingsView: View {
             } header: {
                 Text("流媒体")
             } footer: {
-                Text("音质受歌曲版权和网易云账号权限限制；修改后会从当前进度重新载入音源。")
+                Text(
+                    "音质受歌曲版权和网易云账号权限限制；Hi-Res、环绕声与"
+                        + "超清母带仅在曲目支持时可用，不支持时会自动降级。"
+                        + "修改后会从当前进度重新载入音源。"
+                )
             }
 
             Section("音量") {

@@ -772,14 +772,6 @@ final class AutoMixDeckTransitionController {
     }
 
     private func activateAudioSession() throws {
-        let session =
-            AVAudioSession.sharedInstance()
-        if session.category != .playAndRecord {
-            try session.setCategory(
-                .playback,
-                mode: .default
-            )
-        }
-        try session.setActive(true)
+        try AudioPlaybackSessionConfigurator.activate()
     }
 }

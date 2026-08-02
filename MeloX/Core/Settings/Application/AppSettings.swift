@@ -1,34 +1,6 @@
 import Foundation
 import Observation
 
-enum MusicQuality: String, CaseIterable, Identifiable, Codable {
-    case standard = "128000"
-    case high = "320000"
-    case lossless = "flac"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .standard: "标准"
-        case .high: "高品质"
-        case .lossless: "无损"
-        }
-    }
-
-    var bitrate: String {
-        self == .lossless ? "350000" : rawValue
-    }
-
-    var downloadBitrate: Int {
-        switch self {
-        case .standard: 128_000
-        case .high: 320_000
-        case .lossless: 999_000
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class AppSettings {

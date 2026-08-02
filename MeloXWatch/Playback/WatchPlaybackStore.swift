@@ -13,6 +13,8 @@ final class WatchPlaybackStore: ObservableObject {
     @Published private(set) var repeatMode: WatchRepeatMode = .off
     @Published private(set) var volume: Double = 1
     @Published private(set) var errorMessage: String?
+    @Published private(set) var effectiveStreamingQuality:
+        WatchStreamingQuality?
 
     private let api: WatchNeteaseAPI
     private let player = AVPlayer()
@@ -46,6 +48,10 @@ final class WatchPlaybackStore: ObservableObject {
             forKey: WatchPreferenceKey.volume
         )
         player.volume = Float(volume)
+        player.automaticallyWaitsToMinimizeStalling = true
+        if #available(watchOS 26.0, *) {
+            player.networkResourcePriority = .high
+        }
         restorePersistedSession()
         configureAudioSession()
         observePlayer()
@@ -231,6 +237,7 @@ final class WatchPlaybackStore: ObservableObject {
         let generation = loadGeneration
         isLoading = true
         errorMessage = nil
+        effectiveStreamingQuality = nil
 
         do {
             let quality = WatchStreamingQuality(
@@ -238,12 +245,15 @@ final class WatchPlaybackStore: ObservableObject {
                     forKey: WatchPreferenceKey.streamingQuality
                 ) ?? ""
             ) ?? .high
-            let url = try await api.playbackURL(
-                id: currentSong.id,
-                bitrate: quality.bitrate
+            let source = try await api.playbackSource(
+                for: currentSong,
+                quality: quality
             )
             guard generation == loadGeneration else { return }
-            let item = AVPlayerItem(url: url)
+            effectiveStreamingQuality = source.quality
+            let item = AVPlayerItem(url: source.url)
+            item.preferredForwardBufferDuration =
+                source.quality?.prefersExtendedBuffering == true ? 16 : 8
             player.replaceCurrentItem(with: item)
             duration = currentSong.duration
             let targetPosition = min(
@@ -282,6 +292,10 @@ final class WatchPlaybackStore: ObservableObject {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default)
+            if !session.supportsMultichannelContent {
+                // Unsupported routes can still play a system-provided downmix.
+                try? session.setSupportsMultichannelContent(true)
+            }
             try session.setActive(true)
         } catch {
             errorMessage = error.localizedDescription

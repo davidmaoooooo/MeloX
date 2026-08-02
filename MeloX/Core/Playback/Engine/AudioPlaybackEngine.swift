@@ -556,11 +556,7 @@ final class AudioPlaybackEngine {
     }
 
     private func activateAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        if session.category != .playAndRecord {
-            try session.setCategory(.playback, mode: .default)
-        }
-        try session.setActive(true)
+        try AudioPlaybackSessionConfigurator.activate()
     }
 
     private func installAudioSessionObservers() {

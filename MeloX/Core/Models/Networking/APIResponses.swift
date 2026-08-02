@@ -38,10 +38,11 @@ struct SongURL: Decodable {
     let url: String?
     let bitrate: Int?
     let format: String?
+    let level: String?
     let freeTrialInfo: FreeTrialInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, url
+        case id, url, level
         case bitrate = "br"
         case format = "type"
         case freeTrialInfo

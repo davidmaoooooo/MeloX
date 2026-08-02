@@ -61,6 +61,19 @@ final class PlayerStore {
         PlaybackBeatTimeline?
     private(set) var beatAnalysisStatus:
         PlaybackBeatAnalysisStatus = .idle
+    private(set) var effectivePlaybackQuality: MusicQuality?
+
+    var availablePlaybackQualities: [MusicQuality] {
+        guard currentSong != nil else { return [] }
+        if currentSongAudioAvailability.isKnown {
+            return MusicQuality.allCases.filter { quality in
+                currentSongAudioAvailability.supports(
+                    apiLevel: quality.apiLevel
+                ) == true || quality == effectivePlaybackQuality
+            }
+        }
+        return effectivePlaybackQuality.map { [$0] } ?? []
+    }
 
     private var playbackQueue = PlaybackQueue()
 
@@ -103,6 +116,9 @@ final class PlayerStore {
 
     @ObservationIgnored
     private let api: NeteaseAPI
+
+    private var currentSongAudioAvailability:
+        SongAudioAvailability = .unknown
 
     @ObservationIgnored
     private let settings: AppSettings
@@ -898,6 +914,7 @@ final class PlayerStore {
         loadGeneration += 1
         let generation = loadGeneration
         currentSong = song
+        currentSongAudioAvailability = song.audioAvailability
         resetBeatAnalysis()
         progress = max(0, startAt)
         lastProgressUpdateDate = Date()
@@ -907,6 +924,7 @@ final class PlayerStore {
         isPlaying = false
         isUsingDownloadedSource = false
         currentPlaybackSource = nil
+        effectivePlaybackQuality = nil
         currentLoadShouldAutoplay = autoplay
         playbackIssue = nil
         if nowPlayingLyricsSongID != song.id {
@@ -926,16 +944,29 @@ final class PlayerStore {
         persistSnapshot()
 
         do {
+            var sourceSong = song
+            if !song.audioAvailability.isKnown,
+               let detailedSong = try? await api.songDetails(
+                   ids: [song.id]
+               ).first {
+                guard generation == loadGeneration,
+                      currentSong?.id == song.id else { return }
+                sourceSong = detailedSong
+                currentSongAudioAvailability =
+                    detailedSong.audioAvailability
+            }
+
             let source: PlaybackSource
             if let downloadedSource = downloads.localPlaybackSource(songID: song.id) {
                 source = downloadedSource
                 isUsingDownloadedSource = true
             } else {
-                source = try await api.playbackSource(id: song.id)
+                source = try await api.playbackSource(for: sourceSong)
             }
             guard generation == loadGeneration, currentSong?.id == song.id else { return }
             isResolvingSource = false
             currentPlaybackSource = source
+            effectivePlaybackQuality = source.quality
             await engine.load(
                 source,
                 startAt: startAt,
@@ -1584,8 +1615,11 @@ final class PlayerStore {
 
         loadGeneration += 1
         currentSong = context.incomingSong
+        currentSongAudioAvailability =
+            context.incomingSong.audioAvailability
         resetBeatAnalysis()
         currentPlaybackSource = context.source
+        effectivePlaybackQuality = context.source.quality
         isUsingDownloadedSource =
             context.sourceIsDownloaded
         currentLoadShouldAutoplay = true

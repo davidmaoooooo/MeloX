@@ -31,6 +31,7 @@ struct WatchSong: Codable, Hashable, Identifiable {
     let artists: [WatchArtist]
     let album: WatchAlbum?
     let durationMS: Int
+    let audioAvailability: WatchSongAudioAvailability
 
     var artistText: String {
         artists.map(\.name).joined(separator: " / ")
@@ -49,13 +50,15 @@ struct WatchSong: Codable, Hashable, Identifiable {
         name: String,
         artists: [WatchArtist],
         album: WatchAlbum?,
-        durationMS: Int
+        durationMS: Int,
+        audioAvailability: WatchSongAudioAvailability = .unknown
     ) {
         self.id = id
         self.name = name
         self.artists = artists
         self.album = album
         self.durationMS = durationMS
+        self.audioAvailability = audioAvailability
     }
 
     init(from decoder: Decoder) throws {
@@ -83,6 +86,7 @@ struct WatchSong: Codable, Hashable, Identifiable {
             Int.self,
             forKey: .duration
         ) ?? 0
+        audioAvailability = try WatchSongAudioAvailability(from: decoder)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -92,6 +96,7 @@ struct WatchSong: Codable, Hashable, Identifiable {
         try container.encode(artists, forKey: .artists)
         try container.encodeIfPresent(album, forKey: .album)
         try container.encode(durationMS, forKey: .duration)
+        try audioAvailability.encode(to: encoder)
     }
 }
 

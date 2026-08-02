@@ -322,7 +322,8 @@ struct PodcastProgram: Decodable, Hashable, Identifiable {
             publishTime: createTime.map { Double($0) }
                 ?? mainSong.publishTime,
             copyright: mainSong.copyright,
-            podcastMetadata: metadata
+            podcastMetadata: metadata,
+            audioAvailability: mainSong.audioAvailability
         )
     }
 

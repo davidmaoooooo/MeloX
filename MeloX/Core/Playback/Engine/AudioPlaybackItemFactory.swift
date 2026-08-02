@@ -23,7 +23,11 @@ final class AudioPlaybackItemFactory {
         let asset = AVURLAsset(url: source.url)
         let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration =
-            preferredForwardBufferDuration
+            max(
+                preferredForwardBufferDuration,
+                source.preferredForwardBufferDuration
+            )
+        item.allowedAudioSpatializationFormats = .multichannel
         do {
             if let audioTrack = try await asset.loadTracks(
                 withMediaType: .audio

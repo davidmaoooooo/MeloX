@@ -42,10 +42,19 @@ enum WatchPreferenceKey {
         "melox.watch.playerBackgroundSaturation"
 }
 
-enum WatchStreamingQuality: String, CaseIterable, Identifiable {
+nonisolated enum WatchStreamingQuality:
+    String,
+    CaseIterable,
+    Identifiable,
+    Sendable
+{
     case standard
     case high
     case lossless
+    case hiResolution
+    case highDefinitionSurround
+    case immersiveSurround
+    case ultraClearMaster
 
     var id: String { rawValue }
 
@@ -54,14 +63,79 @@ enum WatchStreamingQuality: String, CaseIterable, Identifiable {
         case .standard: "标准"
         case .high: "高品质"
         case .lossless: "无损"
+        case .hiResolution: "Hi-Res"
+        case .highDefinitionSurround: "高清环绕声"
+        case .immersiveSurround: "沉浸环绕声"
+        case .ultraClearMaster: "超清母带"
         }
     }
 
-    var bitrate: Int {
+    var apiLevel: String {
         switch self {
-        case .standard: 128_000
-        case .high: 320_000
-        case .lossless: 999_000
+        case .standard: "standard"
+        case .high: "exhigh"
+        case .lossless: "lossless"
+        case .hiResolution: "hires"
+        case .highDefinitionSurround: "jyeffect"
+        case .immersiveSurround: "sky"
+        case .ultraClearMaster: "jymaster"
+        }
+    }
+
+    init?(apiLevel: String) {
+        guard let quality = Self.allCases.first(where: {
+            $0.apiLevel == apiLevel
+        }) else {
+            return nil
+        }
+        self = quality
+    }
+
+    var requiresImmersiveType: Bool {
+        self == .immersiveSurround
+    }
+
+    var prefersExtendedBuffering: Bool {
+        switch self {
+        case .standard, .high:
+            false
+        case .lossless, .hiResolution,
+             .highDefinitionSurround, .immersiveSurround,
+             .ultraClearMaster:
+            true
+        }
+    }
+
+    var playbackFallbacks: [WatchStreamingQuality] {
+        switch self {
+        case .standard:
+            [.standard]
+        case .high:
+            [.high, .standard]
+        case .lossless:
+            [.lossless, .high, .standard]
+        case .hiResolution:
+            [.hiResolution, .lossless, .high, .standard]
+        case .highDefinitionSurround:
+            [.highDefinitionSurround, .lossless, .high, .standard]
+        case .immersiveSurround:
+            [
+                .immersiveSurround,
+                .highDefinitionSurround,
+                .lossless,
+                .high,
+                .standard,
+            ]
+        case .ultraClearMaster:
+            [.ultraClearMaster, .hiResolution, .lossless, .high, .standard]
+        }
+    }
+
+    func playbackCandidates(
+        for availability: WatchSongAudioAvailability
+    ) -> [WatchStreamingQuality] {
+        playbackFallbacks.filter {
+            availability.supports(apiLevel: $0.apiLevel) != false
         }
     }
 }

@@ -130,7 +130,8 @@ final class DownloadStore {
         return PlaybackSource(
             url: storage.fileURL(fileName: download.fileName),
             bitrate: download.bitrate,
-            format: download.format
+            format: download.format,
+            quality: download.quality
         )
     }
 
@@ -342,7 +343,10 @@ final class DownloadStore {
         }
 
         do {
-            let source = try await api.downloadSource(id: song.id, quality: quality)
+            let source = try await api.downloadSource(
+                for: song,
+                quality: quality
+            )
             try Task.checkCancellation()
             let transfer = try await transferClient.download(from: source.url) { [weak self] progress in
                 self?.updateProgress(
@@ -372,7 +376,7 @@ final class DownloadStore {
                 byteCount: installed.byteCount,
                 bitrate: source.bitrate,
                 format: source.format,
-                quality: quality,
+                quality: source.quality ?? quality,
                 downloadedAt: Date()
             )
             do {

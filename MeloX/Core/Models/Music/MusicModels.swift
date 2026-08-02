@@ -212,6 +212,7 @@ struct Song: Codable, Hashable, Identifiable {
     let copyright: Int?
     let musicVideoID: Int?
     let podcastMetadata: PodcastPlaybackMetadata?
+    let audioAvailability: SongAudioAvailability
 
     var artistText: String {
         artists.map(\.name).joined(separator: " / ")
@@ -249,7 +250,8 @@ struct Song: Codable, Hashable, Identifiable {
         publishTime: Double? = nil,
         copyright: Int? = nil,
         musicVideoID: Int? = nil,
-        podcastMetadata: PodcastPlaybackMetadata? = nil
+        podcastMetadata: PodcastPlaybackMetadata? = nil,
+        audioAvailability: SongAudioAvailability = .unknown
     ) {
         self.id = id
         self.name = name
@@ -265,6 +267,7 @@ struct Song: Codable, Hashable, Identifiable {
         self.copyright = copyright
         self.musicVideoID = musicVideoID
         self.podcastMetadata = podcastMetadata
+        self.audioAvailability = audioAvailability
     }
 
     init(from decoder: Decoder) throws {
@@ -291,6 +294,7 @@ struct Song: Codable, Hashable, Identifiable {
             PodcastPlaybackMetadata.self,
             forKey: .podcastMetadata
         )
+        audioAvailability = try SongAudioAvailability(from: decoder)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -312,6 +316,7 @@ struct Song: Codable, Hashable, Identifiable {
             podcastMetadata,
             forKey: .podcastMetadata
         )
+        try audioAvailability.encode(to: encoder)
     }
 }
 

@@ -318,7 +318,7 @@ final class AutoMixPlaybackCoordinator {
             return (source, true)
         }
         return (
-            try await api.playbackSource(id: song.id),
+            try await api.playbackSource(for: song),
             false
         )
     }

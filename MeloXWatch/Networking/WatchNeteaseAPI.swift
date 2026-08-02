@@ -82,13 +82,43 @@ final class WatchNeteaseAPI {
         return response.songs
     }
 
-    func playbackURL(id: Int, bitrate: Int = 320_000) async throws -> URL {
+    func playbackSource(
+        for song: WatchSong,
+        quality: WatchStreamingQuality = .high
+    ) async throws -> WatchPlaybackSource {
+        for candidate in quality.playbackCandidates(
+            for: song.audioAvailability
+        ) {
+            do {
+                return try await requestPlaybackSource(
+                    id: song.id,
+                    quality: candidate
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch WatchNeteaseError.noPlayableSource {
+                continue
+            }
+        }
+        throw WatchNeteaseError.noPlayableSource
+    }
+
+    private func requestPlaybackSource(
+        id: Int,
+        quality: WatchStreamingQuality
+    ) async throws -> WatchPlaybackSource {
+        // Mirrors @neteaseapireborn/api/module/song_url_v1.js.
+        var data: [String: Any] = [
+            "ids": "[\(id)]",
+            "level": quality.apiLevel,
+            "encodeType": "flac",
+        ]
+        if quality.requiresImmersiveType {
+            data["immerseType"] = "c51"
+        }
         let response: SongURLResponse = try await client.eapi(
-            "/api/song/enhance/player/url",
-            data: [
-                "ids": "[\"\(id)\"]",
-                "br": bitrate
-            ]
+            "/api/song/enhance/player/url/v1",
+            data: data
         )
         guard let source = response.data.first(where: { $0.id == id }),
               let string = source.url,
@@ -101,7 +131,12 @@ final class WatchNeteaseAPI {
         guard let url = components.url else {
             throw WatchNeteaseError.noPlayableSource
         }
-        return url
+        return WatchPlaybackSource(
+            url: url,
+            quality: source.level.flatMap(
+                WatchStreamingQuality.init(apiLevel:)
+            )
+        )
     }
 
     func lyrics(id: Int) async throws -> [WatchLyricLine] {
@@ -251,6 +286,7 @@ private struct SongURLResponse: Decodable {
 private struct SongURLPayload: Decodable {
     let id: Int
     let url: String?
+    let level: String?
 }
 
 private nonisolated struct LyricsResponse: Decodable, Sendable {

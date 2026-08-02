@@ -27,7 +27,8 @@ struct PlaybackSettingsView: View {
                 Text("播放")
             } footer: {
                 Text(
-                    "音质受歌曲版权和账号权限限制。"
+                    "音质受歌曲版权和账号权限限制；Hi-Res、环绕声与"
+                        + "超清母带仅在曲目支持时可用，不支持时会自动降级。"
                         + settings.playerVolumeControlMode.description
                 )
             }
@@ -86,6 +87,11 @@ struct PlaybackSettingsView: View {
         }
         .navigationTitle("播放与音频")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: settings.quality) {
+            Task {
+                await player.reloadCurrentSongForQualityChange()
+            }
+        }
         .onChange(of: settings.playerVolumeControlMode) {
             player.applyVolumeControlMode()
         }

@@ -14,6 +14,7 @@ final class AudioPlaybackDeck {
     init() {
         player = AVPlayer()
         player.automaticallyWaitsToMinimizeStalling = true
+        player.networkResourcePriority = .high
         player.preventsDisplaySleepDuringVideoPlayback = false
     }
 

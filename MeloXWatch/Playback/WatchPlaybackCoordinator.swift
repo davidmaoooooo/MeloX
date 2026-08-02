@@ -59,6 +59,10 @@ final class WatchPlaybackCoordinator: ObservableObject {
         standalone.errorMessage
     }
 
+    var effectiveStreamingQuality: WatchStreamingQuality? {
+        standalone.effectiveStreamingQuality
+    }
+
     func position(at date: Date = Date()) -> TimeInterval {
         standalone.position(at: date)
     }

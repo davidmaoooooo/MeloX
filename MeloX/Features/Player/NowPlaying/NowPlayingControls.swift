@@ -126,16 +126,20 @@ private struct NowPlayingQualityMenu: View {
 
     var body: some View {
         Menu {
-            Picker("音质", selection: qualityBinding) {
-                ForEach(MusicQuality.allCases) { quality in
-                    Text(quality.title).tag(quality)
+            if player.availablePlaybackQualities.isEmpty {
+                Text("正在获取可用音质")
+            } else {
+                Picker("音质", selection: qualityBinding) {
+                    ForEach(player.availablePlaybackQualities) { quality in
+                        Text(quality.title).tag(quality)
+                    }
                 }
             }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "waveform")
                     .font(.system(size: 9, weight: .semibold))
-                Text(settings.quality.title)
+                Text(displayedQualityTitle)
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
@@ -147,8 +151,12 @@ private struct NowPlayingQualityMenu: View {
         }
         .tint(.white)
         .accessibilityLabel("播放音质")
-        .accessibilityValue(settings.quality.title)
+        .accessibilityValue(displayedQualityTitle)
         .accessibilityHint("轻点调整当前歌曲音质")
+    }
+
+    private var displayedQualityTitle: String {
+        player.effectivePlaybackQuality?.title ?? "音质"
     }
 
     private var qualityBinding: Binding<MusicQuality> {
