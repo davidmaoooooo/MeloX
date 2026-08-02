@@ -3,3 +3,7 @@ __pycache__/
 /build
 AGENTS.md
 vendor/QRCode/build/
+
+# Local TestFlight signing/upload tool and credentials
+/AuthKey_*.p8
+/Tools/TestFlightUploader/

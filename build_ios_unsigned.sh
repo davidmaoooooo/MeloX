@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD="${BUILD_DIR:-$ROOT/build}"
 PROJECT="$ROOT/MeloX.xcodeproj"
+BUILD_VARIANT="${MELOX_BUILD_BUNDLE_VARIANT:-legacy}"
 SCHEME="MeloX"
 APP_NAME="MeloX"
 DERIVED_DATA="$BUILD/DerivedData-iOS"
@@ -11,12 +12,68 @@ STAGING="$BUILD/IPA"
 IPA_PATH="$BUILD/MeloX-iOS-unsigned.ipa"
 RELEASE_NOTES_PATH="$BUILD/ReleaseNotes.json"
 RELEASE_NOTES_MARKDOWN_PATH="$BUILD/ReleaseNotes.md"
+TEMPORARY_PROJECT=""
+TEMPORARY_WATCH_INFO=""
+
+cleanup_temporary_build_inputs() {
+  if [[ -n "$TEMPORARY_PROJECT" && -d "$TEMPORARY_PROJECT" ]]; then
+    rm -rf -- "$TEMPORARY_PROJECT"
+  fi
+  if [[ -n "$TEMPORARY_WATCH_INFO" && -f "$TEMPORARY_WATCH_INFO" ]]; then
+    rm -f -- "$TEMPORARY_WATCH_INFO"
+  fi
+}
+
+trap cleanup_temporary_build_inputs EXIT INT TERM
 
 rm -rf "$DERIVED_DATA" "$STAGING"
 rm -f "$IPA_PATH" "$RELEASE_NOTES_PATH" "$RELEASE_NOTES_MARKDOWN_PATH"
 mkdir -p "$BUILD"
 
-echo "========== 构建 iOS Release =========="
+case "$BUILD_VARIANT" in
+  legacy)
+    # GitHub CI、Release 和 Telegram 继续使用原有发布身份。只修改临时
+    # xcodeproj/Info.plist 副本，避免污染当前用于 TestFlight 的项目配置。
+    TEMPORARY_PROJECT="$ROOT/.MeloX-Legacy-Build-$$.xcodeproj"
+    TEMPORARY_WATCH_INFO="$BUILD/MeloXWatch-Legacy-Info-$$.plist"
+    TEMPORARY_WATCH_INFO_RELATIVE="build/$(basename "$TEMPORARY_WATCH_INFO")"
+
+    if [[ -e "$TEMPORARY_PROJECT" || -e "$TEMPORARY_WATCH_INFO" ]]; then
+      echo "临时构建输入已存在，拒绝覆盖"
+      exit 1
+    fi
+
+    ditto --norsrc "$PROJECT" "$TEMPORARY_PROJECT"
+    ditto --norsrc "$ROOT/MeloXWatch/Info.plist" "$TEMPORARY_WATCH_INFO"
+
+    sed -i '' \
+      -e 's/azki\.moye\.MeloX/moye.MeloX/g' \
+      -e 's/LAW363CUU8/YG7LA7A4T5/g' \
+      -e "s#INFOPLIST_FILE = MeloXWatch/Info.plist;#INFOPLIST_FILE = \"$TEMPORARY_WATCH_INFO_RELATIVE\";#g" \
+      "$TEMPORARY_PROJECT/project.pbxproj"
+    /usr/libexec/PlistBuddy \
+      -c "Set :WKCompanionAppBundleIdentifier moye.MeloX" \
+      "$TEMPORARY_WATCH_INFO"
+
+    PROJECT="$TEMPORARY_PROJECT"
+    EXPECTED_APP_BUNDLE_ID="moye.MeloX"
+    EXPECTED_WIDGET_BUNDLE_ID="moye.MeloX.LyricsWidget"
+    EXPECTED_WATCH_BUNDLE_ID="moye.MeloX.watchkitapp"
+    ;;
+  testflight)
+    # TestFlight 使用项目当前的 App Store Connect 身份。
+    EXPECTED_APP_BUNDLE_ID="azki.moye.MeloX"
+    EXPECTED_WIDGET_BUNDLE_ID="azki.moye.MeloX.LyricsWidget"
+    EXPECTED_WATCH_BUNDLE_ID="azki.moye.MeloX.watchkitapp"
+    ;;
+  *)
+    echo "未知的 MELOX_BUILD_BUNDLE_VARIANT：${BUILD_VARIANT}"
+    echo "可用值：legacy、testflight"
+    exit 1
+    ;;
+esac
+
+echo "========== 构建 iOS Release（${BUILD_VARIANT}）=========="
 
 xcodebuild clean build \
   -project "$PROJECT" \
@@ -44,6 +101,47 @@ fi
 if [[ ! -f "$APP_PATH/ReleaseNotes.json" || ! -f "$APP_PATH/ReleaseNotes.md" ]]; then
   echo "构建产物中缺少更新日志元数据或 Markdown"
   exit 1
+fi
+
+WIDGET_PATH="$APP_PATH/PlugIns/MeloXLyricsWidget.appex"
+WATCH_PATH="$APP_PATH/Watch/MeloX Watch App.app"
+
+assert_bundle_identifier() {
+  local bundle_path="$1"
+  local expected_bundle_id="$2"
+  local product_name="$3"
+  local actual_bundle_id
+
+  if [[ ! -f "$bundle_path/Info.plist" ]]; then
+    echo "找不到 $product_name 的 Info.plist：$bundle_path"
+    exit 1
+  fi
+
+  actual_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle_path/Info.plist")"
+  if [[ "$actual_bundle_id" != "$expected_bundle_id" ]]; then
+    echo "$product_name Bundle ID 不符合 $BUILD_VARIANT 构建要求"
+    echo "期望：$expected_bundle_id"
+    echo "实际：$actual_bundle_id"
+    exit 1
+  fi
+}
+
+assert_bundle_identifier "$APP_PATH" "$EXPECTED_APP_BUNDLE_ID" "MeloX"
+assert_bundle_identifier "$WIDGET_PATH" "$EXPECTED_WIDGET_BUNDLE_ID" "MeloXLyricsWidget"
+assert_bundle_identifier "$WATCH_PATH" "$EXPECTED_WATCH_BUNDLE_ID" "MeloX Watch App"
+
+if [[ "$BUILD_VARIANT" == "legacy" ]]; then
+  WATCH_COMPANION_BUNDLE_ID="$(
+    /usr/libexec/PlistBuddy \
+      -c 'Print :WKCompanionAppBundleIdentifier' \
+      "$WATCH_PATH/Info.plist"
+  )"
+  if [[ "$WATCH_COMPANION_BUNDLE_ID" != "$EXPECTED_APP_BUNDLE_ID" ]]; then
+    echo "Watch Companion Bundle ID 不符合 legacy 构建要求"
+    echo "期望：$EXPECTED_APP_BUNDLE_ID"
+    echo "实际：$WATCH_COMPANION_BUNDLE_ID"
+    exit 1
+  fi
 fi
 
 ditto --norsrc "$APP_PATH/ReleaseNotes.json" "$RELEASE_NOTES_PATH"
