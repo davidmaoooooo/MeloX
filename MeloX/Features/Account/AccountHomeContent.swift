@@ -95,6 +95,15 @@ private struct AccountProfileDetailHero: View {
                 playlistCount: profile.playlistCount ?? playlistCount
             )
             .padding(.top, 20)
+
+            NavigationLink {
+                UserListeningRankView(userID: profile.id)
+            } label: {
+                Label("我的听歌排行", systemImage: "chart.bar.xaxis")
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 14)
+            .accessibilityHint("查看最近一周或所有时间的听歌排行")
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 26)

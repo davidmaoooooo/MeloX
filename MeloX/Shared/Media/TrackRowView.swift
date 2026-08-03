@@ -9,6 +9,7 @@ struct TrackRowView: View {
     let song: Song
     var index: Int?
     var showsArtwork = false
+    var secondaryMetadata: String?
 
     @State private var presentedSheet: TrackRowSheet?
 
@@ -28,7 +29,7 @@ struct TrackRowView: View {
                 Text(song.name)
                     .font(.body)
                     .lineLimit(1)
-                Text(song.artistText)
+                Text(subtitleText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -133,7 +134,7 @@ struct TrackRowView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(song.name)，\(song.artistText)")
+        .accessibilityLabel(accessibilityText)
         .accessibilityAction(named: "查看歌曲资料") {
             openMusicRoute(.song(song))
         }
@@ -154,6 +155,24 @@ struct TrackRowView: View {
 
     private var favoriteActionTitle: String {
         library.contains(song: song) ? "取消喜欢" : "喜欢歌曲"
+    }
+
+    private var subtitleText: String {
+        [song.artistText, secondaryMetadata]
+            .compactMap { value in
+                guard let value else { return nil }
+                let normalized = value.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                return normalized.isEmpty ? nil : normalized
+            }
+            .joined(separator: " · ")
+    }
+
+    private var accessibilityText: String {
+        subtitleText.isEmpty
+            ? song.name
+            : "\(song.name)，\(subtitleText)"
     }
 
     private var favoriteActionSystemImage: String {

@@ -6,17 +6,40 @@ struct LibraryPlaylistsView: View {
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
-        List(displayedPlaylists) { playlist in
-            NavigationLink(value: MusicRoute.playlist(playlist)) {
-                LibraryPlaylistRow(playlist: playlist)
-            }
-            .musicMatchedTransitionSource(for: MusicRoute.playlist(playlist))
-            .swipeActions(edge: .trailing) {
-                if library.canUnsubscribe(playlist) {
-                    Button(role: .destructive) {
-                        library.toggle(playlist: playlist)
+        List {
+            if !isSearching, let userID = library.profile?.id {
+                Section("我的") {
+                    NavigationLink {
+                        UserListeningRankView(userID: userID)
                     } label: {
-                        Label("取消收藏", systemImage: "heart.slash")
+                        Label(
+                            "我的听歌排行",
+                            systemImage: "chart.bar.xaxis"
+                        )
+                    }
+                    .accessibilityHint("查看最近一周或所有时间的听歌排行")
+                }
+            }
+
+            Section(isSearching ? "搜索结果" : "歌单") {
+                ForEach(displayedPlaylists) { playlist in
+                    NavigationLink(value: MusicRoute.playlist(playlist)) {
+                        LibraryPlaylistRow(playlist: playlist)
+                    }
+                    .musicMatchedTransitionSource(
+                        for: MusicRoute.playlist(playlist)
+                    )
+                    .swipeActions(edge: .trailing) {
+                        if library.canUnsubscribe(playlist) {
+                            Button(role: .destructive) {
+                                library.toggle(playlist: playlist)
+                            } label: {
+                                Label(
+                                    "取消收藏",
+                                    systemImage: "heart.slash"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -26,21 +49,24 @@ struct LibraryPlaylistsView: View {
             await library.refresh(force: true)
         }
         .overlay {
-            if displayedPlaylists.isEmpty {
-                if isSearching {
-                    ContentUnavailableView.search(
-                        text: normalizedSearchQuery
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "还没有收藏歌单",
-                        systemImage: "music.note.list",
-                        description: Text(
-                            "打开歌单详情后，轻点收藏按钮。"
+            Group {
+                if displayedPlaylists.isEmpty {
+                    if isSearching {
+                        ContentUnavailableView.search(
+                            text: normalizedSearchQuery
                         )
-                    )
+                    } else {
+                        ContentUnavailableView(
+                            "还没有收藏歌单",
+                            systemImage: "music.note.list",
+                            description: Text(
+                                "打开歌单详情后，轻点收藏按钮。"
+                            )
+                        )
+                    }
                 }
             }
+            .allowsHitTesting(false)
         }
     }
 
