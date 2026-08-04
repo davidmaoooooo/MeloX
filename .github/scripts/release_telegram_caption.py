@@ -20,6 +20,7 @@ def compose_caption(
     version: str,
     details: list[str],
     release_url: str,
+    website_url: str,
 ) -> str:
     lines = [f"{project}版本{version}更新"]
     if details:
@@ -28,7 +29,8 @@ def compose_caption(
         [
             "",
             f"仓库发版地址：{release_url}",
-            f"欢迎将{project}推荐给其他人！",
+            f"官方网站：{website_url}",
+            f"欢迎访问官网了解{project}，也欢迎推荐给更多朋友！",
         ]
     )
     return "\n".join(lines)
@@ -39,8 +41,15 @@ def fit_caption(
     version: str,
     details: list[str],
     release_url: str,
+    website_url: str,
 ) -> str:
-    full_caption = compose_caption(project, version, details, release_url)
+    full_caption = compose_caption(
+        project,
+        version,
+        details,
+        release_url,
+        website_url,
+    )
     if telegram_length(full_caption) <= CAPTION_LIMIT:
         return full_caption
 
@@ -50,14 +59,28 @@ def fit_caption(
         omitted_count = len(details) - len(candidate_details)
         if omitted_count:
             candidate_details.append(f"- ……另有 {omitted_count} 条更新，详见 Release")
-        if telegram_length(compose_caption(project, version, candidate_details, release_url)) > CAPTION_LIMIT:
+        if telegram_length(
+            compose_caption(
+                project,
+                version,
+                candidate_details,
+                release_url,
+                website_url,
+            )
+        ) > CAPTION_LIMIT:
             break
         visible_details.append(detail)
 
     omitted_count = len(details) - len(visible_details)
     if omitted_count:
         visible_details.append(f"- ……另有 {omitted_count} 条更新，详见 Release")
-    return compose_caption(project, version, visible_details, release_url)
+    return compose_caption(
+        project,
+        version,
+        visible_details,
+        release_url,
+        website_url,
+    )
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -66,6 +89,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--version", required=True)
     parser.add_argument("--details-file", required=True, type=Path)
     parser.add_argument("--release-url", required=True)
+    parser.add_argument("--website-url", required=True)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
 
@@ -82,6 +106,7 @@ def main() -> int:
         arguments.version,
         details,
         arguments.release_url,
+        arguments.website_url,
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(f"{caption}\n", encoding="utf-8")

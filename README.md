@@ -8,12 +8,25 @@
   使用原生 SwiftUI 构建的第三方网易云音乐播放器
 </p>
 
+[![官网](https://img.shields.io/badge/MeloX-访问官网-red?style=for-the-badge&logo=music&logoColor=red)](https://melox.luoxe.cn)
+
 [![Telegram Group](https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/melox_official)
 
 > MeloX 是非官方开源项目，与网易云音乐及其关联公司不存在隶属、合作或授权关系。项目仍在开发中，接口和功能可能随网易云音乐服务变化而失效。
 
 > [!IMPORTANT]
 > **Apple Watch 版本仍在开发中。** 当前功能、交互和数据兼容性尚未稳定，不建议将其视为正式版本。
+
+## 免责声明
+
+本项目出于学习与研究目的开发。MeloX 不对 GPLv3 覆盖的主体代码附加额外限制；
+第三方代码、资源和模型仍按上文列出的独立许可证使用。使用者应自行遵守所在地法律法规、
+网易云音乐服务条款以及音乐内容的版权要求。
+
+项目按许可证所述不提供担保；
+因使用本项目产生的风险由使用者自行承担。
+
+下载后请于24小时内删除。
 
 ## 应用截图
 
@@ -371,10 +384,3 @@ MeloX 应用主体代码以 [GNU General Public License version 3](LICENSE) 发�
   [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
   许可证，使用或分发时须保留适当署名、许可证链接及修改说明；详见
   [转换与归属说明](MeloX/Resources/Models/BeatNet/BeatNet-NOTICE.md)。
-
-## 免责声明
-
-本项目出于学习与研究目的开发。MeloX 不对 GPLv3 覆盖的主体代码附加额外限制；
-第三方代码、资源和模型仍按上文列出的独立许可证使用。使用者应自行遵守所在地法律法规、
-网易云音乐服务条款以及音乐内容的版权要求。项目按许可证所述不提供担保；
-因使用本项目产生的风险由使用者自行承担。

@@ -212,6 +212,7 @@ def format_summary(
     current_run_number: int,
     repository: str,
     run_url: str,
+    website_url: str,
 ) -> str:
     header = ["MeloX CI 构建完成"]
     if previous_sha is None:
@@ -233,7 +234,12 @@ def format_summary(
         if commits
         else ["• 本次没有新增 Commit"]
     )
-    footer = [f"仓库：{repository}", f"详情：{run_url}"]
+    footer = [
+        f"官网：{website_url}",
+        "欢迎访问 MeloX 官网了解项目，也欢迎推荐给更多朋友！",
+        f"仓库：{repository}",
+        f"详情：{run_url}",
+    ]
     return fit_caption(header, commit_lines, footer)
 
 
@@ -247,6 +253,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--fallback-sha", default="")
     parser.add_argument("--previous-sha")
     parser.add_argument("--run-url", required=True)
+    parser.add_argument("--website-url", required=True)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
 
@@ -292,6 +299,7 @@ def main() -> int:
         arguments.current_run_number,
         arguments.repository,
         arguments.run_url,
+        arguments.website_url,
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(f"{caption}\n", encoding="utf-8")

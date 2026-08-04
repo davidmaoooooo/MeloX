@@ -86,6 +86,18 @@ struct AboutView: View {
             }
 
             Section("项目与社区") {
+                Link(destination: officialWebsiteURL) {
+                    HStack(spacing: 12) {
+                        Label("MeloX 官网", systemImage: "globe")
+
+                        Spacer(minLength: 8)
+
+                        Text("melox.luoxe.cn")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Link(destination: AppUpdateService.repositoryURL) {
                     Label("GitHub 仓库", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
@@ -150,6 +162,7 @@ struct AboutView: View {
         Bundle.main.appReleaseVersion
     }
 
+    private let officialWebsiteURL = URL(string: "https://melox.luoxe.cn/")!
     private let telegramURL = URL(string: "https://t.me/melox_official")!
 
     @MainActor

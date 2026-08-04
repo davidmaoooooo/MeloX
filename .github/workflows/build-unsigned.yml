@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
 
+env:
+  MELOX_WEBSITE_URL: https://melox.luoxe.cn/
+
 concurrency:
   group: build-ios-unsigned-${{ github.ref }}
   cancel-in-progress: true
@@ -164,6 +167,7 @@ jobs:
             --workflow "build-unsigned.yml" \
             --fallback-sha "${FALLBACK_SHA}" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --website-url "${MELOX_WEBSITE_URL}" \
             --output "${RUNNER_TEMP}/telegram-caption.txt"
 
       - name: Send IPA to Telegram
@@ -257,6 +261,10 @@ jobs:
           cat > release_body.md <<EOF
           这是由 GitHub Actions 自动构建的 MeloX iOS 发行版本。
 
+          ## MeloX 官网
+
+          访问 [MeloX 官网](${MELOX_WEBSITE_URL}) 了解项目与最新动态，也欢迎推荐给更多朋友。
+
           ## 下载说明
 
           - \`MeloX-iOS-unsigned.ipa\`：iOS 未签名安装包
@@ -338,6 +346,7 @@ jobs:
             --version "${GITHUB_REF_NAME}" \
             --details-file "release-metadata/release_notes.md" \
             --release-url "${RELEASE_URL}" \
+            --website-url "${MELOX_WEBSITE_URL}" \
             --output "${RUNNER_TEMP}/telegram-release-caption.txt"
 
       - name: Send and pin Telegram release
