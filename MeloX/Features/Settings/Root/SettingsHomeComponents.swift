@@ -133,7 +133,11 @@ struct SettingsHomeResetCard: View {
             .buttonStyle(.plain)
             .disabled(isResetting)
 
-            Text("重置播放、歌词、均衡器、自动混音和扩展歌词显示，不会删除账号、下载或音乐数据。")
+            Text(
+                AppFeatureAvailability.downloads
+                    ? "重置播放、歌词、均衡器、自动混音和扩展歌词显示，不会删除账号、下载或音乐数据。"
+                    : "重置播放、歌词、均衡器、自动混音和扩展歌词显示，不会删除账号或音乐数据。"
+            )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 14)

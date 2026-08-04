@@ -47,7 +47,10 @@ struct AlbumDetailView: View {
             isLoading: isInitialLoading,
             failureMessage: initialFailureMessage,
             isSubscribed: isSubscribed,
-            downloadCoordinator: downloadCoordinator,
+            downloadCoordinator:
+                AppFeatureAvailability.downloads
+                    ? downloadCoordinator
+                    : nil,
             onToggleSubscription: toggleSubscription,
             onRetry: { reloadToken += 1 },
             onRefresh: { await load() }
@@ -62,14 +65,18 @@ struct AlbumDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(interfaceColorScheme, for: .navigationBar, .tabBar)
         .toolbar {
-            if downloadCoordinator.isSelecting {
+            if AppFeatureAvailability.downloads,
+               downloadCoordinator.isSelecting {
                 downloadSelectionToolbar
             } else {
                 albumToolbar
             }
         }
         .toolbarVisibility(
-            downloadCoordinator.isSelecting ? .hidden : .automatic,
+            AppFeatureAvailability.downloads
+                && downloadCoordinator.isSelecting
+                ? .hidden
+                : .automatic,
             for: .tabBar
         )
         .environment(\.colorScheme, interfaceColorScheme)
@@ -135,7 +142,10 @@ struct AlbumDetailView: View {
         .alert(
             "无法准备下载",
             isPresented: Binding(
-                get: { downloadCoordinator.errorMessage != nil },
+                get: {
+                    AppFeatureAvailability.downloads
+                        && downloadCoordinator.errorMessage != nil
+                },
                 set: { isPresented in
                     if !isPresented {
                         downloadCoordinator.clearError()
@@ -185,6 +195,7 @@ struct AlbumDetailView: View {
     }
 
     private var downloadableSongIDs: [Int] {
+        guard AppFeatureAvailability.downloads else { return [] }
         let unavailableSongIDs = Set(downloads.downloads.map(\.id))
             .union(downloads.activeDownloads.keys)
         return MusicCollectionDownloadCoordinator.songIDs(in: songs)
@@ -193,14 +204,16 @@ struct AlbumDetailView: View {
 
     private func updateTabViewBottomAccessoryVisibility() {
         setTabViewBottomAccessorySuppressed(
-            downloadCoordinator.isSelecting
+            AppFeatureAvailability.downloads
+                && downloadCoordinator.isSelecting
         )
     }
 
     @ToolbarContentBuilder
     private var albumToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            if downloadCoordinator.isPreparing {
+            if AppFeatureAvailability.downloads,
+               downloadCoordinator.isPreparing {
                 ProgressView()
                     .accessibilityLabel(
                         "正在准备下载 \(downloadCoordinator.preparingSongCount) 首歌曲"
@@ -215,16 +228,18 @@ struct AlbumDetailView: View {
             .accessibilityLabel("分享专辑")
 
             Menu {
-                MusicCollectionDownloadMenuContent(
-                    coordinator: downloadCoordinator,
-                    downloadableSongCount:
-                        downloadableSongIDs.count,
-                    onDownloadAll: { quality in
-                        startDownloadAll(quality: quality)
-                    }
-                )
+                if AppFeatureAvailability.downloads {
+                    MusicCollectionDownloadMenuContent(
+                        coordinator: downloadCoordinator,
+                        downloadableSongCount:
+                            downloadableSongIDs.count,
+                        onDownloadAll: { quality in
+                            startDownloadAll(quality: quality)
+                        }
+                    )
 
-                Divider()
+                    Divider()
+                }
 
                 if let artist = displayedAlbum.artists.first {
                     NavigationLink(value: MusicRoute.artist(artist.id)) {
@@ -257,6 +272,7 @@ struct AlbumDetailView: View {
     }
 
     private func startDownloadAll(quality: MusicQuality) {
+        guard AppFeatureAvailability.downloads else { return }
         let songs = songs
         Task {
             await downloadCoordinator.downloadAll(
@@ -269,6 +285,7 @@ struct AlbumDetailView: View {
     }
 
     private func startSelectedDownloads(quality: MusicQuality) {
+        guard AppFeatureAvailability.downloads else { return }
         let songs = songs
         Task {
             await downloadCoordinator.downloadSelection(

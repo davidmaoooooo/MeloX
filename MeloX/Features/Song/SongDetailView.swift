@@ -23,36 +23,42 @@ struct SongDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    if downloads.isDownloading(songID: song.id) {
-                        Button {
-                            downloads.cancel(songID: song.id)
-                        } label: {
-                            Label("取消下载", systemImage: "xmark.circle")
-                        }
-                    } else if downloads.contains(songID: song.id) {
-                        Button(role: .destructive) {
-                            downloads.remove(songID: song.id)
-                        } label: {
-                            Label("删除下载", systemImage: "trash")
-                        }
-                    } else {
-                        Section("选择下载音质") {
-                            ForEach(MusicQuality.allCases) { quality in
-                                Button(quality.title) {
-                                    downloads.start(song, quality: quality)
+                if AppFeatureAvailability.downloads {
+                    Menu {
+                        if downloads.isDownloading(songID: song.id) {
+                            Button {
+                                downloads.cancel(songID: song.id)
+                            } label: {
+                                Label("取消下载", systemImage: "xmark.circle")
+                            }
+                        } else if downloads.contains(songID: song.id) {
+                            Button(role: .destructive) {
+                                downloads.remove(songID: song.id)
+                            } label: {
+                                Label("删除下载", systemImage: "trash")
+                            }
+                        } else {
+                            Section("选择下载音质") {
+                                ForEach(MusicQuality.allCases) { quality in
+                                    Button(quality.title) {
+                                        downloads.start(song, quality: quality)
+                                    }
                                 }
                             }
                         }
+                    } label: {
+                        Image(
+                            systemName: downloads.contains(songID: song.id)
+                                ? "arrow.down.circle.fill"
+                                : "arrow.down.circle"
+                        )
                     }
-                } label: {
-                    Image(
-                        systemName: downloads.contains(songID: song.id)
-                            ? "arrow.down.circle.fill"
-                            : "arrow.down.circle"
+                    .accessibilityLabel(
+                        downloads.contains(songID: song.id)
+                            ? "已下载"
+                            : "下载"
                     )
                 }
-                .accessibilityLabel(downloads.contains(songID: song.id) ? "已下载" : "下载")
 
                 Button {
                     presentedSheet = .comments(song)

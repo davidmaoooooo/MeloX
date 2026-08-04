@@ -92,17 +92,22 @@ enum AppTab: String, CaseIterable, Identifiable {
         .library,
     ]
 
-    static let libraryContentPages: [AppTab] = [
-        .librarySongs,
-        .libraryPlaylists,
-        .libraryPodcasts,
-        .libraryDownloads,
-        .libraryCloud,
-        .libraryHistory,
-    ]
+    static var libraryContentPages: [AppTab] {
+        var pages: [AppTab] = [
+            .librarySongs,
+            .libraryPlaylists,
+            .libraryPodcasts,
+        ]
+        if AppFeatureAvailability.downloads {
+            pages.append(.libraryDownloads)
+        }
+        pages.append(contentsOf: [.libraryCloud, .libraryHistory])
+        return pages
+    }
 
-    static let configurablePages =
+    static var configurablePages: [AppTab] {
         movablePrimaryContentPages + libraryContentPages
+    }
 
     init(libraryPage: LibraryPage) {
         switch libraryPage {
@@ -147,6 +152,12 @@ enum LibraryPage: String, CaseIterable, Identifiable {
     case history
 
     var id: String { rawValue }
+
+    static var availableCases: [LibraryPage] {
+        allCases.filter {
+            AppFeatureAvailability.downloads || $0 != .downloads
+        }
+    }
 
     var title: String {
         switch self {

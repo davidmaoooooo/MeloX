@@ -161,20 +161,32 @@ enum SettingsCatalog {
                 SettingsCatalogItem(
                     route: .storage,
                     title: "存储管理",
-                    subtitle: "空间统计、下载管理与缓存清理",
+                    subtitle:
+                        AppFeatureAvailability.downloads
+                            ? "空间统计、下载管理与缓存清理"
+                            : "空间统计与缓存清理",
                     systemImage: "internaldrive",
-                    keywords: [
-                        "下载",
-                        "自动缓存",
-                        "存储",
-                        "空间",
-                        "清理",
-                        "临时文件",
-                        "数据库",
-                        "触发次数",
-                        "缓存音质",
-                        "删除下载",
-                    ]
+                    keywords:
+                        AppFeatureAvailability.downloads
+                            ? [
+                                "下载",
+                                "自动缓存",
+                                "存储",
+                                "空间",
+                                "清理",
+                                "临时文件",
+                                "数据库",
+                                "触发次数",
+                                "缓存音质",
+                                "删除下载",
+                            ]
+                            : [
+                                "存储",
+                                "空间",
+                                "清理",
+                                "临时文件",
+                                "数据库",
+                            ]
                 ),
             ]
         ),
@@ -196,9 +208,8 @@ enum SettingsCatalog {
                         "云盘",
                         "歌曲",
                         "歌单",
-                        "下载",
                         "历史",
-                    ]
+                    ] + (AppFeatureAvailability.downloads ? ["下载"] : [])
                 ),
                 SettingsCatalogItem(
                     route: .general,

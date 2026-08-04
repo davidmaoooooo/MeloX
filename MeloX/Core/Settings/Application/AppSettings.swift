@@ -469,7 +469,7 @@ final class AppSettings {
     }
 
     var embeddedLibraryPages: [LibraryPage] {
-        LibraryPage.allCases.filter {
+        LibraryPage.availableCases.filter {
             !separatedLibraryPages.contains($0)
         }
     }
@@ -1680,7 +1680,7 @@ final class AppSettings {
         _ pages: [LibraryPage]
     ) -> [LibraryPage] {
         let pageSet = Set(pages)
-        return LibraryPage.allCases.filter(pageSet.contains)
+        return LibraryPage.availableCases.filter(pageSet.contains)
     }
 
     private static func normalizedHomeTabOrder(
@@ -1710,7 +1710,7 @@ final class AppSettings {
         homeTabs: [AppTab]
     ) -> [AppTab] {
         let separatedSet = Set(separatedLibraryPages)
-        let embeddedPages = LibraryPage.allCases.filter {
+        let embeddedPages = LibraryPage.availableCases.filter {
             !separatedSet.contains($0)
         }
         let homeTabSet = Set(homeTabs)

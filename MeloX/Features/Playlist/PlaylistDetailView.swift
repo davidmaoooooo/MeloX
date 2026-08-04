@@ -66,7 +66,10 @@ struct PlaylistDetailView: View {
             loadedTrackOffset: loadedTrackOffset,
             isLoadingMoreTracks: isLoadingMoreTracks,
             loadMoreTracksError: loadMoreTracksError,
-            downloadCoordinator: downloadCoordinator,
+            downloadCoordinator:
+                AppFeatureAvailability.downloads
+                    ? downloadCoordinator
+                    : nil,
             onRetry: { reloadToken += 1 },
             onRefresh: { await load() },
             onLoadMore: { await loadMoreTracks() }
@@ -81,14 +84,18 @@ struct PlaylistDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(interfaceColorScheme, for: .navigationBar, .tabBar)
         .toolbar {
-            if downloadCoordinator.isSelecting {
+            if AppFeatureAvailability.downloads,
+               downloadCoordinator.isSelecting {
                 downloadSelectionToolbar
             } else {
                 playlistToolbar(for: displayedPlaylist)
             }
         }
         .toolbarVisibility(
-            downloadCoordinator.isSelecting ? .hidden : .automatic,
+            AppFeatureAvailability.downloads
+                && downloadCoordinator.isSelecting
+                ? .hidden
+                : .automatic,
             for: .tabBar
         )
         .environment(\.colorScheme, interfaceColorScheme)
@@ -154,7 +161,10 @@ struct PlaylistDetailView: View {
         .alert(
             "无法准备下载",
             isPresented: Binding(
-                get: { downloadCoordinator.errorMessage != nil },
+                get: {
+                    AppFeatureAvailability.downloads
+                        && downloadCoordinator.errorMessage != nil
+                },
                 set: { isPresented in
                     if !isPresented {
                         downloadCoordinator.clearError()
@@ -221,7 +231,8 @@ struct PlaylistDetailView: View {
     }
 
     private var downloadableSongIDs: [Int] {
-        guard let playlist else { return [] }
+        guard AppFeatureAvailability.downloads,
+              let playlist else { return [] }
         let unavailableSongIDs = Set(downloads.downloads.map(\.id))
             .union(downloads.activeDownloads.keys)
         return MusicCollectionDownloadCoordinator.songIDs(
@@ -232,14 +243,16 @@ struct PlaylistDetailView: View {
 
     private func updateTabViewBottomAccessoryVisibility() {
         setTabViewBottomAccessorySuppressed(
-            downloadCoordinator.isSelecting
+            AppFeatureAvailability.downloads
+                && downloadCoordinator.isSelecting
         )
     }
 
     @ToolbarContentBuilder
     private func playlistToolbar(for playlist: Playlist) -> some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            if downloadCoordinator.isPreparing {
+            if AppFeatureAvailability.downloads,
+               downloadCoordinator.isPreparing {
                 ProgressView()
                     .accessibilityLabel(
                         "正在准备下载 \(downloadCoordinator.preparingSongCount) 首歌曲"
@@ -254,16 +267,18 @@ struct PlaylistDetailView: View {
             .accessibilityLabel("分享\(collectionTitle)")
 
             Menu {
-                MusicCollectionDownloadMenuContent(
-                    coordinator: downloadCoordinator,
-                    downloadableSongCount:
-                        downloadableSongIDs.count,
-                    onDownloadAll: { quality in
-                        startDownloadAll(quality: quality)
-                    }
-                )
+                if AppFeatureAvailability.downloads {
+                    MusicCollectionDownloadMenuContent(
+                        coordinator: downloadCoordinator,
+                        downloadableSongCount:
+                            downloadableSongIDs.count,
+                        onDownloadAll: { quality in
+                            startDownloadAll(quality: quality)
+                        }
+                    )
 
-                Divider()
+                    Divider()
+                }
 
                 Button {
                     library.toggle(playlist: playlist)
@@ -299,7 +314,8 @@ struct PlaylistDetailView: View {
     }
 
     private func startDownloadAll(quality: MusicQuality) {
-        guard let playlist else { return }
+        guard AppFeatureAvailability.downloads,
+              let playlist else { return }
         Task {
             await downloadCoordinator.downloadAll(
                 in: playlist,
@@ -311,7 +327,8 @@ struct PlaylistDetailView: View {
     }
 
     private func startSelectedDownloads(quality: MusicQuality) {
-        guard let playlist else { return }
+        guard AppFeatureAvailability.downloads,
+              let playlist else { return }
         Task {
             await downloadCoordinator.downloadSelection(
                 in: playlist,

@@ -12,7 +12,9 @@ struct StorageManagementView: View {
             storageItemsSection
             cacheCleanupSection
             maintenanceSection
-            destructiveSection
+            if AppFeatureAvailability.downloads {
+                destructiveSection
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("存储管理")
@@ -80,7 +82,7 @@ struct StorageManagementView: View {
                         if model.hasLoadedUsage {
                             Text(
                                 formattedSize(
-                                    model.usage.totalManagedBytes
+                                    displayedManagedByteCount
                                 )
                             )
                             .font(.title2.weight(.semibold))
@@ -115,7 +117,9 @@ struct StorageManagementView: View {
             Text("总览")
         } footer: {
             Text(
-                "统计包含下载、MeloX 数据库、网络缓存和临时播放文件，不包含 App 本体与系统管理的其他空间。"
+                AppFeatureAvailability.downloads
+                    ? "统计包含下载、MeloX 数据库、网络缓存和临时播放文件，不包含 App 本体与系统管理的其他空间。"
+                    : "统计包含 MeloX 数据库、网络缓存和临时播放文件，不包含 App 本体与系统管理的其他空间。"
             )
         }
     }
@@ -145,21 +149,23 @@ struct StorageManagementView: View {
 
     private var storageItemsSection: some View {
         Section("存储项目") {
-            NavigationLink {
-                DownloadsView()
-            } label: {
-                storageUsageRow(
-                    title: "下载与自动缓存",
-                    subtitle:
-                        "\(downloads.downloads.count) 首歌曲",
-                    systemImage: "arrow.down.circle.fill",
-                    byteCount: model.usage.downloadsBytes
-                )
+            if AppFeatureAvailability.downloads {
+                NavigationLink {
+                    DownloadsView()
+                } label: {
+                    storageUsageRow(
+                        title: "下载与自动缓存",
+                        subtitle:
+                            "\(downloads.downloads.count) 首歌曲",
+                        systemImage: "arrow.down.circle.fill",
+                        byteCount: model.usage.downloadsBytes
+                    )
+                }
             }
 
             storageUsageRow(
                 title: "网络与图片缓存",
-                subtitle: "封面与网络响应，可重新下载",
+                subtitle: "封面与网络响应，可按需重新获取",
                 systemImage: "photo.stack",
                 byteCount: model.usage.networkCacheBytes
             )
@@ -173,7 +179,10 @@ struct StorageManagementView: View {
 
             storageUsageRow(
                 title: "本地数据库",
-                subtitle: "下载记录与自动缓存计数",
+                subtitle:
+                    AppFeatureAvailability.downloads
+                        ? "下载记录与自动缓存计数"
+                        : "播放与应用数据",
                 systemImage: "cylinder.split.1x2",
                 byteCount: model.usage.databaseBytes
             )
@@ -193,7 +202,7 @@ struct StorageManagementView: View {
             cleanupButton(
                 action: .networkCache,
                 title: "清理网络与图片缓存",
-                subtitle: "之后浏览时会按需重新下载",
+                subtitle: "之后浏览时会按需重新获取",
                 systemImage: "photo.on.rectangle.angled",
                 byteCount: model.usage.networkCacheBytes
             )
@@ -201,7 +210,10 @@ struct StorageManagementView: View {
             cleanupButton(
                 action: .temporaryFiles,
                 title: "清理临时播放文件",
-                subtitle: "保留正在下载与正在使用的文件",
+                subtitle:
+                    AppFeatureAvailability.downloads
+                        ? "保留正在下载与正在使用的文件"
+                        : "保留正在使用的文件",
                 systemImage: "waveform",
                 byteCount: model.usage.temporaryFilesBytes
             )
@@ -209,29 +221,33 @@ struct StorageManagementView: View {
             Text("缓存清理")
         } footer: {
             Text(
-                "缓存清理不会删除已下载歌曲、收藏、账号信息或播放队列。正在使用的文件可能会被保留或立即重新生成。"
+                AppFeatureAvailability.downloads
+                    ? "缓存清理不会删除已下载歌曲、收藏、账号信息或播放队列。正在使用的文件可能会被保留或立即重新生成。"
+                    : "缓存清理不会删除收藏、账号信息或播放队列。正在使用的文件可能会被保留或立即重新生成。"
             )
         }
     }
 
     private var maintenanceSection: some View {
         Section {
-            cleanupButton(
-                action: .repairDownloads,
-                title: "修复下载存储",
-                subtitle: "清除缺失记录与未登记文件",
-                systemImage: "wrench.and.screwdriver",
-                byteCount: nil,
-                disabled: !downloads.activeDownloads.isEmpty
-            )
+            if AppFeatureAvailability.downloads {
+                cleanupButton(
+                    action: .repairDownloads,
+                    title: "修复下载存储",
+                    subtitle: "清除缺失记录与未登记文件",
+                    systemImage: "wrench.and.screwdriver",
+                    byteCount: nil,
+                    disabled: !downloads.activeDownloads.isEmpty
+                )
 
-            cleanupButton(
-                action: .automaticCacheHistory,
-                title: "重置自动缓存计数",
-                subtitle: "重新计算歌曲的播放触发次数",
-                systemImage: "arrow.counterclockwise",
-                byteCount: nil
-            )
+                cleanupButton(
+                    action: .automaticCacheHistory,
+                    title: "重置自动缓存计数",
+                    subtitle: "重新计算歌曲的播放触发次数",
+                    systemImage: "arrow.counterclockwise",
+                    byteCount: nil
+                )
+            }
 
             Button {
                 Task {
@@ -252,12 +268,16 @@ struct StorageManagementView: View {
             }
             .disabled(
                 model.isBusy
-                    || !downloads.activeDownloads.isEmpty
+                    || (
+                        AppFeatureAvailability.downloads
+                            && !downloads.activeDownloads.isEmpty
+                    )
             )
         } header: {
             Text("维护")
         } footer: {
-            if !downloads.activeDownloads.isEmpty {
+            if AppFeatureAvailability.downloads,
+               !downloads.activeDownloads.isEmpty {
                 Text("下载任务完成或取消后，才能修复下载存储或压缩数据库。")
             }
         }
@@ -432,5 +452,16 @@ struct StorageManagementView: View {
 
     private func formattedSize(_ byteCount: Int64) -> String {
         byteCount.formatted(.byteCount(style: .file))
+    }
+
+    private var displayedManagedByteCount: Int64 {
+        guard !AppFeatureAvailability.downloads else {
+            return model.usage.totalManagedBytes
+        }
+        return max(
+            model.usage.totalManagedBytes
+                - model.usage.downloadsBytes,
+            0
+        )
     }
 }

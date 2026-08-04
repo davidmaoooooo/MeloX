@@ -49,7 +49,11 @@ struct SettingsAccountSection: View {
                 logout()
             }
         } message: {
-            Text("本机保存的网易云登录 Cookie 和已加载的账号数据将被清除，已下载歌曲不会被删除。")
+            Text(
+                AppFeatureAvailability.downloads
+                    ? "本机保存的网易云登录 Cookie 和已加载的账号数据将被清除，已下载歌曲不会被删除。"
+                    : "本机保存的网易云登录 Cookie 和已加载的账号数据将被清除。"
+            )
         }
     }
 

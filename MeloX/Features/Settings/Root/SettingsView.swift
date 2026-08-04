@@ -69,7 +69,11 @@ struct SettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这会覆盖播放、歌词与扩展显示的自定义参数，但不会影响账号、下载和音乐数据。")
+            Text(
+                AppFeatureAvailability.downloads
+                    ? "这会覆盖播放、歌词与扩展显示的自定义参数，但不会影响账号、下载和音乐数据。"
+                    : "这会覆盖播放、歌词与扩展显示的自定义参数，但不会影响账号和音乐数据。"
+            )
         }
     }
 

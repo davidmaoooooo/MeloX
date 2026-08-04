@@ -9,7 +9,7 @@ struct AlbumDetailContent: View {
     let isLoading: Bool
     let failureMessage: String?
     let isSubscribed: Bool
-    let downloadCoordinator: MusicCollectionDownloadCoordinator
+    let downloadCoordinator: MusicCollectionDownloadCoordinator?
     let onToggleSubscription: () -> Void
     let onRetry: () -> Void
     let onRefresh: () async -> Void

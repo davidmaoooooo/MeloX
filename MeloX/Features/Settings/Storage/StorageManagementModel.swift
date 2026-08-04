@@ -188,9 +188,9 @@ enum StorageCleanupAction: String, Identifiable {
     var confirmationMessage: String {
         switch self {
         case .allCaches:
-            "将清除可重新下载的网络、图片和非活动临时文件，不会删除已下载歌曲或账号数据。"
+            "将清除可重新生成的网络、图片和非活动临时文件，不会影响收藏、账号数据或播放队列。"
         case .networkCache:
-            "封面和网络响应会在之后使用时重新下载。"
+            "封面和网络响应会在之后使用时重新获取。"
         case .temporaryFiles:
             "将清理自动混音分析、歌词附件等临时内容；正在使用的文件会保留或按需重新生成。"
         case .repairDownloads:

@@ -56,7 +56,11 @@ struct PlaybackSettingsView: View {
             } header: {
                 Text("音频处理")
             } footer: {
-                Text("均衡器和自动混音会同时作用于网络播放和已下载歌曲。")
+                Text(
+                    AppFeatureAvailability.downloads
+                        ? "均衡器和自动混音会同时作用于网络播放和已下载歌曲。"
+                        : "均衡器和自动混音会同时作用于歌曲播放。"
+                )
             }
 
             Section {

@@ -16,9 +16,12 @@ struct LibraryView: View {
         fixedPage: LibraryPage? = nil,
         showsNavigationTitle: Bool = true
     ) {
-        self.fixedPage = fixedPage
+        let resolvedFixedPage = fixedPage.flatMap { page in
+            LibraryPage.availableCases.contains(page) ? page : nil
+        }
+        self.fixedPage = resolvedFixedPage
         self.showsNavigationTitle = showsNavigationTitle
-        _section = State(initialValue: fixedPage ?? .songs)
+        _section = State(initialValue: resolvedFixedPage ?? .songs)
     }
 
     private var availablePages: [LibraryPage] {
@@ -121,7 +124,11 @@ struct LibraryView: View {
         ContentUnavailableView {
             Label("需要登录", systemImage: "person.crop.circle.badge.exclamationmark")
         } description: {
-            Text("登录后可读取收藏歌曲、歌单、订阅播客、音乐云盘和播放记录；已下载歌曲无需登录。")
+            Text(
+                AppFeatureAvailability.downloads
+                    ? "登录后可读取收藏歌曲、歌单、订阅播客、音乐云盘和播放记录；已下载歌曲无需登录。"
+                    : "登录后可读取收藏歌曲、歌单、订阅播客、音乐云盘和播放记录。"
+            )
         } actions: {
             Button("登录网易云音乐") {
                 showsLogin = true
@@ -171,7 +178,9 @@ struct LibraryView: View {
         case .podcasts:
             "在订阅播客中搜索"
         case .downloads:
-            "在下载歌曲中搜索"
+            AppFeatureAvailability.downloads
+                ? "在下载歌曲中搜索"
+                : "搜索歌曲"
         case .cloud:
             "在云盘歌曲中搜索"
         case .history:

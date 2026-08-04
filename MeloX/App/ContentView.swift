@@ -247,7 +247,10 @@ struct ContentView: View {
             .alert(
                 "下载操作失败",
                 isPresented: Binding(
-                    get: { downloads.errorMessage != nil },
+                    get: {
+                        AppFeatureAvailability.downloads
+                            && downloads.errorMessage != nil
+                    },
                     set: { isPresented in
                         if !isPresented {
                             downloads.clearError()

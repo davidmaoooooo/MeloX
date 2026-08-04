@@ -40,9 +40,9 @@ struct ReleaseNotesView: View {
             }
 
             Section {
-                if let releaseNotes, !releaseNotes.entries.isEmpty {
-                    ForEach(releaseNotes.entries.indices, id: \.self) { index in
-                        Text(releaseNotes.entries[index])
+                if !visibleEntries.isEmpty {
+                    ForEach(visibleEntries.indices, id: \.self) { index in
+                        Text(visibleEntries[index])
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
@@ -113,9 +113,7 @@ struct ReleaseNotesView: View {
                     .foregroundStyle(.orange)
 
                     Text(
-                        "重置范围包含播放器、歌词、均衡器、全屏天际歌词、"
-                            + "悬浮歌词与文字 PV；账号、下载、歌单和播放记录"
-                            + "不会受到影响。"
+                        resetScopeDescription
                     )
                 }
             }
@@ -127,6 +125,22 @@ struct ReleaseNotesView: View {
     private var displayVersion: String {
         releaseNotes?.displayVersion
             ?? AppVersion.displayName(for: currentVersion)
+    }
+
+    private var visibleEntries: [String] {
+        let entries = releaseNotes?.entries ?? []
+        guard !AppFeatureAvailability.downloads else { return entries }
+        return entries.filter { !$0.contains("下载") }
+    }
+
+    private var resetScopeDescription: String {
+        if AppFeatureAvailability.downloads {
+            return "重置范围包含播放器、歌词、均衡器、全屏天际歌词、"
+                + "悬浮歌词与文字 PV；账号、下载、歌单和播放记录"
+                + "不会受到影响。"
+        }
+        return "重置范围包含播放器、歌词、均衡器、全屏天际歌词、"
+            + "悬浮歌词与文字 PV；账号、歌单和播放记录不会受到影响。"
     }
 
     private var emptyStateDescription: String {

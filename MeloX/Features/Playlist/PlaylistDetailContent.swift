@@ -12,7 +12,7 @@ struct PlaylistDetailContent: View {
     let loadedTrackOffset: Int
     let isLoadingMoreTracks: Bool
     let loadMoreTracksError: String?
-    let downloadCoordinator: MusicCollectionDownloadCoordinator
+    let downloadCoordinator: MusicCollectionDownloadCoordinator?
     let onRetry: () -> Void
     let onRefresh: () async -> Void
     let onLoadMore: () async -> Void

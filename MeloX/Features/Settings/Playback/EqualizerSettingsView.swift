@@ -12,7 +12,11 @@ struct EqualizerSettingsView: View {
             Section {
                 Toggle("图形均衡器", isOn: enabledBinding)
             } footer: {
-                Text("实时作用于网络播放与已下载歌曲；关闭后将绕过全部均衡处理。")
+                Text(
+                    AppFeatureAvailability.downloads
+                        ? "实时作用于网络播放与已下载歌曲；关闭后将绕过全部均衡处理。"
+                        : "实时作用于歌曲播放；关闭后将绕过全部均衡处理。"
+                )
             }
 
             Section {
