@@ -62,6 +62,7 @@ final class PlayerStore {
     private(set) var beatAnalysisStatus:
         PlaybackBeatAnalysisStatus = .idle
     private(set) var effectivePlaybackQuality: MusicQuality?
+    private(set) var sleepTimer: PlaybackSleepTimer
 
     var availablePlaybackQualities: [MusicQuality] {
         guard currentSong != nil else { return [] }
@@ -249,10 +250,16 @@ final class PlayerStore {
         lyricsLiveActivityController = LyricsLiveActivityController()
         self.lyricsNotificationController =
             lyricsNotificationController
+        sleepTimer = PlaybackSleepTimer()
         bindEngine()
         bindAutoMixCoordinator()
         bindRemoteCommands()
         applyVolumeControlMode()
+        sleepTimer.setExpirationHandler { [weak self] in
+            guard let self else { return }
+            self.engine.pause()
+            self.persistSnapshot()
+        }
     }
 
     func restore() async {

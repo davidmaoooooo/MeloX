@@ -34,6 +34,10 @@ struct NowPlayingSongActions: View {
                 ListenTogetherView()
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+            case .sleepTimer:
+                PlaybackSleepTimerSheet()
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
             case .beatNetDebug:
                 BeatNetDebugSheet()
                     .presentationDetents([.large])
@@ -64,6 +68,19 @@ struct NowPlayingSongActions: View {
 
     private var songMenu: some View {
         Menu {
+            Button {
+                presentedSheet = .sleepTimer
+            } label: {
+                Label(
+                    player.sleepTimer.isActive
+                        ? "定时关闭（已开启）"
+                        : "定时关闭",
+                    systemImage: "timer"
+                )
+            }
+
+            Divider()
+
             if let podcast = song.podcastMetadata {
                 Button {
                     player.addToPlaybackQueue(song)
@@ -211,6 +228,7 @@ private enum NowPlayingSongSheet: Identifiable {
     case comments(Song)
     case songWiki(Song)
     case listenTogether
+    case sleepTimer
     case beatNetDebug
 
     var id: String {
@@ -223,6 +241,8 @@ private enum NowPlayingSongSheet: Identifiable {
             "song-wiki-\(song.id)"
         case .listenTogether:
             "listen-together"
+        case .sleepTimer:
+            "sleep-timer"
         case .beatNetDebug:
             "beatnet-debug"
         }
