@@ -1,6 +1,10 @@
 import Foundation
 
 enum AppVersion {
+    private static let buildPrefix = 91
+    private static let buildPrefixScale = 100_000
+    private static let patchComponentScale = 100
+
     static func compare(_ lhs: String, to rhs: String) -> ComparisonResult {
         let lhsParts = normalizedParts(lhs)
         let rhsParts = normalizedParts(rhs)
@@ -31,6 +35,24 @@ enum AppVersion {
         return String(trimmedVersion.dropFirst())
     }
 
+    static func releaseVersion(fromBuildNumber buildNumber: String) -> String? {
+        let trimmedBuildNumber = buildNumber.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard let encodedVersion = Int(trimmedBuildNumber),
+              encodedVersion / buildPrefixScale == buildPrefix else {
+            return nil
+        }
+
+        let versionDigits = encodedVersion % buildPrefixScale
+        let majorScale = 10_000
+        let major = versionDigits / majorScale
+        let remainder = versionDigits % majorScale
+        let minor = remainder / patchComponentScale
+        let patch = remainder % patchComponentScale
+        return "\(major).\(minor).\(patch)"
+    }
+
     private static func normalizedParts(_ version: String) -> [Int] {
         version
             .lowercased()
@@ -44,10 +66,17 @@ enum AppVersion {
 extension Bundle {
     var appVersion: String {
         object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "1.0"
+            ?? "2.0"
     }
 
     var appBuildNumber: String {
         object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }
+
+    /// Build numbers use a fixed `91` prefix, one digit for major, and two
+    /// digits each for minor/patch. The short version stays fixed at 2.0.
+    var appReleaseVersion: String {
+        AppVersion.releaseVersion(fromBuildNumber: appBuildNumber)
+            ?? appBuildNumber
     }
 }

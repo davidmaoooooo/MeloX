@@ -13,7 +13,7 @@ struct ReleaseNotesView: View {
 
     init(
         releaseNotes: AppReleaseNotes?,
-        currentVersion: String = Bundle.main.appVersion
+        currentVersion: String = Bundle.main.appReleaseVersion
     ) {
         self.releaseNotes = releaseNotes
         self.currentVersion = currentVersion

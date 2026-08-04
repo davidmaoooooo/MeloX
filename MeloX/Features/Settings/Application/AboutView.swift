@@ -32,7 +32,7 @@ struct AboutView: View {
             }
 
             Section("应用信息") {
-                LabeledContent("版本", value: appVersion)
+                LabeledContent("版本", value: releaseVersion)
                 LabeledContent("构建版本", value: buildNumber)
             }
 
@@ -48,7 +48,7 @@ struct AboutView: View {
 
                         Spacer()
 
-                        Text("MeloX \(appVersion)")
+                        Text("MeloX \(releaseVersion)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -142,12 +142,12 @@ struct AboutView: View {
         }
     }
 
-    private var appVersion: String {
-        Bundle.main.appVersion
-    }
-
     private var buildNumber: String {
         Bundle.main.appBuildNumber
+    }
+
+    private var releaseVersion: String {
+        Bundle.main.appReleaseVersion
     }
 
     private let telegramURL = URL(string: "https://t.me/melox_official")!
@@ -162,7 +162,9 @@ struct AboutView: View {
         }
 
         do {
-            let result = try await AppUpdateService.checkLatestRelease(currentVersion: appVersion)
+            let result = try await AppUpdateService.checkLatestRelease(
+                currentVersion: releaseVersion
+            )
 
             if result.hasUpdate {
                 updateAlert = AppUpdateAlert(

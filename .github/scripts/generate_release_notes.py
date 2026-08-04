@@ -11,6 +11,11 @@ import subprocess
 import sys
 
 
+BUILD_PREFIX = 91
+BUILD_PREFIX_SCALE = 100_000
+PATCH_COMPONENT_SCALE = 100
+
+
 def git(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *arguments],
@@ -93,6 +98,20 @@ def version_label(reference: str | None) -> str | None:
     return reference_name
 
 
+def release_version(build_number: str) -> str:
+    if not build_number.isascii() or not build_number.isdecimal():
+        raise ValueError("构建号必须是纯数字")
+
+    encoded_version = int(build_number)
+    prefix, version_digits = divmod(encoded_version, BUILD_PREFIX_SCALE)
+    if prefix != BUILD_PREFIX:
+        raise ValueError("构建号必须以固定前缀 91 开头")
+
+    major, remainder = divmod(version_digits, 10_000)
+    minor, patch = divmod(remainder, PATCH_COMPONENT_SCALE)
+    return f"{major}.{minor}.{patch}"
+
+
 def validate_release_notes(path: Path) -> int:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -115,7 +134,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--current-ref", default="HEAD")
     parser.add_argument("--previous-ref")
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--build-number", required=True)
     parser.add_argument("--notes", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
@@ -125,6 +144,7 @@ def main() -> int:
     arguments = parse_arguments()
 
     try:
+        version = release_version(arguments.build_number)
         current_commit = resolve_commit(arguments.current_ref)
         current_tag = exact_version_tag(current_commit, arguments.current_ref)
         previous_reference = arguments.previous_ref or infer_previous_version_tag(
@@ -146,7 +166,7 @@ def main() -> int:
 
     payload = {
         "schemaVersion": 2,
-        "version": arguments.version.removeprefix("v"),
+        "version": version,
         "sourceRevision": current_commit,
         "currentRef": current_tag or arguments.current_ref,
         "previousRef": previous_reference,

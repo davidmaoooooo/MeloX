@@ -354,7 +354,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\" --version \"${MARKETING_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nelse\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --version \"${MARKETING_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nfi\n\n/bin/cp \"${RELEASE_NOTES_SOURCE}\" \"${MARKDOWN_OUTPUT_PATH}\"\n";
+			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\" --build-number \"${CURRENT_PROJECT_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nelse\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --build-number \"${CURRENT_PROJECT_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nfi\n\n/bin/cp \"${RELEASE_NOTES_SOURCE}\" \"${MARKDOWN_OUTPUT_PATH}\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -405,7 +405,7 @@
 				CODE_SIGN_ENTITLEMENTS = MeloXLyricsWidget/MeloXLyricsWidget.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = LAW363CUU8;
 				ENABLE_PREVIEWS = YES;
@@ -416,7 +416,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX.LyricsWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -561,7 +561,7 @@
 				CODE_SIGN_ENTITLEMENTS = MeloX/MeloX.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = LAW363CUU8;
 				ENABLE_PREVIEWS = YES;
@@ -577,7 +577,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -600,7 +600,7 @@
 				CODE_SIGN_ENTITLEMENTS = MeloX/MeloX.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = LAW363CUU8;
 				ENABLE_PREVIEWS = YES;
@@ -616,7 +616,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -638,7 +638,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=watchos*]" = LAW363CUU8;
 				ENABLE_PREVIEWS = YES;
@@ -648,7 +648,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -678,7 +678,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=watchos*]" = LAW363CUU8;
 				ENABLE_PREVIEWS = YES;
@@ -688,7 +688,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -718,7 +718,7 @@
 				CODE_SIGN_ENTITLEMENTS = MeloXLyricsWidget/MeloXLyricsWidget.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2607311;
+				CURRENT_PROJECT_VERSION = 9110102;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = LAW363CUU8;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -728,7 +728,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX.LyricsWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

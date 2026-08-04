@@ -24,7 +24,7 @@ struct MeloXApp: App {
     init() {
         let settings = AppSettings()
         let releaseNotes = AppReleaseNotesStore(
-            currentVersion: Bundle.main.appVersion,
+            currentVersion: Bundle.main.appReleaseVersion,
             hadCompletedOnboarding: settings.hasCompletedOnboarding,
             currentReleaseNotes: AppReleaseNotesLoader.load()
         )

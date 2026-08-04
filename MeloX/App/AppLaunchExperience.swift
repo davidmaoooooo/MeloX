@@ -111,7 +111,7 @@ private struct AppLaunchExperienceModifier: ViewModifier {
 
         do {
             let result = try await AppUpdateService.checkLatestRelease(
-                currentVersion: Bundle.main.appVersion
+                currentVersion: Bundle.main.appReleaseVersion
             )
             guard result.hasUpdate else { return }
 
