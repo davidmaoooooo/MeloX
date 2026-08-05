@@ -85,6 +85,12 @@ struct AboutView: View {
                 Text("MeloX 使用原生 SwiftUI 构建，专注于提供简洁、流畅的网易云音乐播放与歌词体验。")
             }
 
+            Section("股东") {
+                ForEach(shareholders, id: \.self) { shareholder in
+                    ShareholderShowcaseView(name: shareholder)
+                }
+            }
+
             Section("项目与社区") {
                 Link(destination: officialWebsiteURL) {
                     HStack(spacing: 12) {
@@ -164,6 +170,9 @@ struct AboutView: View {
 
     private let officialWebsiteURL = URL(string: "https://melox.luoxe.cn/")!
     private let telegramURL = URL(string: "https://t.me/melox_official")!
+
+    // 股东致谢（不分先后或排名）：J1 Champ1on
+    private let shareholders = ["J1 Champ1on"]
 
     @MainActor
     private func checkForUpdates() async {

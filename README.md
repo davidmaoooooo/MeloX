@@ -362,6 +362,12 @@ MeloX 使用固定 32 秒窗口、FP16 计算精度的 Core ML ML Program；模�
 - MeloX 不以绕过付费、版权或地区限制为目标。
 - Apple Watch 版本仍在开发中，暂不保证功能完整性和数据兼容性。
 
+## 股东
+
+感谢以下股东对 MeloX 的支持。名单仅作致谢，不代表任何先后或排名。
+
+- J1 Champ1on
+
 ## 特别鸣谢
 
 - [jayfunc/BetterLyrics](https://github.com/jayfunc/BetterLyrics)：逐字歌词渲染、光效与动效参考。
