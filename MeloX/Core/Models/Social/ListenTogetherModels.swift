@@ -454,6 +454,9 @@ struct ListenTogetherInvitation: Hashable {
         guard let inviterID = Self.queryValue(
             named: "inviterId",
             in: items
+        ) ?? Self.queryValue(
+            named: "inviterUid",
+            in: items
         ), !inviterID.isEmpty else {
             throw ListenTogetherInvitationError.missingInviterID
         }
