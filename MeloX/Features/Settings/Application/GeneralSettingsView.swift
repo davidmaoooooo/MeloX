@@ -52,6 +52,19 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Section {
+                Toggle(
+                    "识别剪贴板中的网易云链接",
+                    isOn: $settings.recognizesClipboardLinksOnLaunch
+                )
+            } header: {
+                Text("剪贴板")
+            } footer: {
+                Text(
+                    "开启后，MeloX 会在每次启动时读取一次剪贴板；识别到网易云歌曲或一起听链接时，会先询问是否打开。系统可能显示粘贴权限提示。"
+                )
+            }
+
             if !settings.embeddedLibraryPages.isEmpty {
                 Section {
                     Toggle(

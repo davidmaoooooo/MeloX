@@ -11,6 +11,7 @@ final class AppSettings {
     static let defaultPlayerBackgroundBeatEffectsEnabled = false
     static let defaultBeatNetDebugEnabled = false
     static let defaultStartsHeartModeOnLaunch = false
+    static let defaultRecognizesClipboardLinksOnLaunch = false
     static let defaultSystemNowPlayingLyricsEnabled = true
     static let defaultSystemNowPlayingLyricsTitleFormat = "{歌词}"
     static let defaultSystemNowPlayingLyricsSubtitleFormat =
@@ -228,6 +229,8 @@ final class AppSettings {
         static let rememberedNowPlayingPage = "rememberedNowPlayingPage"
         static let previousRestartsCurrentSong = "previousRestartsCurrentSong"
         static let startsHeartModeOnLaunch = "startsHeartModeOnLaunch"
+        static let recognizesClipboardLinksOnLaunch =
+            "recognizesClipboardLinksOnLaunch"
         static let checksUpdatesOnLaunch = "checksUpdatesOnLaunch"
         static let automaticallyCachesFrequentlyPlayedSongs = "automaticallyCachesFrequentlyPlayedSongs"
         static let automaticCachePlaybackThreshold = "automaticCachePlaybackThreshold"
@@ -1112,6 +1115,15 @@ final class AppSettings {
         }
     }
 
+    var recognizesClipboardLinksOnLaunch: Bool {
+        didSet {
+            defaults.set(
+                recognizesClipboardLinksOnLaunch,
+                forKey: Key.recognizesClipboardLinksOnLaunch
+            )
+        }
+    }
+
     var checksUpdatesOnLaunch: Bool {
         didSet { defaults.set(checksUpdatesOnLaunch, forKey: Key.checksUpdatesOnLaunch) }
     }
@@ -1624,6 +1636,9 @@ final class AppSettings {
         startsHeartModeOnLaunch = defaults.object(
             forKey: Key.startsHeartModeOnLaunch
         ) as? Bool ?? Self.defaultStartsHeartModeOnLaunch
+        recognizesClipboardLinksOnLaunch = defaults.object(
+            forKey: Key.recognizesClipboardLinksOnLaunch
+        ) as? Bool ?? Self.defaultRecognizesClipboardLinksOnLaunch
         checksUpdatesOnLaunch = defaults.object(forKey: Key.checksUpdatesOnLaunch) as? Bool ?? true
         automaticallyCachesFrequentlyPlayedSongs = defaults.object(
             forKey: Key.automaticallyCachesFrequentlyPlayedSongs

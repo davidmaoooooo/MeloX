@@ -285,6 +285,9 @@ struct ContentView: View {
                 )
             }
             .coordinateListenTogether()
+            .recognizesClipboardLinksOnLaunch { song in
+                openMusicRoute(.song(song))
+            }
             .appLaunchExperience()
     }
 

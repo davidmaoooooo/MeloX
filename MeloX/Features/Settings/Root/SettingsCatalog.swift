@@ -214,7 +214,7 @@ enum SettingsCatalog {
                 SettingsCatalogItem(
                     route: .general,
                     title: "通用",
-                    subtitle: "主题、启动页面、导航与音乐库记忆",
+                    subtitle: "主题、启动页面、剪贴板链接与音乐库记忆",
                     systemImage: "gearshape",
                     keywords: [
                         "主题",
@@ -227,6 +227,10 @@ enum SettingsCatalog {
                         "发现",
                         "音乐库",
                         "搜索",
+                        "剪贴板",
+                        "歌曲链接",
+                        "一起听链接",
+                        "网易云链接",
                     ]
                 ),
             ]

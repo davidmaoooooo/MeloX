@@ -6,8 +6,12 @@ struct ListenTogetherView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(ListenTogetherStore.self) private var listenTogether
 
-    @State private var invitationText = ""
+    @State private var invitationText: String
     @State private var showsLeaveConfirmation = false
+
+    init(invitationText: String = "") {
+        _invitationText = State(initialValue: invitationText)
+    }
 
     var body: some View {
         NavigationStack {
