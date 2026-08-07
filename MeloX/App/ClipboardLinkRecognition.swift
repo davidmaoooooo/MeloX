@@ -1,13 +1,6 @@
 import SwiftUI
 import UIKit
 
-private struct ClipboardListenTogetherInvitation: Identifiable {
-    let invitationText: String
-    let roomID: String
-
-    var id: String { roomID }
-}
-
 private enum ClipboardLinkOpenError: LocalizedError {
     case songNotFound
 
@@ -27,9 +20,9 @@ struct ClipboardLinkRecognitionModifier: ViewModifier {
     let onOpenSong: (Song) -> Void
 
     @State private var hasInspectedClipboardOnLaunch = false
-    @State private var detectedLink: NeteaseClipboardLink?
+    @State private var detectedLink: NeteaseMusicLink?
     @State private var listenTogetherInvitation:
-        ClipboardListenTogetherInvitation?
+        NeteaseListenTogetherLink?
     @State private var isOpeningSong = false
     @State private var errorMessage: String?
 
@@ -119,21 +112,18 @@ struct ClipboardLinkRecognitionModifier: ViewModifier {
 
         guard settings.recognizesClipboardLinksOnLaunch,
               let text = UIPasteboard.general.string,
-              let link = NeteaseClipboardLinkParser.parse(text) else {
+              let link = NeteaseMusicLinkParser.parse(text) else {
             return
         }
         detectedLink = link
     }
 
-    private func open(_ link: NeteaseClipboardLink) {
+    private func open(_ link: NeteaseMusicLink) {
         switch link {
         case .song(let id):
             openSong(id: id)
-        case .listenTogether(let invitationText, let roomID):
-            listenTogetherInvitation = ClipboardListenTogetherInvitation(
-                invitationText: invitationText,
-                roomID: roomID
-            )
+        case .listenTogether(let invitation):
+            listenTogetherInvitation = invitation
         }
     }
 
@@ -159,7 +149,7 @@ struct ClipboardLinkRecognitionModifier: ViewModifier {
     }
 }
 
-private extension NeteaseClipboardLink {
+private extension NeteaseMusicLink {
     var promptTitle: String {
         switch self {
         case .song:

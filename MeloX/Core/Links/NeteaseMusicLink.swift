@@ -1,21 +1,28 @@
 import Foundation
 
-enum NeteaseClipboardLink: Hashable, Identifiable {
+struct NeteaseListenTogetherLink: Hashable, Identifiable {
+    let invitationText: String
+    let roomID: String
+
+    var id: String { roomID }
+}
+
+enum NeteaseMusicLink: Hashable, Identifiable {
     case song(id: Int)
-    case listenTogether(invitationText: String, roomID: String)
+    case listenTogether(NeteaseListenTogetherLink)
 
     var id: String {
         switch self {
         case .song(let id):
             "song-\(id)"
-        case .listenTogether(_, let roomID):
-            "listen-together-\(roomID)"
+        case .listenTogether(let invitation):
+            "listen-together-\(invitation.roomID)"
         }
     }
 }
 
-enum NeteaseClipboardLinkParser {
-    static func parse(_ text: String) -> NeteaseClipboardLink? {
+enum NeteaseMusicLinkParser {
+    static func parse(_ text: String) -> NeteaseMusicLink? {
         let trimmed = text.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -27,8 +34,10 @@ enum NeteaseClipboardLinkParser {
                    text: url.absoluteString
                ) {
                 return .listenTogether(
-                    invitationText: trimmed,
-                    roomID: invitation.roomID
+                    NeteaseListenTogetherLink(
+                        invitationText: trimmed,
+                        roomID: invitation.roomID
+                    )
                 )
             }
 

@@ -14,11 +14,17 @@ struct SearchView: View {
     @State private var playlists: [Playlist] = []
     @State private var podcasts: [Podcast] = []
     @State private var completedRequest: SearchRequest?
+    @State private var recognizedLink: NeteaseMusicLink?
+    @State private var linkedSong: Song?
+    @State private var presentedListenTogetherLink:
+        NeteaseListenTogetherLink?
 
     var body: some View {
         Group {
             if trimmedQuery.isEmpty {
                 SearchDiscoveryView()
+            } else if let recognizedLink {
+                linkResult(for: recognizedLink)
             } else {
                 searchResults
             }
@@ -27,7 +33,7 @@ struct SearchView: View {
         .searchable(
             text: $query,
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "歌曲、歌手、专辑、歌单或播客"
+            prompt: "音乐内容或网易云链接"
         )
         .searchScopes($scope) {
             ForEach(SearchKind.allCases) { kind in
@@ -37,13 +43,25 @@ struct SearchView: View {
         .overlay {
             if !trimmedQuery.isEmpty, case .failed(let message) = phase {
                 ContentUnavailableView(
-                    "搜索失败",
-                    systemImage: "exclamationmark.magnifyingglass",
+                    recognizedLink == nil ? "搜索失败" : "无法打开链接",
+                    systemImage: recognizedLink == nil
+                        ? "exclamationmark.magnifyingglass"
+                        : "link.badge.plus",
                     description: Text(message)
                 )
-            } else if !trimmedQuery.isEmpty, phase == .loaded, resultIsEmpty {
+            } else if recognizedLink == nil,
+                      !trimmedQuery.isEmpty,
+                      phase == .loaded,
+                      resultIsEmpty {
                 ContentUnavailableView.search(text: query)
             }
+        }
+        .sheet(item: $presentedListenTogetherLink) { invitation in
+            ListenTogetherView(
+                invitationText: invitation.invitationText
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .alert(
             "收藏失败",
@@ -145,6 +163,49 @@ struct SearchView: View {
         .listStyle(.plain)
     }
 
+    @ViewBuilder
+    private func linkResult(for link: NeteaseMusicLink) -> some View {
+        switch link {
+        case .song:
+            List {
+                if phase == .loading {
+                    HStack {
+                        Spacer()
+                        ProgressView("正在读取歌曲链接")
+                        Spacer()
+                    }
+                } else if let linkedSong {
+                    Section("链接中的歌曲") {
+                        NavigationLink(
+                            value: MusicRoute.song(linkedSong)
+                        ) {
+                            TrackRowView(
+                                song: linkedSong,
+                                showsArtwork: true
+                            )
+                        }
+                        .musicMatchedTransitionSource(
+                            for: MusicRoute.song(linkedSong)
+                        )
+                    }
+                }
+            }
+            .listStyle(.plain)
+
+        case .listenTogether(let invitation):
+            ContentUnavailableView {
+                Label("一起听邀请", systemImage: "person.2.wave.2")
+            } description: {
+                Text("已识别网易云音乐一起听分享链接。")
+            } actions: {
+                Button("查看邀请") {
+                    presentedListenTogetherLink = invitation
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -163,10 +224,20 @@ struct SearchView: View {
         let keywords = request.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keywords.isEmpty else {
             clearResults()
+            recognizedLink = nil
+            linkedSong = nil
             phase = .loaded
             completedRequest = request
             return
         }
+
+        if let link = NeteaseMusicLinkParser.parse(keywords) {
+            await resolve(link, for: request)
+            return
+        }
+
+        recognizedLink = nil
+        linkedSong = nil
         phase = .loading
         try? await Task.sleep(for: .milliseconds(350))
         guard !Task.isCancelled else { return }
@@ -193,6 +264,41 @@ struct SearchView: View {
             return
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func resolve(
+        _ link: NeteaseMusicLink,
+        for request: SearchRequest
+    ) async {
+        recognizedLink = link
+        linkedSong = nil
+        clearResults()
+
+        switch link {
+        case .song(let id):
+            phase = .loading
+            do {
+                let details = try await api.songDetails(ids: [id])
+                try Task.checkCancellation()
+                guard let song = details.first else {
+                    phase = .failed(
+                        "网易云音乐没有返回这首歌曲的信息。"
+                    )
+                    return
+                }
+                linkedSong = song
+                phase = .loaded
+                completedRequest = request
+            } catch is CancellationError {
+                return
+            } catch {
+                phase = .failed(error.localizedDescription)
+            }
+
+        case .listenTogether:
+            phase = .loaded
+            completedRequest = request
         }
     }
 
