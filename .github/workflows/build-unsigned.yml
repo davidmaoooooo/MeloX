@@ -144,7 +144,7 @@ jobs:
               ;;
             macos)
               echo "build_script=build_macos_dmg.sh" >> "${GITHUB_OUTPUT}"
-              echo "asset_path=build/MeloX-macOS.dmg" >> "${GITHUB_OUTPUT}"
+              echo "asset_path=build/MeloX-macOS-*.dmg" >> "${GITHUB_OUTPUT}"
               ;;
             *)
               echo "未知平台：${PLATFORM}"
@@ -236,10 +236,11 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${PLATFORM}" == "macos" ]]; then
-            echo "filename=MeloX-macOS.dmg" >> "${GITHUB_OUTPUT}"
+            echo "is_macos=true" >> "${GITHUB_OUTPUT}"
             echo "project=MeloX macOS" >> "${GITHUB_OUTPUT}"
             echo "build_job=Build macos artifact" >> "${GITHUB_OUTPUT}"
           else
+            echo "is_macos=false" >> "${GITHUB_OUTPUT}"
             echo "filename=MeloX-iOS-unsigned.ipa" >> "${GITHUB_OUTPUT}"
             echo "project=MeloX iOS + Apple Watch" >> "${GITHUB_OUTPUT}"
             echo "build_job=Build ios artifact" >> "${GITHUB_OUTPUT}"
@@ -280,26 +281,58 @@ jobs:
             exit 1
           fi
 
-          ASSET_PATH="telegram-assets/${{ steps.target.outputs.filename }}"
           CAPTION_PATH="${RUNNER_TEMP}/telegram-caption.txt"
-          if [[ ! -f "${ASSET_PATH}" || ! -f "${CAPTION_PATH}" ]]; then
-            echo "::error::找不到构建产物或 Telegram Caption"
+          if [[ ! -f "${CAPTION_PATH}" ]]; then
+            echo "::error::找不到 Telegram Caption"
             exit 1
           fi
 
           CAPTION="$(< "${CAPTION_PATH}")"
-          curl \
-            --fail-with-body \
-            --silent \
-            --show-error \
-            --connect-timeout 15 \
-            --max-time 600 \
-            --request POST \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
-            --form "document=@${ASSET_PATH};type=application/octet-stream" \
-            --form-string "caption=${CAPTION}" \
-            > /dev/null
+          if [[ "${{ steps.target.outputs.is_macos }}" == "true" ]]; then
+            APPLE_SILICON_PATH="telegram-assets/MeloX-macOS-Apple-Silicon.dmg"
+            INTEL_PATH="telegram-assets/MeloX-macOS-Intel.dmg"
+            if [[ ! -f "${APPLE_SILICON_PATH}" || ! -f "${INTEL_PATH}" ]]; then
+              echo "::error::找不到 Apple Silicon 或 Intel DMG"
+              exit 1
+            fi
+            MEDIA="$(
+              jq -cn --arg caption "${CAPTION}" '[
+                {type: "document", media: "attach://apple_silicon", caption: $caption},
+                {type: "document", media: "attach://intel"}
+              ]'
+            )"
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --connect-timeout 15 \
+              --max-time 600 \
+              --request POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form-string "media=${MEDIA}" \
+              --form "apple_silicon=@${APPLE_SILICON_PATH};type=application/octet-stream" \
+              --form "intel=@${INTEL_PATH};type=application/octet-stream" \
+              > /dev/null
+          else
+            ASSET_PATH="telegram-assets/${{ steps.target.outputs.filename }}"
+            if [[ ! -f "${ASSET_PATH}" ]]; then
+              echo "::error::找不到 iOS 构建产物"
+              exit 1
+            fi
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --connect-timeout 15 \
+              --max-time 600 \
+              --request POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form "document=@${ASSET_PATH};type=application/octet-stream" \
+              --form-string "caption=${CAPTION}" \
+              > /dev/null
+          fi
 
   release:
     name: Create ${{ matrix.platform }} GitHub Release
@@ -337,7 +370,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${PLATFORM}" == "macos" ]]; then
-            echo "filename=MeloX-macOS.dmg" >> "${GITHUB_OUTPUT}"
+            echo "filename=MeloX-macOS-*.dmg" >> "${GITHUB_OUTPUT}"
             echo "release_name=MeloX macOS ${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
             echo "make_latest=false" >> "${GITHUB_OUTPUT}"
           else
@@ -388,7 +421,8 @@ jobs:
 
           ## 下载说明
 
-          - \`MeloX-macOS.dmg\`：macOS 未签名安装镜像
+          - \`MeloX-macOS-Apple-Silicon.dmg\`：Apple 芯片（M 系列，\`arm64\`）未签名安装镜像
+          - \`MeloX-macOS-Intel.dmg\`：Intel（\`x86_64\`）未签名安装镜像
 
           ## 安装说明
 
@@ -501,11 +535,12 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${PLATFORM}" == "macos" ]]; then
-            echo "filename=MeloX-macOS.dmg" >> "${GITHUB_OUTPUT}"
+            echo "is_macos=true" >> "${GITHUB_OUTPUT}"
             echo "project=MeloX macOS" >> "${GITHUB_OUTPUT}"
             echo "install_note=若提示应用已损坏或无法验证开发者，请运行：xattr -dr com.apple.quarantine '/Applications/MeloX Desktop.app'" >> "${GITHUB_OUTPUT}"
-            echo "distribution_note=本消息附件为未签名 DMG；已签名并经 Apple 公证的 DMG 请前往官网获取。" >> "${GITHUB_OUTPUT}"
+            echo "distribution_note=本消息附件分为 Apple 芯片与 Intel 两份未签名 DMG；已签名并经 Apple 公证的对应版本请前往官网获取。" >> "${GITHUB_OUTPUT}"
           else
+            echo "is_macos=false" >> "${GITHUB_OUTPUT}"
             echo "filename=MeloX-iOS-unsigned.ipa" >> "${GITHUB_OUTPUT}"
             echo "project=MeloX iOS + Apple Watch" >> "${GITHUB_OUTPUT}"
             echo "install_note=" >> "${GITHUB_OUTPUT}"
@@ -543,30 +578,63 @@ jobs:
             exit 1
           fi
 
-          ASSET_PATH="telegram-assets/${{ steps.target.outputs.filename }}"
           CAPTION="$(< "${RUNNER_TEMP}/telegram-release-caption.txt")"
           RESPONSE_FILE="${RUNNER_TEMP}/telegram-release-response.json"
-          if ! curl \
-              --fail-with-body \
-              --silent \
-              --show-error \
-              --connect-timeout 15 \
-              --max-time 600 \
-              --request POST \
-              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
-              --form-string "disable_notification=false" \
-              --form "document=@${ASSET_PATH};type=application/octet-stream" \
-              --form-string "caption=${CAPTION}" \
-              --output "${RESPONSE_FILE}"; then
-            echo "::error::发送 Telegram Release 失败"
-            exit 1
+          if [[ "${{ steps.target.outputs.is_macos }}" == "true" ]]; then
+            APPLE_SILICON_PATH="telegram-assets/MeloX-macOS-Apple-Silicon.dmg"
+            INTEL_PATH="telegram-assets/MeloX-macOS-Intel.dmg"
+            if [[ ! -f "${APPLE_SILICON_PATH}" || ! -f "${INTEL_PATH}" ]]; then
+              echo "::error::找不到 Apple Silicon 或 Intel DMG"
+              exit 1
+            fi
+            MEDIA="$(
+              jq -cn --arg caption "${CAPTION}" '[
+                {type: "document", media: "attach://apple_silicon", caption: $caption},
+                {type: "document", media: "attach://intel"}
+              ]'
+            )"
+            if ! curl \
+                --fail-with-body \
+                --silent \
+                --show-error \
+                --connect-timeout 15 \
+                --max-time 600 \
+                --request POST \
+                "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+                --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+                --form-string "disable_notification=false" \
+                --form-string "media=${MEDIA}" \
+                --form "apple_silicon=@${APPLE_SILICON_PATH};type=application/octet-stream" \
+                --form "intel=@${INTEL_PATH};type=application/octet-stream" \
+                --output "${RESPONSE_FILE}"; then
+              echo "::error::发送 macOS Telegram Release 失败"
+              exit 1
+            fi
+            MESSAGE_ID="$(jq -er '.result[0].message_id' "${RESPONSE_FILE}")"
+          else
+            ASSET_PATH="telegram-assets/${{ steps.target.outputs.filename }}"
+            if [[ ! -f "${ASSET_PATH}" ]]; then
+              echo "::error::找不到 iOS Release 产物"
+              exit 1
+            fi
+            if ! curl \
+                --fail-with-body \
+                --silent \
+                --show-error \
+                --connect-timeout 15 \
+                --max-time 600 \
+                --request POST \
+                "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+                --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+                --form-string "disable_notification=false" \
+                --form "document=@${ASSET_PATH};type=application/octet-stream" \
+                --form-string "caption=${CAPTION}" \
+                --output "${RESPONSE_FILE}"; then
+              echo "::error::发送 iOS Telegram Release 失败"
+              exit 1
+            fi
+            MESSAGE_ID="$(jq -er '.result.message_id' "${RESPONSE_FILE}")"
           fi
-
-          MESSAGE_ID="$(
-            python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["result"]["message_id"])' \
-              "${RESPONSE_FILE}"
-          )"
           curl \
             --fail-with-body \
             --silent \

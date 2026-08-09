@@ -30,11 +30,17 @@ TOOL_DIRECTORY = Path(__file__).resolve().parent
 PROJECT_ROOT = TOOL_DIRECTORY.parents[1]
 BUILD_DIRECTORY = PROJECT_ROOT / "build"
 BUILD_SCRIPT = PROJECT_ROOT / "build_macos_dmg.sh"
-DEFAULT_APP_PATH = (
-    BUILD_DIRECTORY
-    / "DerivedData-macOS/Build/Products/Release/MeloX Desktop.app"
-)
-DEFAULT_OUTPUT_PATH = BUILD_DIRECTORY / "MeloX-macOS-notarized.dmg"
+DEFAULT_APP_PATHS = {
+    "arm64": BUILD_DIRECTORY
+    / "DerivedData-macOS-arm64/Build/Products/Release/MeloX Desktop.app",
+    "x86_64": BUILD_DIRECTORY
+    / "DerivedData-macOS-x86_64/Build/Products/Release/MeloX Desktop.app",
+}
+DEFAULT_OUTPUT_DIRECTORY = BUILD_DIRECTORY
+ARCHITECTURE_VARIANTS = {
+    "arm64": ("Apple Silicon", "Apple-Silicon"),
+    "x86_64": ("Intel", "Intel"),
+}
 ENTITLEMENTS_PATH = PROJECT_ROOT / "MeloXDesktop/MeloXDesktop.entitlements"
 TESTFLIGHT_TOOL_PATH = (
     PROJECT_ROOT / "Tools/TestFlightUploader/upload_testflight.py"
@@ -84,6 +90,7 @@ def run_command(
     label: str,
     *,
     cwd: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[bytes]:
     stop_event = threading.Event()
@@ -113,6 +120,7 @@ def run_command(
         result = subprocess.run(
             list(command),
             cwd=str(cwd) if cwd else None,
+            env=dict(env) if env is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
@@ -136,6 +144,7 @@ def require_tools() -> None:
         Path("/usr/bin/codesign"),
         Path("/usr/bin/ditto"),
         Path("/usr/bin/hdiutil"),
+        Path("/usr/bin/lipo"),
         Path("/usr/bin/security"),
         Path("/usr/sbin/spctl"),
         Path("/usr/bin/xcrun"),
@@ -319,13 +328,50 @@ def load_app_metadata(app_path: Path) -> AppMetadata:
     return metadata
 
 
-def build_unsigned_app() -> Path:
+def build_unsigned_apps(architectures: Sequence[str]) -> dict[str, Path]:
     if not BUILD_SCRIPT.is_file():
         raise ReleaseError(f"找不到 macOS 构建脚本: {BUILD_SCRIPT}")
-    run_command([str(BUILD_SCRIPT)], "构建 macOS 未签名 App", cwd=PROJECT_ROOT)
-    if not DEFAULT_APP_PATH.is_dir():
-        raise ReleaseError(f"构建成功但找不到 App: {DEFAULT_APP_PATH}")
-    return DEFAULT_APP_PATH
+    environment = os.environ.copy()
+    environment["MELOX_MAC_ARCHS"] = " ".join(architectures)
+    run_command(
+        [str(BUILD_SCRIPT)],
+        "构建 macOS 分架构未签名 App",
+        cwd=PROJECT_ROOT,
+        env=environment,
+    )
+    app_paths: dict[str, Path] = {}
+    for architecture in architectures:
+        app_path = DEFAULT_APP_PATHS[architecture]
+        if not app_path.is_dir():
+            raise ReleaseError(
+                f"构建成功但找不到 {ARCHITECTURE_VARIANTS[architecture][0]} App: "
+                f"{app_path}"
+            )
+        app_paths[architecture] = app_path
+    return app_paths
+
+
+def validate_app_architecture(app_path: Path, architecture: str) -> None:
+    info_path = app_path / "Contents/Info.plist"
+    try:
+        with info_path.open("rb") as info_file:
+            info = plistlib.load(info_file)
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise ReleaseError(f"无法读取 {info_path}: {error}") from error
+    executable_name = info.get("CFBundleExecutable")
+    if not isinstance(executable_name, str) or not executable_name:
+        raise ReleaseError(f"{info_path} 缺少 CFBundleExecutable。")
+    executable_path = app_path / "Contents/MacOS" / executable_name
+    result = run_command(
+        ["/usr/bin/lipo", "-archs", str(executable_path)],
+        f"检查 {ARCHITECTURE_VARIANTS[architecture][0]} App 架构",
+    )
+    actual_architectures = result.stdout.decode("utf-8", errors="replace").strip()
+    if actual_architectures != architecture:
+        raise ReleaseError(
+            f"{ARCHITECTURE_VARIANTS[architecture][0]} App 架构不正确："
+            f"期望 {architecture}，实际 {actual_architectures or '未知'}"
+        )
 
 
 def remove_existing_signatures(root: Path) -> None:
@@ -534,7 +580,7 @@ def notarize_and_staple(
 def confirm_release(
     identity: SigningIdentity,
     authentication: NotaryAuthentication,
-    output_path: Path,
+    output_paths: Mapping[str, Path],
     assume_yes: bool,
 ) -> bool:
     print_message("")
@@ -542,8 +588,12 @@ def confirm_release(
     print_message(f"签名证书: {identity.name}")
     print_message(f"证书 SHA-1: {identity.fingerprint}")
     print_message(f"公证认证: {authentication.description}")
-    print_message(f"输出: {output_path}")
-    print_message("该流程会将 DMG 上传至 Apple 公证服务。")
+    print_message("输出:")
+    for architecture, output_path in output_paths.items():
+        print_message(
+            f"  {ARCHITECTURE_VARIANTS[architecture][0]} ({architecture}): {output_path}"
+        )
+    print_message("该流程会将所选架构的 DMG 分别上传至 Apple 公证服务。")
     print_message("=========================================")
     if assume_yes:
         print_message("已通过 --yes 确认。")
@@ -572,6 +622,11 @@ def install_output(source: Path, destination: Path, allow_overwrite: bool) -> No
             temporary_output.unlink()
 
 
+def output_path_for_architecture(output_directory: Path, architecture: str) -> Path:
+    file_variant = ARCHITECTURE_VARIANTS[architecture][1]
+    return output_directory / f"MeloX-macOS-{file_variant}-notarized.dmg"
+
+
 def run(arguments: argparse.Namespace) -> None:
     require_tools()
     if not ENTITLEMENTS_PATH.is_file():
@@ -585,49 +640,102 @@ def run(arguments: argparse.Namespace) -> None:
         print_message("检查完成：本地签名和公证配置齐全，未构建或上传。")
         return
 
-    output_path = Path(arguments.output).expanduser().resolve()
-    if output_path.exists() and not arguments.force:
-        raise ReleaseError(f"输出已存在: {output_path}；可使用 --force 覆盖。")
+    architectures = list(dict.fromkeys(arguments.architectures))
+    output_directory = Path(arguments.output_directory).expanduser().resolve()
+    output_paths = {
+        architecture: output_path_for_architecture(output_directory, architecture)
+        for architecture in architectures
+    }
+    existing_outputs = [path for path in output_paths.values() if path.exists()]
+    if existing_outputs and not arguments.force:
+        raise ReleaseError(
+            "输出已存在："
+            + ", ".join(str(path) for path in existing_outputs)
+            + "；可使用 --force 覆盖。"
+        )
     if not confirm_release(
         identity,
         authentication,
-        output_path,
+        output_paths,
         arguments.yes,
     ):
         print_message("已取消，未构建或上传。")
         return
 
     if arguments.skip_build:
-        app_path = Path(arguments.app).expanduser().resolve()
-        if not app_path.is_dir():
-            raise ReleaseError(f"指定 App 不存在: {app_path}")
+        configured_apps = {
+            "arm64": arguments.app_arm64,
+            "x86_64": arguments.app_x86_64,
+        }
+        app_paths = {
+            architecture: Path(configured_apps[architecture]).expanduser().resolve()
+            for architecture in architectures
+        }
+        for architecture, app_path in app_paths.items():
+            if not app_path.is_dir():
+                raise ReleaseError(
+                    f"指定 {ARCHITECTURE_VARIANTS[architecture][0]} App 不存在: "
+                    f"{app_path}"
+                )
     else:
-        app_path = build_unsigned_app().resolve()
-    metadata = load_app_metadata(app_path)
-    print_message(
-        f"✓ App: {metadata.bundle_id} {metadata.marketing_version} ({metadata.build_version})"
-    )
+        app_paths = {
+            architecture: path.resolve()
+            for architecture, path in build_unsigned_apps(architectures).items()
+        }
 
+    expected_metadata: Optional[AppMetadata] = None
+    for architecture, app_path in app_paths.items():
+        metadata = load_app_metadata(app_path)
+        validate_app_architecture(app_path, architecture)
+        if expected_metadata is None:
+            expected_metadata = metadata
+        elif metadata != expected_metadata:
+            raise ReleaseError("Apple Silicon 与 Intel App 的版本或 Bundle ID 不一致。")
+        print_message(
+            f"✓ {ARCHITECTURE_VARIANTS[architecture][0]} App: "
+            f"{metadata.bundle_id} {metadata.marketing_version} ({metadata.build_version})"
+        )
+
+    temporary_outputs: dict[str, Path] = {}
+    submission_ids: dict[str, str] = {}
     with tempfile.TemporaryDirectory(prefix="melox-mac-release-") as temporary_directory:
         temporary_root = Path(temporary_directory)
-        signed_app = temporary_root / f"{APP_NAME}.app"
-        run_command(
-            ["/usr/bin/ditto", "--norsrc", str(app_path), str(signed_app)],
-            "复制待签名 App",
-        )
-        sign_app(signed_app, identity)
+        for architecture, app_path in app_paths.items():
+            variant_name = ARCHITECTURE_VARIANTS[architecture][0]
+            variant_root = temporary_root / architecture
+            variant_root.mkdir(parents=True)
+            signed_app = variant_root / f"{APP_NAME}.app"
+            print_message(f"")
+            print_message(f"========== 签名公证 {variant_name} 版 ==========")
+            run_command(
+                ["/usr/bin/ditto", "--norsrc", str(app_path), str(signed_app)],
+                f"复制 {variant_name} 待签名 App",
+            )
+            sign_app(signed_app, identity)
 
-        notarized_dmg = temporary_root / "MeloX-macOS-notarized.dmg"
-        create_and_sign_dmg(signed_app, notarized_dmg, identity)
-        submission_id = notarize_and_staple(notarized_dmg, authentication)
-        install_output(notarized_dmg, output_path, arguments.force)
+            notarized_dmg = variant_root / output_paths[architecture].name
+            create_and_sign_dmg(signed_app, notarized_dmg, identity)
+            submission_ids[architecture] = notarize_and_staple(
+                notarized_dmg,
+                authentication,
+            )
+            temporary_outputs[architecture] = notarized_dmg
 
-    size_mib = output_path.stat().st_size / 1024 / 1024
+        for architecture, temporary_output in temporary_outputs.items():
+            install_output(
+                temporary_output,
+                output_paths[architecture],
+                arguments.force,
+            )
+
     print_message("")
-    print_message("完成：已生成 Developer ID 签名、Apple 公证并装订票据的 DMG。")
-    print_message(f"文件: {output_path}")
-    print_message(f"大小: {size_mib:.1f} MiB")
-    print_message(f"公证 Submission ID: {submission_id}")
+    print_message("完成：已生成分架构的 Developer ID 签名、Apple 公证 DMG。")
+    for architecture, output_path in output_paths.items():
+        size_mib = output_path.stat().st_size / 1024 / 1024
+        print_message(
+            f"{ARCHITECTURE_VARIANTS[architecture][0]}: {output_path} "
+            f"({size_mib:.1f} MiB，Submission ID: {submission_ids[architecture]})"
+        )
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -635,10 +743,17 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         description="本地构建、Developer ID 签名并公证 MeloX macOS DMG"
     )
     parser.add_argument(
-        "--output",
+        "--architectures",
+        nargs="+",
+        choices=ARCHITECTURE_VARIANTS,
+        default=list(ARCHITECTURE_VARIANTS),
+        help="要生成的架构（默认: arm64 x86_64）",
+    )
+    parser.add_argument(
+        "--output-directory",
         type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help=f"输出 DMG（默认: {DEFAULT_OUTPUT_PATH}）",
+        default=DEFAULT_OUTPUT_DIRECTORY,
+        help=f"输出目录（默认: {DEFAULT_OUTPUT_DIRECTORY}）",
     )
     parser.add_argument(
         "--signing-identity",
@@ -655,13 +770,19 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-build",
         action="store_true",
-        help="跳过构建，签名 --app 指定的现有 App",
+        help="跳过构建，签名指定的现有分架构 App",
     )
     parser.add_argument(
-        "--app",
+        "--app-arm64",
         type=Path,
-        default=DEFAULT_APP_PATH,
-        help=f"--skip-build 使用的 App（默认: {DEFAULT_APP_PATH}）",
+        default=DEFAULT_APP_PATHS["arm64"],
+        help="--skip-build 使用的 Apple Silicon App",
+    )
+    parser.add_argument(
+        "--app-x86-64",
+        type=Path,
+        default=DEFAULT_APP_PATHS["x86_64"],
+        help="--skip-build 使用的 Intel App",
     )
     parser.add_argument(
         "--check-only",

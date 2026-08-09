@@ -1,6 +1,11 @@
 # MeloX macOS 本地签名公证
 
-GitHub Actions 继续发布未签名 DMG。网盘发布使用本工具生成的 `build/MeloX-macOS-notarized.dmg`，只有脚本完成 Developer ID 签名、Apple 公证、票据装订和 Gatekeeper 验证后才会写入该输出。
+GitHub Actions 继续发布未签名 DMG，但 Apple 芯片和 Intel 分别构建，不使用 Universal 二进制。网盘发布使用本工具生成的两份产物：
+
+- `build/MeloX-macOS-Apple-Silicon-notarized.dmg`：Apple 芯片（M 系列，`arm64`）。
+- `build/MeloX-macOS-Intel-notarized.dmg`：Intel（`x86_64`）。
+
+默认流程只有在两份 DMG 都完成 Developer ID 签名、Apple 公证、票据装订和 Gatekeeper 验证后，才会将它们写入最终输出目录。使用 `--architectures` 显式只选一个架构时，则只处理该产物。
 
 ## 前置条件
 
@@ -24,4 +29,11 @@ python3 Tools/MacRelease/build_macos_release.py \
   --notary-profile MeloX-notary
 ```
 
-上传网盘前，确认脚本最后输出“已生成 Developer ID 签名、Apple 公证并装订票据的 DMG”。
+如果只需要某一架构，可显式指定：
+
+```bash
+python3 Tools/MacRelease/build_macos_release.py --architectures arm64
+python3 Tools/MacRelease/build_macos_release.py --architectures x86_64
+```
+
+上传网盘前，确认脚本最后同时列出 Apple Silicon 和 Intel 两份 DMG 及各自的 Submission ID。
