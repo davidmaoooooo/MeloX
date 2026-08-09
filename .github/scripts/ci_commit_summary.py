@@ -17,7 +17,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 
-BUILD_JOB_NAME = "Build unsigned iOS IPA"
+DEFAULT_BUILD_JOB_NAME = "Build unsigned iOS IPA"
 CAPTION_LIMIT = 1024
 DEFAULT_API_URL = "https://api.github.com"
 PAGE_SIZE = 100
@@ -90,6 +90,7 @@ def run_has_successful_build(
     repository: str,
     token: str,
     run_id: int,
+    build_job_name: str,
 ) -> bool:
     payload = github_api_get(
         api_url,
@@ -99,7 +100,7 @@ def run_has_successful_build(
         {"filter": "latest", "per_page": PAGE_SIZE},
     )
     return any(
-        job.get("name") == BUILD_JOB_NAME and job.get("conclusion") == "success"
+        job.get("name") == build_job_name and job.get("conclusion") == "success"
         for job in payload.get("jobs", [])
     )
 
@@ -111,6 +112,7 @@ def find_previous_successful_build(
     workflow: str,
     current_run_id: int,
     current_sha: str,
+    build_job_name: str,
 ) -> tuple[str | None, int | None]:
     workflow_id = quote(workflow, safe="")
     for page in range(1, MAX_PAGES + 1):
@@ -129,7 +131,13 @@ def find_previous_successful_build(
             candidate_sha = resolve_commit(workflow_run.get("head_sha", ""))
             if candidate_sha is None or not is_ancestor(candidate_sha, current_sha):
                 continue
-            if run_has_successful_build(api_url, repository, token, run_id):
+            if run_has_successful_build(
+                api_url,
+                repository,
+                token,
+                run_id,
+                build_job_name,
+            ):
                 return candidate_sha, workflow_run.get("run_number")
         if len(runs) < PAGE_SIZE:
             break
@@ -213,8 +221,9 @@ def format_summary(
     repository: str,
     run_url: str,
     website_url: str,
+    project: str,
 ) -> str:
-    header = ["MeloX CI 构建完成"]
+    header = [f"{project} CI 构建完成"]
     if previous_sha is None:
         header.append(f"范围：首次 CI → CI #{current_run_number} ({current_sha[:7]})")
     else:
@@ -250,6 +259,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--current-run-number", required=True, type=int)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--workflow", default="build-unsigned.yml")
+    parser.add_argument("--build-job-name", default=DEFAULT_BUILD_JOB_NAME)
+    parser.add_argument("--project", default="MeloX")
     parser.add_argument("--fallback-sha", default="")
     parser.add_argument("--previous-sha")
     parser.add_argument("--run-url", required=True)
@@ -285,6 +296,7 @@ def main() -> int:
                 arguments.workflow,
                 arguments.current_run_id,
                 current_sha,
+                arguments.build_job_name,
             )
         except RuntimeError as error:
             print(f"::warning::{error}，将尝试使用事件 before SHA。", file=sys.stderr)
@@ -300,6 +312,7 @@ def main() -> int:
         arguments.repository,
         arguments.run_url,
         arguments.website_url,
+        arguments.project,
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(f"{caption}\n", encoding="utf-8")

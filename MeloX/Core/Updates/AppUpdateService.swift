@@ -15,17 +15,18 @@ struct AppUpdateResult: Equatable, Sendable {
 
 enum AppUpdateService {
     nonisolated static let repositoryURL = URL(string: "https://github.com/youshen2/MeloX")!
-    private nonisolated static let latestReleaseURL = URL(
-        string: "https://api.github.com/repos/youshen2/MeloX/releases/latest"
+    private nonisolated static let releasesURL = URL(
+        string: "https://api.github.com/repos/youshen2/MeloX/releases?per_page=100"
     )!
 
     nonisolated static func checkLatestRelease(currentVersion: String) async throws -> AppUpdateResult {
         var request = URLRequest(
-            url: latestReleaseURL,
+            url: releasesURL,
             cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 20
         )
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("MeloX", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -41,7 +42,14 @@ enum AppUpdateService {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let release = try decoder.decode(GitHubRelease.self, from: data)
+        let releases = try decoder.decode([GitHubRelease].self, from: data)
+        guard let release = releases.first(where: { release in
+            !release.isDraft
+                && !release.isPrerelease
+                && !release.tagName.lowercased().hasSuffix("_mac")
+        }) else {
+            throw AppUpdateError.noRelease
+        }
         let latestVersion = release.tagName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !latestVersion.isEmpty,
@@ -79,11 +87,15 @@ private nonisolated struct GitHubRelease: Decodable {
     let name: String?
     let htmlURL: String
     let publishedAt: Date?
+    let isDraft: Bool
+    let isPrerelease: Bool
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case name
         case htmlURL = "html_url"
         case publishedAt = "published_at"
+        case isDraft = "draft"
+        case isPrerelease = "prerelease"
     }
 }

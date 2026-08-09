@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from release_notes import PLATFORM_HEADINGS, parse_release_notes, write_platform_notes
+
 
 BUILD_PREFIX = 91
 BUILD_PREFIX_SCALE = 100_000
@@ -52,7 +54,16 @@ def is_ancestor(reference: str, current_commit: str) -> bool:
     )
 
 
-def exact_version_tag(current_commit: str, current_reference: str) -> str | None:
+def tag_matches_platform(tag: str, platform: str) -> bool:
+    is_macos_tag = tag.lower().endswith("_mac")
+    return is_macos_tag if platform == "macos" else not is_macos_tag
+
+
+def exact_version_tag(
+    current_commit: str,
+    current_reference: str,
+    platform: str,
+) -> str | None:
     tags = git(
         "tag",
         "--points-at",
@@ -61,6 +72,7 @@ def exact_version_tag(current_commit: str, current_reference: str) -> str | None
         "v*",
         "--sort=-version:refname",
     ).stdout.splitlines()
+    tags = [tag for tag in tags if tag_matches_platform(tag, platform)]
     if not tags:
         return None
 
@@ -73,26 +85,44 @@ def exact_version_tag(current_commit: str, current_reference: str) -> str | None
 def infer_previous_version_tag(
     current_commit: str,
     current_tag: str | None,
+    platform: str,
 ) -> str | None:
-    reference = f"{current_commit}^" if current_tag is not None else current_commit
     result = git(
-        "describe",
-        "--tags",
-        "--match",
+        "tag",
+        "--merged",
+        current_commit,
+        "--list",
         "v*",
-        "--abbrev=0",
-        reference,
+        "--sort=-version:refname",
         check=False,
     )
     if result.returncode != 0:
         return None
-    return result.stdout.strip() or None
+
+    for tag in result.stdout.splitlines():
+        if tag != current_tag and tag_matches_platform(tag, platform):
+            return tag
+    return None
+
+
+def validate_tag_platform(current_reference: str, platform: str) -> None:
+    reference_name = current_reference.removeprefix("refs/tags/")
+    if reference_name == current_reference:
+        return
+    if not tag_matches_platform(reference_name, platform):
+        expected_suffix = "_mac" if platform == "macos" else "（无 _mac 后缀）"
+        raise ValueError(
+            f"标签 {reference_name} 不属于 {PLATFORM_HEADINGS[platform]}，"
+            f"期望后缀：{expected_suffix}"
+        )
 
 
 def version_label(reference: str | None) -> str | None:
     if reference is None:
         return None
     reference_name = reference.removeprefix("refs/tags/")
+    if reference_name.lower().endswith("_mac"):
+        reference_name = reference_name[:-4]
     if len(reference_name) > 1 and reference_name[0].lower() == "v":
         return reference_name[1:]
     return reference_name
@@ -112,31 +142,16 @@ def release_version(build_number: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def validate_release_notes(path: Path) -> int:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
-        raise ValueError(f"无法读取更新日志 {path}：{error}") from error
-
-    if not lines:
-        raise ValueError(f"更新日志不能为空：{path}")
-
-    for line_number, line in enumerate(lines, start=1):
-        stripped_line = line.strip()
-        if not stripped_line.startswith("- ") or not stripped_line[2:].strip():
-            raise ValueError(
-                f"更新日志第 {line_number} 行必须是单条 Markdown 列表项"
-            )
-    return len(lines)
-
-
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--current-ref", default="HEAD")
     parser.add_argument("--previous-ref")
+    parser.add_argument("--platform", required=True, choices=PLATFORM_HEADINGS)
     parser.add_argument("--build-number", required=True)
     parser.add_argument("--notes", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--markdown-output", required=True, type=Path)
+    parser.add_argument("--allow-empty", action="store_true")
     return parser.parse_args()
 
 
@@ -144,28 +159,43 @@ def main() -> int:
     arguments = parse_arguments()
 
     try:
+        validate_tag_platform(arguments.current_ref, arguments.platform)
         version = release_version(arguments.build_number)
         current_commit = resolve_commit(arguments.current_ref)
-        current_tag = exact_version_tag(current_commit, arguments.current_ref)
+        current_tag = exact_version_tag(
+            current_commit,
+            arguments.current_ref,
+            arguments.platform,
+        )
         previous_reference = arguments.previous_ref or infer_previous_version_tag(
             current_commit,
             current_tag,
+            arguments.platform,
         )
 
         if previous_reference is not None:
+            if not tag_matches_platform(previous_reference, arguments.platform):
+                raise ValueError(
+                    f"更新日志基线 {previous_reference} 与当前平台不一致"
+                )
             resolve_commit(previous_reference)
             if not is_ancestor(previous_reference, current_commit):
                 raise ValueError(
                     f"更新日志基线 {previous_reference} 不是当前 Commit 的祖先"
                 )
 
-        entry_count = validate_release_notes(arguments.notes)
+        entries = parse_release_notes(arguments.notes)[arguments.platform]
+        if not entries and not arguments.allow_empty:
+            raise ValueError(
+                f"{PLATFORM_HEADINGS[arguments.platform]} 更新日志不能为空"
+            )
     except (subprocess.CalledProcessError, ValueError) as error:
         print(f"生成更新日志失败：{error}", file=sys.stderr)
         return 1
 
     payload = {
         "schemaVersion": 2,
+        "platform": arguments.platform,
         "version": version,
         "sourceRevision": current_commit,
         "currentRef": current_tag or arguments.current_ref,
@@ -182,6 +212,11 @@ def main() -> int:
         encoding="utf-8",
     )
     temporary_output.replace(arguments.output)
+    write_platform_notes(
+        entries,
+        arguments.markdown_output,
+        allow_empty=arguments.allow_empty,
+    )
 
     range_description = (
         f"{previous_reference}..{current_tag or current_commit[:7]}"
@@ -189,8 +224,9 @@ def main() -> int:
         else "无可用的历史版本基线"
     )
     print(
-        f"已生成 MeloX {payload['version']} 更新日志："
-        f"{range_description}，从 {arguments.notes} 读取 {entry_count} 条"
+        f"已生成 MeloX {payload['version']} "
+        f"{PLATFORM_HEADINGS[arguments.platform]} 更新日志："
+        f"{range_description}，从 {arguments.notes} 读取 {len(entries)} 条"
     )
     return 0
 

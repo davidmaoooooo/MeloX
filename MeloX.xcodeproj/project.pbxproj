@@ -12,6 +12,7 @@
 		B10000000000000000000010 /* QRCode in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000012 /* QRCode */; };
 		C20000000000000000000001 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = C20000000000000000000003 /* NukeUI */; };
 		CDCDC02B263846DD93AAF886 /* MeloXLyricsWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2572AEB5A5B04809878AE645 /* MeloXLyricsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D3000000000000000000000B /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0AD000000000000000003 /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 		2572AEB5A5B04809878AE645 /* MeloXLyricsWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeloXLyricsWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6DB1D882300F5FA000FB3AEE /* MeloX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeloX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000002 /* MeloX Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeloX Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D30000000000000000000001 /* MeloX Desktop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeloX Desktop.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -83,6 +85,13 @@
 				Info.plist,
 			);
 			target = B10000000000000000000001 /* MeloX Watch App */;
+		};
+		D30000000000000000000002 /* Exceptions for "MeloXDesktop" folder in "MeloX Desktop" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D30000000000000000000007 /* MeloX Desktop */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -121,6 +130,14 @@
 			path = MeloXLyricsWidget;
 			sourceTree = "<group>";
 		};
+		D30000000000000000000003 /* MeloXDesktop */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D30000000000000000000002 /* Exceptions for "MeloXDesktop" folder in "MeloX Desktop" target */,
+			);
+			path = MeloXDesktop;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +165,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D30000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3000000000000000000000B /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -155,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				6DB1D884300F5FA000FB3AEE /* MeloX */,
+				D30000000000000000000003 /* MeloXDesktop */,
 				B10000000000000000000004 /* MeloXWatchShared */,
 				B10000000000000000000003 /* MeloXWatch */,
 				CCEB73D46F0F496D8CBFF0CE /* MeloXLyricsWidget */,
@@ -167,6 +193,7 @@
 			isa = PBXGroup;
 			children = (
 				6DB1D882300F5FA000FB3AEE /* MeloX.app */,
+				D30000000000000000000001 /* MeloX Desktop.app */,
 				B10000000000000000000002 /* MeloX Watch App.app */,
 				2572AEB5A5B04809878AE645 /* MeloXLyricsWidget.appex */,
 			);
@@ -254,6 +281,30 @@
 			productReference = B10000000000000000000002 /* MeloX Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D30000000000000000000007 /* MeloX Desktop */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D30000000000000000000008 /* Build configuration list for PBXNativeTarget "MeloX Desktop" */;
+			buildPhases = (
+				D30000000000000000000004 /* Sources */,
+				D30000000000000000000005 /* Frameworks */,
+				D30000000000000000000006 /* Resources */,
+				D3000000000000000000000C /* Generate macOS Release Notes */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D30000000000000000000003 /* MeloXDesktop */,
+			);
+			name = "MeloX Desktop";
+			packageProductDependencies = (
+				A1D0AD000000000000000003 /* GRDB */,
+			);
+			productName = "MeloX Desktop";
+			productReference = D30000000000000000000001 /* MeloX Desktop.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -283,6 +334,9 @@
 					B10000000000000000000001 = {
 						CreatedOnToolsVersion = 26.6;
 					};
+					D30000000000000000000007 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 6DB1D87D300F5FA000FB3AEE /* Build configuration list for PBXProject "MeloX" */;
@@ -305,6 +359,7 @@
 			projectRoot = "";
 			targets = (
 				6DB1D881300F5FA000FB3AEE /* MeloX */,
+				D30000000000000000000007 /* MeloX Desktop */,
 				B10000000000000000000001 /* MeloX Watch App */,
 				1CC9813243AD4097A843BDAE /* MeloXLyricsWidget */,
 			);
@@ -333,6 +388,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D30000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -344,6 +406,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/.github/scripts/generate_release_notes.py",
+				"$(SRCROOT)/.github/scripts/release_notes.py",
 				"$(SRCROOT)/RELEASE_NOTES.md",
 				"$(SRCROOT)/.git",
 			);
@@ -354,7 +417,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\" --build-number \"${CURRENT_PROJECT_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nelse\n    /usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" --current-ref \"${CURRENT_REFERENCE}\" --build-number \"${CURRENT_PROJECT_VERSION}\" --notes \"${RELEASE_NOTES_SOURCE}\" --output \"${METADATA_OUTPUT_PATH}\"\nfi\n\n/bin/cp \"${RELEASE_NOTES_SOURCE}\" \"${MARKDOWN_OUTPUT_PATH}\"\n";
+			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nGENERATOR_ARGUMENTS=(\n    --current-ref \"${CURRENT_REFERENCE}\"\n    --platform ios\n    --build-number \"${CURRENT_PROJECT_VERSION}\"\n    --notes \"${RELEASE_NOTES_SOURCE}\"\n    --output \"${METADATA_OUTPUT_PATH}\"\n    --markdown-output \"${MARKDOWN_OUTPUT_PATH}\"\n    --allow-empty\n)\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    GENERATOR_ARGUMENTS+=(--previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\")\nfi\n/usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" \"${GENERATOR_ARGUMENTS[@]}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D3000000000000000000000C /* Generate macOS Release Notes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.github/scripts/generate_release_notes.py",
+				"$(SRCROOT)/.github/scripts/release_notes.py",
+				"$(SRCROOT)/RELEASE_NOTES.md",
+				"$(SRCROOT)/.git",
+			);
+			name = "Generate macOS Release Notes";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ReleaseNotes.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ReleaseNotes.md",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\n\nRELEASE_NOTES_DIRECTORY=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nRELEASE_NOTES_SOURCE=\"${SRCROOT}/RELEASE_NOTES.md\"\nCURRENT_REFERENCE=\"${RELEASE_NOTES_CURRENT_REF:-HEAD}\"\nMETADATA_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.json\"\nMARKDOWN_OUTPUT_PATH=\"${RELEASE_NOTES_DIRECTORY}/ReleaseNotes.md\"\n\nmkdir -p \"${RELEASE_NOTES_DIRECTORY}\"\nexport GIT_CONFIG_NOSYSTEM=1\nexport GIT_CONFIG_GLOBAL=/dev/null\n\nGENERATOR_ARGUMENTS=(\n    --current-ref \"${CURRENT_REFERENCE}\"\n    --platform macos\n    --build-number \"${CURRENT_PROJECT_VERSION}\"\n    --notes \"${RELEASE_NOTES_SOURCE}\"\n    --output \"${METADATA_OUTPUT_PATH}\"\n    --markdown-output \"${MARKDOWN_OUTPUT_PATH}\"\n    --allow-empty\n)\nif [[ -n \"${RELEASE_NOTES_PREVIOUS_REF:-}\" ]]; then\n    GENERATOR_ARGUMENTS+=(--previous-ref \"${RELEASE_NOTES_PREVIOUS_REF}\")\nfi\n/usr/bin/python3 \"${SRCROOT}/.github/scripts/generate_release_notes.py\" \"${GENERATOR_ARGUMENTS[@]}\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -375,6 +460,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B10000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000004 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -583,6 +675,9 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = MeloX;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -622,6 +717,9 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = MeloX;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -711,6 +809,74 @@
 			};
 			name = Release;
 		};
+		D30000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MeloXDesktop/MeloXDesktop.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9100100;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MeloXDesktop/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX.desktop;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D3000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MeloXDesktop/MeloXDesktop.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9100100;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MeloXDesktop/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = azki.moye.MeloX.desktop;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		F069EC317AEC4255A40182CE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -779,6 +945,15 @@
 			buildConfigurations = (
 				B10000000000000000000009 /* Debug */,
 				B1000000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D30000000000000000000008 /* Build configuration list for PBXNativeTarget "MeloX Desktop" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D30000000000000000000009 /* Debug */,
+				D3000000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

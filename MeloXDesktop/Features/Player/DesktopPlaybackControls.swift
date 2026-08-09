@@ -1,0 +1,302 @@
+import SwiftUI
+
+struct DesktopPlaybackControls: View {
+    @Environment(DesktopAppModel.self) private var model
+    var prominent = false
+    var tint: Color = .primary
+    var prominentWidth: CGFloat = 320
+    var prominentEdgeInset: CGFloat = 0
+    var secondaryTintOpacity = 0.58
+
+    var body: some View {
+        Group {
+            if prominent {
+                prominentControls
+            } else {
+                compactControls
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(tint)
+    }
+
+    private var prominentControls: some View {
+        HStack(spacing: 0) {
+            shuffleButton
+                .frame(width: 28)
+            Spacer(minLength: 0)
+            previousButton
+                .frame(width: 36)
+            Spacer(minLength: 0)
+            playButton
+                .frame(width: 48)
+            Spacer(minLength: 0)
+            nextButton
+                .frame(width: 36)
+            Spacer(minLength: 0)
+            repeatButton
+                .frame(width: 28)
+        }
+        .padding(.horizontal, prominentEdgeInset)
+        .frame(width: prominentWidth)
+    }
+
+    private var compactControls: some View {
+        HStack(spacing: 10) {
+            shuffleButton.frame(width: 16)
+            previousButton.frame(width: 18)
+            playButton.frame(width: 24)
+            nextButton.frame(width: 18)
+            repeatButton.frame(width: 16)
+        }
+    }
+
+    private var shuffleButton: some View {
+        Button {
+            model.player.toggleShuffle()
+        } label: {
+            Image(systemName: "shuffle")
+                .font(.system(size: prominent ? 16 : 12, weight: .semibold))
+                .foregroundStyle(
+                    model.player.isShuffled
+                        ? .red
+                        : tint.opacity(secondaryTintOpacity)
+                )
+        }
+        .help(model.player.isShuffled ? "关闭随机播放" : "随机播放")
+    }
+
+    private var previousButton: some View {
+        Button {
+            Task { await model.player.previous() }
+        } label: {
+            Image(systemName: "backward.fill")
+                .font(.system(size: prominent ? 24 : 15, weight: .semibold))
+        }
+        .help("上一首")
+    }
+
+    private var playButton: some View {
+        Button {
+            model.player.togglePlayback()
+        } label: {
+            Image(systemName: model.player.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: prominent ? 30 : 20, weight: .semibold))
+                .contentTransition(
+                    .symbolEffect(
+                        .replace,
+                        options: .speed(DesktopPlayerMotion.playbackSymbolSpeed)
+                    )
+                )
+        }
+        .keyboardShortcut(.space, modifiers: [])
+        .help(model.player.isPlaying ? "暂停" : "播放")
+    }
+
+    private var nextButton: some View {
+        Button {
+            Task { await model.player.next() }
+        } label: {
+            Image(systemName: "forward.fill")
+                .font(.system(size: prominent ? 24 : 15, weight: .semibold))
+        }
+        .disabled(!model.player.canPlayNext)
+        .help("下一首")
+    }
+
+    private var repeatButton: some View {
+        Button {
+            model.player.cycleRepeatMode()
+        } label: {
+            Image(systemName: model.player.repeatMode.systemImage)
+                .font(.system(size: prominent ? 16 : 12, weight: .semibold))
+                .foregroundStyle(
+                    model.player.repeatMode == .off
+                        ? tint.opacity(secondaryTintOpacity)
+                        : .red
+                )
+        }
+        .help(model.player.repeatMode.accessibilityTitle)
+    }
+}
+
+struct DesktopPlaybackProgress: View {
+    @Environment(DesktopAppModel.self) private var model
+    var tint: Color = .primary
+    var showsTimes = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Slider(
+                value: Binding(
+                    get: { min(model.player.progress, max(model.player.duration, 0)) },
+                    set: { model.player.seek(to: $0) }
+                ),
+                in: 0...max(model.player.duration, 1)
+            )
+            .tint(tint)
+            .controlSize(.mini)
+
+            if showsTimes {
+                HStack {
+                    Text(format(model.player.progress))
+                    Spacer()
+                    Text("−\(format(max(model.player.duration - model.player.progress, 0)))")
+                }
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(tint.opacity(0.60))
+                .padding(.top, 10)
+            }
+        }
+    }
+
+    private func format(_ time: TimeInterval) -> String {
+        guard time.isFinite else { return "0:00" }
+        let seconds = max(Int(time), 0)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+struct DesktopVolumeControl: View {
+    @Environment(DesktopAppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var tint: Color = .primary
+    @State private var isExpanded = false
+    @State private var lastAudibleVolume = 0.8
+    @State private var volumeAnimationTrigger = 0
+    @State private var isVolumeTrackHovered = false
+
+    var body: some View {
+        surfacedControl
+            .fixedSize(horizontal: true, vertical: false)
+            .contentShape(.capsule)
+            .onHover { hovering in
+                guard !hovering, isExpanded else { return }
+                setExpanded(false)
+            }
+            .animation(
+                reduceMotion
+                    ? nil
+                    : DesktopPlayerMotion.volume(expanded: isExpanded),
+                value: isExpanded
+            )
+    }
+
+    @ViewBuilder
+    private var surfacedControl: some View {
+        if #available(macOS 26.0, *) {
+            controlContent
+                .glassEffect(
+                    isExpanded ? .regular.interactive() : .identity,
+                    in: .capsule
+                )
+        } else {
+            controlContent
+                .background {
+                    if isExpanded {
+                        Capsule()
+                            .fill(tint.opacity(0.08))
+                    }
+                }
+        }
+    }
+
+    private var controlContent: some View {
+        HStack(spacing: 10) {
+            if isExpanded {
+                volumeTrack
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+
+            Button {
+                handleVolumeButton()
+            } label: {
+                Image(systemName: volumeSymbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(
+                        .bounce,
+                        options: reduceMotion ? .nonRepeating : .default,
+                        value: volumeAnimationTrigger
+                    )
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help(isExpanded ? "静音或恢复音量" : "显示音量")
+        }
+        .padding(.horizontal, isExpanded ? 14 : 8)
+        .frame(height: 32)
+        .contentShape(.capsule)
+    }
+
+    @ViewBuilder
+    private var volumeTrack: some View {
+        if #available(macOS 26.0, *) {
+            volumeSlider
+                .sliderThumbVisibility(
+                    isVolumeTrackHovered ? .visible : .hidden
+                )
+                .onHover { isVolumeTrackHovered = $0 }
+        } else {
+            volumeSlider
+        }
+    }
+
+    private var volumeSlider: some View {
+        Slider(
+            value: Binding(
+                get: { model.player.volume },
+                set: { setExpandedVolume($0) }
+            ),
+            in: 0...1
+        )
+        .tint(tint)
+        .controlSize(.small)
+        .frame(width: 106, height: 18)
+        .accessibilityLabel("音量")
+        .help("音量")
+    }
+
+    private func setExpandedVolume(_ value: Double) {
+        if value > 0.001 {
+            lastAudibleVolume = value
+        }
+        model.player.setVolume(value)
+    }
+
+    private func handleVolumeButton() {
+        guard isExpanded else {
+            setExpanded(true)
+            return
+        }
+
+        if model.player.volume > 0.001 {
+            lastAudibleVolume = model.player.volume
+            model.player.setVolume(0)
+        } else {
+            model.player.setVolume(max(lastAudibleVolume, 0.08))
+        }
+        volumeAnimationTrigger += 1
+    }
+
+    private func setExpanded(_ expanded: Bool) {
+        guard isExpanded != expanded else { return }
+        withAnimation(
+            reduceMotion
+                ? nil
+                : DesktopPlayerMotion.volume(expanded: expanded)
+        ) {
+            isExpanded = expanded
+        }
+    }
+
+    private var volumeSymbol: String {
+        switch model.player.volume {
+        case ...0.001: "speaker.slash.fill"
+        case ..<0.35: "speaker.wave.1.fill"
+        case ..<0.7: "speaker.wave.2.fill"
+        default: "speaker.wave.3.fill"
+        }
+    }
+}

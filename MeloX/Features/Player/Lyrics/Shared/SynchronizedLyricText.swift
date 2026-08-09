@@ -375,8 +375,7 @@ struct SynchronizedLyricText: View {
                     rubyText(
                         at: playbackTime,
                         appliesTimingEffects: true,
-                        timingEffectsStrength:
-                            timedLyricPresentationProgress
+                        timingEffectsStrength: 1
                     )
                 } else {
                     activeSynchronizedText
@@ -391,8 +390,7 @@ struct SynchronizedLyricText: View {
                         .textRenderer(
                             lyricTextRenderer(
                                 at: playbackTime,
-                                timingEffectsStrength:
-                                    timedLyricPresentationProgress
+                                timingEffectsStrength: 1
                             )
                         )
                 }

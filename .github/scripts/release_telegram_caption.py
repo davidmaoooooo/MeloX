@@ -19,12 +19,18 @@ def compose_caption(
     project: str,
     version: str,
     details: list[str],
+    install_note: str,
+    distribution_note: str,
     release_url: str,
     website_url: str,
 ) -> str:
     lines = [f"{project}版本{version}更新"]
     if details:
         lines.extend(["", "更新明细：", *details])
+    if install_note:
+        lines.extend(["", "安装提示：", install_note])
+    if distribution_note:
+        lines.extend(["", distribution_note])
     lines.extend(
         [
             "",
@@ -40,6 +46,8 @@ def fit_caption(
     project: str,
     version: str,
     details: list[str],
+    install_note: str,
+    distribution_note: str,
     release_url: str,
     website_url: str,
 ) -> str:
@@ -47,6 +55,8 @@ def fit_caption(
         project,
         version,
         details,
+        install_note,
+        distribution_note,
         release_url,
         website_url,
     )
@@ -64,6 +74,8 @@ def fit_caption(
                 project,
                 version,
                 candidate_details,
+                install_note,
+                distribution_note,
                 release_url,
                 website_url,
             )
@@ -78,6 +90,8 @@ def fit_caption(
         project,
         version,
         visible_details,
+        install_note,
+        distribution_note,
         release_url,
         website_url,
     )
@@ -88,6 +102,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--project", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--details-file", required=True, type=Path)
+    parser.add_argument("--install-note", default="")
+    parser.add_argument("--distribution-note", default="")
     parser.add_argument("--release-url", required=True)
     parser.add_argument("--website-url", required=True)
     parser.add_argument("--output", required=True, type=Path)
@@ -105,6 +121,8 @@ def main() -> int:
         arguments.project,
         arguments.version,
         details,
+        arguments.install_note.strip(),
+        arguments.distribution_note.strip(),
         arguments.release_url,
         arguments.website_url,
     )

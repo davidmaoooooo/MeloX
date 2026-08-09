@@ -1,0 +1,46 @@
+import AppKit
+import SwiftUI
+
+enum LyricsFontWeight: String, CaseIterable, Identifiable {
+    case light
+    case regular
+    case medium
+    case semibold
+    case bold
+    case heavy
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .light: "细体"
+        case .regular: "常规"
+        case .medium: "中等"
+        case .semibold: "半粗体"
+        case .bold: "粗体"
+        case .heavy: "特粗体"
+        }
+    }
+
+    var swiftUIWeight: Font.Weight {
+        switch self {
+        case .light: .light
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        }
+    }
+
+    var appKitWeight: NSFont.Weight {
+        switch self {
+        case .light: .light
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        }
+    }
+}

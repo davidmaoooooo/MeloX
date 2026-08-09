@@ -7,3 +7,12 @@ vendor/QRCode/build/
 # Local TestFlight signing/upload tool and credentials
 /AuthKey_*.p8
 /Tools/TestFlightUploader/
+
+# Local macOS notarization credentials
+/Tools/MacRelease/.credentials/
+/Tools/MacRelease/*.p8
+/Tools/MacRelease/*.p12
+/Tools/MacRelease/*.cer
+/Tools/MacRelease/*.pfx
+/Tools/MacRelease/*.pem
+/Tools/MacRelease/*.key

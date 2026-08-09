@@ -1,0 +1,91 @@
+import CoreGraphics
+
+/// Keeps transient layout measurements out of SwiftUI's invalidation graph.
+///
+/// Lyric frames change continuously while a scroll view moves or its window is
+/// resized. They are inputs to focus calculations, but they are not render
+/// state by themselves, so publishing every measurement would unnecessarily
+/// rebuild the complete lyric hierarchy.
+@MainActor
+final class DesktopLyricsGeometryCache {
+    struct FrameUpdate {
+        let frameChanged: Bool
+        let layoutHeightChanged: Bool
+    }
+
+    private(set) var frameByID: [LyricLine.ID: CGRect] = [:]
+    private(set) var layoutHeightByID: [LyricLine.ID: CGFloat] = [:]
+    private(set) var annotationHeightByID: [LyricLine.ID: CGFloat] = [:]
+    private(set) var viewportSize: CGSize = .zero
+
+    func recordViewportSize(_ size: CGSize) {
+        guard size.width.isFinite,
+              size.height.isFinite,
+              size.width > 0,
+              size.height > 0 else { return }
+        viewportSize = size
+    }
+
+    func recordFrame(
+        _ frame: CGRect,
+        for id: LyricLine.ID
+    ) -> FrameUpdate? {
+        guard frame.minY.isFinite,
+              frame.maxY.isFinite,
+              frame.height.isFinite,
+              frame.height > 0 else { return nil }
+
+        let previousFrame = frameByID[id]
+        let previousHeight = layoutHeightByID[id]
+        let frameChanged = previousFrame == nil
+            || !Self.isApproximatelyEqual(previousFrame ?? .zero, frame)
+        let layoutHeightChanged = previousHeight == nil
+            || abs((previousHeight ?? 0) - frame.height) > 0.5
+        guard frameChanged || layoutHeightChanged else { return nil }
+
+        frameByID[id] = frame
+        layoutHeightByID[id] = frame.height
+        return FrameUpdate(
+            frameChanged: frameChanged,
+            layoutHeightChanged: layoutHeightChanged
+        )
+    }
+
+    func recordAnnotationHeight(
+        _ height: CGFloat,
+        for id: LyricLine.ID
+    ) -> Bool {
+        guard height.isFinite, height > 0 else { return false }
+        let previousHeight = annotationHeightByID[id]
+        guard previousHeight == nil
+                || abs((previousHeight ?? 0) - height) > 0.5 else {
+            return false
+        }
+
+        annotationHeightByID[id] = height
+        return true
+    }
+
+    func removeMeasurements(for id: LyricLine.ID) {
+        frameByID.removeValue(forKey: id)
+        layoutHeightByID.removeValue(forKey: id)
+        annotationHeightByID.removeValue(forKey: id)
+    }
+
+    func removeAllMeasurements() {
+        frameByID.removeAll(keepingCapacity: true)
+        layoutHeightByID.removeAll(keepingCapacity: true)
+        annotationHeightByID.removeAll(keepingCapacity: true)
+    }
+
+    private static func isApproximatelyEqual(
+        _ lhs: CGRect,
+        _ rhs: CGRect
+    ) -> Bool {
+        let tolerance: CGFloat = 0.5
+        return abs(lhs.minX - rhs.minX) <= tolerance
+            && abs(lhs.minY - rhs.minY) <= tolerance
+            && abs(lhs.width - rhs.width) <= tolerance
+            && abs(lhs.height - rhs.height) <= tolerance
+    }
+}

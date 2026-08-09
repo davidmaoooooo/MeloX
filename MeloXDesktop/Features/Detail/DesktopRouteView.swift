@@ -1,0 +1,330 @@
+import SwiftUI
+
+struct DesktopRouteView: View {
+    let route: DesktopRoute
+
+    var body: some View {
+        switch route {
+        case .album(let id):
+            DesktopAlbumDetailView(albumID: id)
+        case .artist(let id):
+            DesktopArtistDetailView(artistID: id)
+        case .playlist(let id):
+            DesktopPlaylistDetailView(playlistID: id)
+        case .podcast(let id):
+            DesktopPodcastDetailView(podcastID: id)
+        case .podcastCategory(let id, let title):
+            DesktopPodcastCategoryView(categoryID: id, title: title)
+        case .section(let section):
+            DesktopSectionContentView(section: section)
+        case .song(let id):
+            DesktopSongDetailView(songID: id)
+        }
+    }
+}
+
+struct DesktopCollectionHeader: View {
+    let artworkURL: URL?
+    let kind: String
+    let title: String
+    let subtitle: String?
+    let metadata: String?
+    let description: String?
+    let songs: [Song]
+    let sourceID: Int?
+    var isFavorite = false
+    var favoriteAction: (() -> Void)?
+    var shareURL: URL?
+
+    @Environment(DesktopAppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isDescriptionExpanded = false
+    @State private var isArtworkHovered = false
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 34) {
+            artwork(size: 278)
+            details
+                .padding(.bottom, 6)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func artwork(size: CGFloat) -> some View {
+        DesktopArtworkView(url: artworkURL, cornerRadius: 11)
+            .frame(width: size, height: size)
+            .scaleEffect(isArtworkHovered ? 1.012 : 1)
+            .shadow(
+                color: .black.opacity(isArtworkHovered ? 0.24 : 0.20),
+                radius: isArtworkHovered ? 22 : 18,
+                y: isArtworkHovered ? 12 : 10
+            )
+            .onHover { isArtworkHovered = $0 }
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .snappy(duration: 0.25, extraBounce: 0.04),
+                value: isArtworkHovered
+            )
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(kind.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 32, weight: .bold))
+                .lineLimit(2)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+            if let metadata, !metadata.isEmpty {
+                Text(metadata)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            descriptionView
+            actions
+                .padding(.top, 10)
+        }
+        .frame(maxWidth: 620, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var descriptionView: some View {
+        if let description, !description.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(description)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(isDescriptionExpanded ? nil : 3)
+                    .textSelection(.enabled)
+
+                if description.count > 120 || description.contains("\n") {
+                    Button(isDescriptionExpanded ? "收起" : "更多") {
+                        withAnimation(
+                            reduceMotion ? nil : .smooth(duration: 0.24)
+                        ) {
+                            isDescriptionExpanded.toggle()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 12) {
+            Button("播放", systemImage: "play.fill") {
+                Task { await model.player.playAll(songs, sourceID: sourceID) }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(songs.isEmpty)
+
+            Button("随机播放", systemImage: "shuffle") {
+                Task {
+                    await model.player.playAll(
+                        songs.shuffled(),
+                        sourceID: sourceID
+                    )
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(songs.isEmpty)
+
+            if let favoriteAction {
+                Button(action: favoriteAction) {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.bordered)
+                .help(isFavorite ? "取消收藏" : "收藏")
+            }
+
+            Menu {
+                Button("下载全部", systemImage: "arrow.down.circle") {
+                    model.downloads.start(
+                        songs,
+                        quality: model.settings.quality
+                    )
+                }
+                .disabled(songs.isEmpty)
+
+                if let shareURL {
+                    ShareLink(item: shareURL) {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("更多")
+        }
+    }
+}
+
+struct DesktopCollectionTrackList: View {
+    let songs: [Song]
+    let sourceID: Int?
+    var showsAlbumColumn = true
+    var usesTrackNumbers = false
+    var groupsByDisc = false
+
+    var body: some View {
+        LazyVStack(spacing: 1) {
+            if groupsByDisc, discGroups.count > 1 {
+                ForEach(discGroups) { group in
+                    Text("碟片 \(group.id)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(
+                            .top,
+                            group.id == discGroups.first?.id ? 0 : 18
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 5)
+
+                    ForEach(group.entries) { entry in
+                        row(entry)
+                    }
+                }
+            } else {
+                ForEach(entries) { entry in
+                    row(entry)
+                }
+            }
+        }
+    }
+
+    private func row(_ entry: TrackEntry) -> some View {
+        DesktopTrackRow(
+            song: entry.song,
+            index: entry.index,
+            songs: songs,
+            sourceID: sourceID,
+            showsAlbumColumn: showsAlbumColumn,
+            displayNumber: usesTrackNumbers
+                ? String(entry.song.trackNumber ?? entry.index + 1)
+                : nil
+        )
+    }
+
+    private var entries: [TrackEntry] {
+        Array(songs.enumerated()).map {
+            TrackEntry(index: $0.offset, song: $0.element)
+        }
+    }
+
+    private var discGroups: [DiscGroup] {
+        var order: [String] = []
+        var values: [String: [TrackEntry]] = [:]
+
+        for entry in entries {
+            let key = normalizedDisc(entry.song.disc)
+            if values[key] == nil {
+                order.append(key)
+                values[key] = []
+            }
+            values[key, default: []].append(entry)
+        }
+
+        return order.map {
+            DiscGroup(id: $0, entries: values[$0] ?? [])
+        }
+    }
+
+    private func normalizedDisc(_ value: String?) -> String {
+        guard let value else { return "1" }
+        let digits = value.filter(\.isNumber)
+        if let number = Int(digits) {
+            return String(number)
+        }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? "1" : normalized
+    }
+
+    private struct TrackEntry: Identifiable {
+        let index: Int
+        let song: Song
+
+        var id: Int { song.id }
+    }
+
+    private struct DiscGroup: Identifiable, Equatable {
+        let id: String
+        let entries: [TrackEntry]
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.id == rhs.id
+        }
+    }
+}
+
+struct DesktopDetailLoadingView: View {
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 34) {
+            HStack(alignment: .bottom, spacing: 34) {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(.quaternary)
+                    .frame(width: 278, height: 278)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach([72.0, 310.0, 190.0, 250.0], id: \.self) { width in
+                        Capsule()
+                            .fill(.quaternary)
+                            .frame(width: width, height: width == 310 ? 30 : 12)
+                    }
+                }
+                Spacer()
+            }
+
+            Divider()
+
+            VStack(spacing: 12) {
+                ForEach(0..<5, id: \.self) { _ in
+                    Capsule()
+                        .fill(.quaternary)
+                        .frame(height: 12)
+                }
+            }
+        }
+        .padding(42)
+        .redacted(reason: .placeholder)
+        .overlay {
+            ProgressView(message)
+                .padding(14)
+                .background(.regularMaterial, in: .capsule)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(message)
+    }
+}
+
+struct DesktopDetailErrorView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("无法载入", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("重试", action: retry)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
