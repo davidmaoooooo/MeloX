@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct DesktopPlayerInspector: View {
-    @Environment(DesktopAppModel.self) private var model
     let kind: DesktopInspector
     var isActive = true
 
@@ -14,10 +13,9 @@ struct DesktopPlayerInspector: View {
     private var inspectorContent: some View {
         switch kind {
         case .lyrics:
-            DesktopLyricsScrollView(
+            DesktopPlaybackPositionedLyricsView(
                 compact: true,
                 allowsLyricBlur: false,
-                initialFocusID: model.currentLyricsFocusID,
                 isActive: isActive
             )
         case .queue:

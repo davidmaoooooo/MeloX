@@ -9,7 +9,7 @@ struct PlaybackSettingsView: View {
 
         Form {
             Section {
-                Picker("播放音质", selection: $settings.quality) {
+                Picker("播放音质", selection: qualityBinding) {
                     ForEach(MusicQuality.allCases) { quality in
                         Text(quality.title).tag(quality)
                     }
@@ -91,13 +91,15 @@ struct PlaybackSettingsView: View {
         }
         .navigationTitle("播放与音频")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: settings.quality) {
-            Task {
-                await player.reloadCurrentSongForQualityChange()
-            }
-        }
         .onChange(of: settings.playerVolumeControlMode) {
             player.applyVolumeControlMode()
         }
+    }
+
+    private var qualityBinding: Binding<MusicQuality> {
+        Binding(
+            get: { settings.quality },
+            set: { player.selectPlaybackQuality($0) }
+        )
     }
 }

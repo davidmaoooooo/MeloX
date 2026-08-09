@@ -46,10 +46,7 @@ struct DesktopMiniPlayerWindow: View {
                 Group {
                     switch expandedPanel {
                     case .lyrics:
-                        DesktopLyricsScrollView(
-                            compact: true,
-                            initialFocusID: model.currentLyricsFocusID
-                        )
+                        DesktopPlaybackPositionedLyricsView(compact: true)
                     case .queue:
                         DesktopQueueView(presentation: .miniPlayer)
                     }
@@ -589,6 +586,8 @@ struct DesktopMiniPlayerWindow: View {
 
     @ViewBuilder
     private var miniPlayerMenuItems: some View {
+        DesktopPlaybackQualityMenu(model: model)
+
         Button(
             showsLargeArtwork ? "隐藏大插图" : "显示大插图",
             systemImage: showsLargeArtwork ? "photo.fill" : "photo"

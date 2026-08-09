@@ -227,7 +227,7 @@ private struct DesktopPlaybackSettingsView: View {
         ScrollView {
             Form {
             Section("音质与控制") {
-                Picker("播放音质", selection: $settings.quality) {
+                Picker("播放音质", selection: qualityBinding) {
                     ForEach(MusicQuality.allCases) { quality in
                         Text(quality.title).tag(quality)
                     }
@@ -360,11 +360,6 @@ private struct DesktopPlaybackSettingsView: View {
             .padding()
         }
         .scrollIndicators(.automatic)
-        .onChange(of: settings.quality) { _, _ in
-            Task {
-                await model.player.reloadCurrentSongForQualityChange()
-            }
-        }
         .onChange(of: settings.playerVolumeControlMode) { _, _ in
             model.playbackVolume.applyControlMode()
         }
@@ -380,6 +375,13 @@ private struct DesktopPlaybackSettingsView: View {
         .onChange(of: autoMix.configuration) { _, _ in
             model.player.applyAutoMixSettings()
         }
+    }
+
+    private var qualityBinding: Binding<MusicQuality> {
+        Binding(
+            get: { model.settings.quality },
+            set: { model.player.selectPlaybackQuality($0) }
+        )
     }
 }
 

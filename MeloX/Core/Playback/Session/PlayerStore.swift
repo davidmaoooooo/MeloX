@@ -66,6 +66,7 @@ final class PlayerStore {
 
     var availablePlaybackQualities: [MusicQuality] {
         guard currentSong != nil else { return [] }
+        guard !isResolvingCurrentSongAudioAvailability else { return [] }
         if currentSongAudioAvailability.isKnown {
             return MusicQuality.allCases.filter { quality in
                 currentSongAudioAvailability.supports(
@@ -120,6 +121,14 @@ final class PlayerStore {
 
     private var currentSongAudioAvailability:
         SongAudioAvailability = .unknown
+
+    private var isResolvingCurrentSongAudioAvailability = false
+
+    @ObservationIgnored
+    private var detailedPlaybackSongs: [Song.ID: Song] = [:]
+
+    @ObservationIgnored
+    private var audioAvailabilityTask: Task<Void, Never>?
 
     @ObservationIgnored
     private let settings: AppSettings
@@ -177,7 +186,7 @@ final class PlayerStore {
     private var lastPersistedSecond = -1
 
     @ObservationIgnored
-    private var lastProgressUpdateDate = Date()
+    private var playbackTimelineClock = PlaybackTimelineClock()
 
     @ObservationIgnored
     private var historySourceID: Int?
@@ -278,9 +287,9 @@ final class PlayerStore {
             shuffledOrder: snapshot.shuffledOrder
         )
         currentSong = playbackQueue.currentSong
-        progress = max(snapshot.progress, 0)
-        lastProgressUpdateDate = Date()
         duration = TimeInterval(currentSong?.durationMS ?? 0) / 1_000
+        progress = clampedPlaybackPosition(snapshot.progress)
+        reanchorPlaybackTimeline(to: progress, rate: 0)
         repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
         volume = min(max(snapshot.volume, 0), 1)
         historySourceID = snapshot.historySourceID
@@ -500,6 +509,13 @@ final class PlayerStore {
 
     func togglePlayback() {
         guard currentSong != nil else { return }
+        if isLoading {
+            playbackIssue = nil
+            currentLoadShouldAutoplay = true
+            engine.play()
+            updateNowPlayingState()
+            return
+        }
         if engine.hasCurrentItem {
             if isPlaying {
                 engine.pause()
@@ -517,21 +533,39 @@ final class PlayerStore {
 
     func retry() async {
         guard currentSong != nil else { return }
-        await loadCurrentSong(autoplay: true)
+        await loadCurrentSong(
+            autoplay: true,
+            startAt: estimatedProgress()
+        )
     }
 
     func dismissPlaybackIssue() {
         playbackIssue = nil
     }
 
-    func reloadCurrentSongForQualityChange() async {
-        guard currentSong != nil else { return }
+    func selectPlaybackQuality(_ quality: MusicQuality) {
+        guard settings.quality != quality else { return }
         let shouldAutoplay = isPlaying
-        let resumePosition = estimatedProgress()
-        await loadCurrentSong(
-            autoplay: shouldAutoplay,
-            startAt: resumePosition
-        )
+            || (isLoading && currentLoadShouldAutoplay)
+        let resumePosition = engine.currentPlaybackTime
+            ?? estimatedProgress()
+        let songID = currentSong?.id
+        settings.quality = quality
+        guard let songID else { return }
+        seekRevision += 1
+        let qualityChangeRevision = seekRevision
+        Task { @MainActor [weak self] in
+            guard let self,
+                  self.currentSong?.id == songID else { return }
+            let startPosition =
+                self.seekRevision == qualityChangeRevision
+                ? resumePosition
+                : self.estimatedProgress()
+            await self.loadCurrentSong(
+                autoplay: shouldAutoplay,
+                startAt: startPosition
+            )
+        }
     }
 
     func next() async {
@@ -622,13 +656,12 @@ final class PlayerStore {
     }
 
     func seek(to seconds: TimeInterval) {
-        let maximum = duration > 0 ? duration : TimeInterval(currentSong?.durationMS ?? 0) / 1_000
-        let clamped = max(0, min(seconds, maximum))
+        let clamped = clampedPlaybackPosition(seconds)
         cancelAutoMixPreparation()
-        engine.seek(to: clamped)
         progress = clamped
+        reanchorPlaybackTimeline(to: clamped, rate: 0)
         seekRevision += 1
-        lastProgressUpdateDate = Date()
+        engine.seek(to: clamped)
         updateNowPlayingState(
             forceNowPlayingLyrics: true,
             forceLyricsLiveActivity: true
@@ -680,11 +713,42 @@ final class PlayerStore {
     }
 
     func estimatedProgress(at date: Date = Date()) -> TimeInterval {
-        guard isPlaying else { return progress }
-        let elapsed = max(date.timeIntervalSince(lastProgressUpdateDate), 0)
-        let maximum = duration > 0 ? duration : TimeInterval(currentSong?.durationMS ?? 0) / 1_000
-        let estimated = progress + elapsed
-        return maximum > 0 ? min(estimated, maximum) : estimated
+        playbackTimelineClock.position(
+            at: date,
+            duration: playbackDurationLimit
+        )
+    }
+
+    private var playbackDurationLimit: TimeInterval {
+        if duration.isFinite, duration > 0 {
+            return duration
+        }
+        return TimeInterval(currentSong?.durationMS ?? 0) / 1_000
+    }
+
+    private func clampedPlaybackPosition(
+        _ position: TimeInterval
+    ) -> TimeInterval {
+        let normalized = position.isFinite
+            ? max(position, 0)
+            : 0
+        let maximum = playbackDurationLimit
+        guard maximum.isFinite, maximum > 0 else {
+            return normalized
+        }
+        return min(normalized, maximum)
+    }
+
+    private func reanchorPlaybackTimeline(
+        to position: TimeInterval,
+        rate: Double,
+        at date: Date = Date()
+    ) {
+        playbackTimelineClock.reanchor(
+            to: position,
+            rate: rate,
+            at: date
+        )
     }
 
     func beatDebugSnapshot(
@@ -921,11 +985,19 @@ final class PlayerStore {
         loadGeneration += 1
         let generation = loadGeneration
         currentSong = song
-        currentSongAudioAvailability = song.audioAvailability
+        let cachedDetailedSong = detailedPlaybackSongs[song.id]
+        resolveCurrentSongAudioAvailability(
+            for: song,
+            generation: generation
+        )
         resetBeatAnalysis()
-        progress = max(0, startAt)
-        lastProgressUpdateDate = Date()
         duration = TimeInterval(song.durationMS) / 1_000
+        let playbackStartPosition = clampedPlaybackPosition(startAt)
+        progress = playbackStartPosition
+        reanchorPlaybackTimeline(
+            to: playbackStartPosition,
+            rate: 0
+        )
         isResolvingSource = true
         isLoading = true
         isPlaying = false
@@ -951,33 +1023,30 @@ final class PlayerStore {
         persistSnapshot()
 
         do {
-            var sourceSong = song
-            if !song.audioAvailability.isKnown,
-               let detailedSong = try? await api.songDetails(
-                   ids: [song.id]
-               ).first {
-                guard generation == loadGeneration,
-                      currentSong?.id == song.id else { return }
-                sourceSong = detailedSong
-                currentSongAudioAvailability =
-                    detailedSong.audioAvailability
-            }
-
             let source: PlaybackSource
             if let downloadedSource = downloads.localPlaybackSource(songID: song.id) {
                 source = downloadedSource
                 isUsingDownloadedSource = true
+            } else if let cachedDetailedSong {
+                source = try await api.playbackSource(
+                    for: cachedDetailedSong
+                )
             } else {
-                source = try await api.playbackSource(for: sourceSong)
+                // A list response can contain only part of the quality
+                // metadata. Let the v1 source endpoint try the requested
+                // level while song details resolve in parallel.
+                source = try await api.playbackSource(id: song.id)
             }
             guard generation == loadGeneration, currentSong?.id == song.id else { return }
             isResolvingSource = false
             currentPlaybackSource = source
             effectivePlaybackQuality = source.quality
+            let shouldAutoplay = currentLoadShouldAutoplay
+            let resolvedStartPosition = estimatedProgress()
             await engine.load(
                 source,
-                startAt: startAt,
-                autoplay: autoplay
+                startAt: resolvedStartPosition,
+                autoplay: shouldAutoplay
             )
         } catch is CancellationError {
             return
@@ -1008,7 +1077,7 @@ final class PlayerStore {
            case .itemFailed = playbackError,
            isUsingDownloadedSource,
            let song = currentSong {
-            let resumePosition = progress
+            let resumePosition = estimatedProgress()
             let shouldAutoplay = currentLoadShouldAutoplay
             isUsingDownloadedSource = false
             downloads.discardInvalidDownload(songID: song.id)
@@ -1038,7 +1107,8 @@ final class PlayerStore {
         engine.pause()
         engine.seek(to: 0)
         progress = 0
-        lastProgressUpdateDate = Date()
+        reanchorPlaybackTimeline(to: 0, rate: 0)
+        seekRevision += 1
         isPlaying = false
         isLoading = false
         updateNowPlayingState()
@@ -1074,22 +1144,10 @@ final class PlayerStore {
                 self.scheduleBeatAnalysisIfNeeded()
                 self.prepareAutoMixIfNeeded()
             }
-            self.lastProgressUpdateDate = Date()
             self.updateNowPlayingState()
         }
-        engine.onProgressChanged = { [weak self] value in
-            guard let self else { return }
-            self.progress = value
-            self.lastProgressUpdateDate = Date()
-            self.updateNowPlayingLyricMetadata()
-            self.updateLyricsLiveActivity()
-            self.updateLyricsNotification()
-            let second = Int(value)
-            if second != self.lastPersistedSecond {
-                self.lastPersistedSecond = second
-                self.persistSnapshot()
-            }
-            self.prepareAutoMixIfNeeded()
+        engine.onPlaybackClockChanged = { [weak self] sample in
+            self?.handlePlaybackClockSample(sample)
         }
         engine.onDurationChanged = { [weak self] value in
             guard let self else { return }
@@ -1121,6 +1179,29 @@ final class PlayerStore {
         engine.onOutputDeviceDisconnected = { [weak self] in
             self?.shouldResumeAfterInterruption = false
         }
+    }
+
+    private func handlePlaybackClockSample(
+        _ sample: AudioPlaybackClockSample
+    ) {
+        let measuredProgress = clampedPlaybackPosition(
+            sample.position
+        )
+        progress = measuredProgress
+        reanchorPlaybackTimeline(
+            to: measuredProgress,
+            rate: sample.rate,
+            at: sample.sampledAt
+        )
+        updateNowPlayingLyricMetadata()
+        updateLyricsLiveActivity()
+        updateLyricsNotification()
+        let second = Int(measuredProgress)
+        if second != lastPersistedSecond {
+            lastPersistedSecond = second
+            persistSnapshot()
+        }
+        prepareAutoMixIfNeeded()
     }
 
     private func bindAutoMixCoordinator() {
@@ -1621,9 +1702,12 @@ final class PlayerStore {
         }
 
         loadGeneration += 1
+        let generation = loadGeneration
         currentSong = context.incomingSong
-        currentSongAudioAvailability =
-            context.incomingSong.audioAvailability
+        resolveCurrentSongAudioAvailability(
+            for: context.incomingSong,
+            generation: generation
+        )
         resetBeatAnalysis()
         currentPlaybackSource = context.source
         effectivePlaybackQuality = context.source.quality
@@ -1635,7 +1719,6 @@ final class PlayerStore {
         isPlaying = engine.state == .playing
         playbackIssue = nil
         hasRecordedCurrentStart = false
-        lastProgressUpdateDate = Date()
         lastPersistedSecond = Int(progress)
         nowPlayingLyricsSongID = nil
         nowPlayingLyrics = []
@@ -1664,5 +1747,46 @@ final class PlayerStore {
         persistSnapshot()
         scheduleBeatAnalysisIfNeeded()
         prepareAutoMixIfNeeded()
+    }
+
+    private func resolveCurrentSongAudioAvailability(
+        for song: Song,
+        generation: Int
+    ) {
+        audioAvailabilityTask?.cancel()
+        if let detailedSong = detailedPlaybackSongs[song.id] {
+            currentSongAudioAvailability =
+                detailedSong.audioAvailability
+            isResolvingCurrentSongAudioAvailability = false
+            audioAvailabilityTask = nil
+            return
+        }
+
+        currentSongAudioAvailability = song.audioAvailability
+        isResolvingCurrentSongAudioAvailability = true
+        audioAvailabilityTask = Task { @MainActor [weak self] in
+            guard let api = self?.api else { return }
+            let detailedSong: Song?
+            do {
+                detailedSong = try await api.songDetails(
+                    ids: [song.id]
+                ).first
+            } catch is CancellationError {
+                return
+            } catch {
+                detailedSong = nil
+            }
+            guard let self,
+                  !Task.isCancelled,
+                  generation == loadGeneration,
+                  currentSong?.id == song.id else { return }
+            if let detailedSong {
+                detailedPlaybackSongs[song.id] = detailedSong
+                currentSongAudioAvailability =
+                    detailedSong.audioAvailability
+            }
+            isResolvingCurrentSongAudioAvailability = false
+            audioAvailabilityTask = nil
+        }
     }
 }

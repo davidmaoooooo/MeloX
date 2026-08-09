@@ -157,6 +157,7 @@ struct DesktopBottomPlayer: View {
                 Button("播放队列", systemImage: "list.bullet") {
                     model.ui.toggleInspector(.queue)
                 }
+                DesktopPlaybackQualityMenu(model: model)
                 Divider()
                 Button("迷你播放器", systemImage: "pip") {
                     Task { @MainActor in

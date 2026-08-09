@@ -22,8 +22,13 @@ final class AudioPlaybackItemFactory {
         preferredForwardBufferDuration: TimeInterval,
         autoMixEqualizerState:
             SharedAutoMixEqualizerState
-    ) async -> AVPlayerItem {
-        let asset = AVURLAsset(url: source.url)
+    ) async -> PreparedAudioPlaybackItem {
+        let asset = AVURLAsset(
+            url: source.url,
+            options: [
+                AVURLAssetPreferPreciseDurationAndTimingKey: true
+            ]
+        )
         let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration =
             max(
@@ -34,10 +39,14 @@ final class AudioPlaybackItemFactory {
             spatialAudioMode,
             to: item
         )
+        var audioTrackTimeRange: CMTimeRange?
         do {
             if let audioTrack = try await asset.loadTracks(
                 withMediaType: .audio
             ).first {
+                audioTrackTimeRange = try? await audioTrack.load(
+                    .timeRange
+                )
                 item.audioMix =
                     equalizerProcessor.makeAudioMix(
                         for: audioTrack,
@@ -48,7 +57,12 @@ final class AudioPlaybackItemFactory {
         } catch {
             // AVPlayerItem reports an actionable error if playback fails.
         }
-        return item
+        return PreparedAudioPlaybackItem(
+            item: item,
+            timeline: AudioPlaybackMediaTimeline(
+                audioTrackTimeRange: audioTrackTimeRange
+            )
+        )
     }
 
     func updateEqualizer(

@@ -162,13 +162,7 @@ private struct NowPlayingQualityMenu: View {
     private var qualityBinding: Binding<MusicQuality> {
         Binding(
             get: { settings.quality },
-            set: { quality in
-                guard settings.quality != quality else { return }
-                settings.quality = quality
-                Task {
-                    await player.reloadCurrentSongForQualityChange()
-                }
-            }
+            set: { player.selectPlaybackQuality($0) }
         )
     }
 }

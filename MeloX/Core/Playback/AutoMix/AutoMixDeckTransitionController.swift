@@ -117,7 +117,7 @@ final class AutoMixDeckTransitionController {
         clearStandbyDeck()
 
         let deckIndex = standbyDeckIndex
-        let item = await itemFactory.makeItem(
+        let playbackItem = await itemFactory.makeItem(
             for: source,
             preferredForwardBufferDuration:
                 max(plan.duration + 8, 12),
@@ -125,6 +125,7 @@ final class AutoMixDeckTransitionController {
                 decks[deckIndex]
                     .autoMixEqualizerState
         )
+        let item = playbackItem.item
         item.audioTimePitchAlgorithm = .spectral
         guard generation == preparationGeneration,
               !Task.isCancelled,
@@ -134,20 +135,16 @@ final class AutoMixDeckTransitionController {
 
         let deck = decks[deckIndex]
         deck.replaceCurrentItem(
-            with: item,
+            with: playbackItem,
             identifier: identifier
         )
         deckGains[deckIndex] = 0
         applyOutputVolumes()
         await seek(
             deck.player,
-            to: CMTime(
-                seconds:
-                    max(
-                        plan.incomingStartTime,
-                        0
-                    ),
-                preferredTimescale: 600
+            to: deck.mediaTime(
+                forPlaybackPosition:
+                    plan.incomingStartTime
             )
         )
         guard generation == preparationGeneration,
@@ -327,10 +324,8 @@ final class AutoMixDeckTransitionController {
                 == .readyToPlay else {
             return
         }
-        let seconds =
-            activeDeck.player
-                .currentTime().seconds
-        guard seconds.isFinite,
+        guard let seconds =
+                activeDeck.currentPlaybackTime,
               seconds
                 >= preparedTransition
                     .plan
@@ -396,11 +391,10 @@ final class AutoMixDeckTransitionController {
         }
 
         let outgoingPosition =
-            activeDeck.player
-                .currentTime().seconds
+            activeDeck.currentPlaybackTime
         let incomingPosition =
             decks[prepared.deckIndex]
-                .player.currentTime().seconds
+                .currentPlaybackTime
         let transition = ActiveTransition(
             identifier: prepared.identifier,
             outgoingDeckIndex:
@@ -409,15 +403,13 @@ final class AutoMixDeckTransitionController {
                 prepared.deckIndex,
             plan: prepared.plan,
             outgoingStartPosition:
-                outgoingPosition.isFinite
-                ? outgoingPosition
-                : prepared.plan
-                    .outgoingStartTime,
+                outgoingPosition
+                    ?? prepared.plan
+                        .outgoingStartTime,
             incomingStartPosition:
-                incomingPosition.isFinite
-                ? incomingPosition
-                : prepared.plan
-                    .incomingStartTime
+                incomingPosition
+                    ?? prepared.plan
+                        .incomingStartTime
         )
         preparedTransition = nil
         activeTransition = transition
@@ -533,16 +525,12 @@ final class AutoMixDeckTransitionController {
     private func currentProgress(
         for transition: ActiveTransition
     ) -> Double {
-        let outgoingPosition =
-            decks[
-                transition.outgoingDeckIndex
-            ].player.currentTime().seconds
-        let incomingPosition =
-            decks[
-                transition.incomingDeckIndex
-            ].player.currentTime().seconds
-        guard outgoingPosition.isFinite,
-              incomingPosition.isFinite else {
+        guard let outgoingPosition = decks[
+                  transition.outgoingDeckIndex
+              ].currentPlaybackTime,
+              let incomingPosition = decks[
+                  transition.incomingDeckIndex
+              ].currentPlaybackTime else {
             return transition.lastProgress
         }
 

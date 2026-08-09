@@ -135,10 +135,9 @@ struct DesktopNowPlayingWindow: View {
     private func nowPlayingPanel(_ page: DesktopInspector) -> some View {
         switch page {
         case .lyrics:
-            DesktopLyricsScrollView(
+            DesktopPlaybackPositionedLyricsView(
                 compact: false,
                 foregroundColor: artworkInfluencedForeground,
-                initialFocusID: initialLyricsFocusID,
                 isActive: isRenderingActive,
                 isPresented: isActive,
                 keepsPlaybackFocusSynchronized: true
@@ -147,10 +146,6 @@ struct DesktopNowPlayingWindow: View {
         case .queue:
             DesktopQueueView(presentation: .nowPlaying)
         }
-    }
-
-    private var initialLyricsFocusID: LyricLine.ID? {
-        model.currentLyricsFocusID
     }
 
     private var playerChrome: some View {
@@ -218,6 +213,7 @@ struct DesktopNowPlayingWindow: View {
                         Button("下载", systemImage: "arrow.down.circle") {
                             model.downloads.start(song, quality: model.settings.quality)
                         }
+                        DesktopPlaybackQualityMenu(model: model)
                         Button("桌面歌词", systemImage: "text.quote") {
                             openWindow(id: "floating-lyrics")
                         }
