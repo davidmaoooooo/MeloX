@@ -18,8 +18,8 @@ struct DesktopLyricLineView: View {
     let visualHighlightedLyricID: LyricLine.ID?
     let focusColorTransition: LyricFocusColorTransition?
     let movementPhase: LyricMovementPhase
-    let viewportSize: CGSize
-    let focusPosition: CGFloat
+    let layoutWidth: CGFloat
+    let visualFocusAnchorY: CGFloat
     let compact: Bool
     let allowsLyricBlur: Bool
     let foregroundColor: Color
@@ -62,10 +62,6 @@ struct DesktopLyricLineView: View {
                 + lineSpacing,
             1
         )
-        let layoutWidth = max(
-            viewportSize.width - (compact ? 48 : 0),
-            1
-        )
         let currentLineScale = lyricsCurrentLineScale
         let focusScaleAnimation = DesktopLyricsAnimations
             .focusScaleAnimation(
@@ -82,7 +78,6 @@ struct DesktopLyricLineView: View {
                 reduceMotion: reduceMotion
             )
         let focusBlurRadius = allowsLyricBlur ? self.focusBlurRadius : 0
-        let focusAnchorY = viewportSize.height * focusPosition
         let blurIntensity = CGFloat(model.settings.lyricsBlurIntensity)
         let distanceBlurScale = allowsLyricBlur
             ? CGFloat(model.settings.lyricsDistanceBlurScale)
@@ -156,7 +151,9 @@ struct DesktopLyricLineView: View {
                             in: .scrollView(axis: .vertical)
                         )
                         let distance = abs(
-                            frame.midY + movementOffset - focusAnchorY
+                            frame.midY
+                                + movementOffset
+                                - visualFocusAnchorY
                         )
                         let blurRadius = Self.lyricDistanceBlurRadius(
                             forPixelDistance: distance,

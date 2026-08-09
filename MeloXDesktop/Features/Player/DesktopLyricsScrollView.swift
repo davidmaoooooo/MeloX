@@ -8,14 +8,22 @@ struct DesktopLyricsScrollView: View {
         case active
     }
 
+    private struct ScrollRequest: Equatable {
+        let id: String
+        let generation: UInt
+        let animationDuration: TimeInterval?
+    }
+
     private static let focusColorTransitionDuration: TimeInterval = 0.12
+    private static let viewportAlignmentDelay: Duration = .milliseconds(120)
     private static let annotationSpacing =
         LyricAnnotationMetrics.verticalSpacing
 
     @Environment(DesktopAppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var scrollPositionID: LyricLine.ID?
+    @State private var scrollRequest: ScrollRequest?
     @State private var isInitialFocusPrepared = false
+    @State private var isViewportChanging = false
     @State private var initialFocusPreparationRevision = 0
     @State private var positionedLyricID: LyricLine.ID?
     @State private var positionedInterludeID: LyricInterlude.ID?
@@ -52,10 +60,18 @@ struct DesktopLyricsScrollView: View {
         self.keepsPlaybackFocusSynchronized =
             keepsPlaybackFocusSynchronized
 
-        _scrollPositionID = State(initialValue: initialFocusID)
-        // Keep the same visual focus that is used to seed the native scroll
-        // position. This prevents the coordinator's initial update from
-        // producing a visible first-row -> current-row double scroll.
+        _scrollRequest = State(
+            initialValue: initialFocusID.map {
+                ScrollRequest(
+                    id: $0,
+                    generation: 0,
+                    animationDuration: nil
+                )
+            }
+        )
+        // Keep the visual focus and the first one-way scroll request in sync.
+        // This prevents the coordinator's initial update from producing a
+        // visible first-row -> current-row double scroll.
         _positionedLyricID = State(initialValue: nil)
         _playbackFocus = State(
             initialValue: initialFocusID.map {
@@ -141,6 +157,10 @@ struct DesktopLyricsScrollView: View {
         UnitPoint(x: 0.5, y: focusPosition)
     }
 
+    private var requestedScrollID: LyricLine.ID? {
+        scrollRequest?.id
+    }
+
     private var focusPosition: CGFloat {
         min(
             max(
@@ -174,7 +194,11 @@ struct DesktopLyricsScrollView: View {
     }
 
     private var coordinatesPlaybackFocus: Bool {
-        isActive && acceptsGeometryUpdates
+        acceptsGeometryUpdates
+            && (
+                isActive
+                    || (keepsPlaybackFocusSynchronized && isPresented)
+            )
     }
 
     var body: some View {
@@ -200,9 +224,9 @@ struct DesktopLyricsScrollView: View {
                 }
             }
             .onChange(of: geometry.size, initial: true) { _, size in
-                guard acceptsGeometryUpdates else { return }
-                geometryCache.recordViewportSize(size)
-                settleMovementForViewportChange()
+                let sizeChanged = geometryCache.recordViewportSize(size)
+                guard acceptsGeometryUpdates, sizeChanged else { return }
+                scheduleViewportAlignment(for: size.height)
             }
         }
         .onChange(of: model.lyrics.songID) { _, _ in
@@ -211,6 +235,20 @@ struct DesktopLyricsScrollView: View {
         .onChange(of: acceptsGeometryUpdates) { _, acceptsUpdates in
             guard !acceptsUpdates else { return }
             geometryCache.cancelPendingLayoutSynchronization()
+            geometryCache.cancelPendingViewportSettlement()
+            endViewportChange()
+        }
+        .onChange(of: focusPosition) { _, _ in
+            guard acceptsGeometryUpdates,
+                  model.settings.lyricsAutoFollow,
+                  let focusID = requestedFocusID
+                    ?? positionedLyricID
+                    ?? visualCascadeFocusLyricID else { return }
+            requestScroll(to: focusID)
+        }
+        .onDisappear {
+            geometryCache.cancelPendingLayoutSynchronization()
+            geometryCache.cancelPendingViewportSettlement()
         }
         .background {
             AppleMusicLyricsFocusCoordinator(
@@ -229,7 +267,7 @@ struct DesktopLyricsScrollView: View {
         )
         .environment(
             \.lyricsRenderingIsActive,
-            isActive && acceptsGeometryUpdates
+            isActive && acceptsGeometryUpdates && !isViewportChanging
         )
     }
 
@@ -237,8 +275,9 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = nil
+            scrollRequest = nil
             isInitialFocusPrepared = false
+            isViewportChanging = false
             initialFocusPreparationRevision = 0
             positionedLyricID = nil
             positionedInterludeID = nil
@@ -253,6 +292,32 @@ struct DesktopLyricsScrollView: View {
         geometryCache.removeAllMeasurements()
     }
 
+    private func scheduleViewportAlignment(for viewportHeight: CGFloat) {
+        guard isInitialFocusPrepared else { return }
+        settleMovementForViewportChange()
+        if !isViewportChanging {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isViewportChanging = true
+            }
+        }
+        geometryCache.scheduleViewportSettlement(
+            after: Self.viewportAlignmentDelay
+        ) {
+            finishViewportChange(viewportHeight: viewportHeight)
+        }
+    }
+
+    private func endViewportChange() {
+        guard isViewportChanging else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isViewportChanging = false
+        }
+    }
+
     private func settleMovementForViewportChange() {
         guard isInitialFocusPrepared,
               let transition = lyricMovementTransition else { return }
@@ -261,7 +326,6 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = focusID
             visualCascadeFocusLyricID = focusID
             lyricMovementOffsetByID = focusedLineFollowingOffsets(
                 for: focusID
@@ -278,6 +342,35 @@ struct DesktopLyricsScrollView: View {
             return fallback
         }
         return measuredHeight
+    }
+
+    private func requestScroll(
+        to id: String,
+        animationDuration: TimeInterval? = nil
+    ) {
+        scrollRequest = ScrollRequest(
+            id: id,
+            generation: (scrollRequest?.generation ?? 0) &+ 1,
+            animationDuration: animationDuration
+        )
+    }
+
+    private func performScroll(
+        _ request: ScrollRequest,
+        with proxy: ScrollViewProxy
+    ) {
+        if let duration = request.animationDuration {
+            withAnimation(.smooth(duration: duration)) {
+                proxy.scrollTo(request.id, anchor: focusAnchor)
+            }
+            return
+        }
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(request.id, anchor: focusAnchor)
+        }
     }
 
     private func lyricsScrollView(viewportSize: CGSize) -> some View {
@@ -355,6 +448,45 @@ struct DesktopLyricsScrollView: View {
                     lyricFocusColorTransition
                 )
             }
+    }
+
+    private func finishViewportChange(
+        viewportHeight: CGFloat
+    ) {
+        guard isViewportChanging, acceptsGeometryUpdates else {
+            endViewportChange()
+            return
+        }
+        synchronizeStationaryFollowingOffsets()
+        if isActive,
+           model.settings.lyricsAutoFollow {
+            realignPlaybackFocusAfterViewportChange(
+                viewportHeight: viewportHeight
+            )
+        }
+        endViewportChange()
+    }
+
+    private func realignPlaybackFocusAfterViewportChange(
+        viewportHeight proposedViewportHeight: CGFloat
+    ) {
+        guard let focusID = requestedFocusID
+                ?? positionedLyricID
+                ?? visualCascadeFocusLyricID else { return }
+
+        let isLyricFocus = playbackFocus?.interludeID == nil
+        let viewportHeight = currentViewportHeight(
+            fallback: proposedViewportHeight
+        )
+        let viewportAnchorY = viewportHeight * focusPosition
+        if isLyricFocus,
+           isFocusAligned(
+               id: focusID,
+               viewportAnchorY: viewportAnchorY
+           ) {
+            return
+        }
+        requestScroll(to: focusID)
     }
 
     private func finishInitialFocusPreparation(
@@ -449,22 +581,10 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = nil
+            requestScroll(to: id)
         }
         await Task.yield()
-        guard !Task.isCancelled else {
-            let currentTarget = playbackFocus?.interludeID
-                ?? playbackFocus?.lyricID
-                ?? highlightedID
-                ?? id
-            withTransaction(transaction) {
-                scrollPositionID = currentTarget
-            }
-            return false
-        }
-        withTransaction(transaction) {
-            scrollPositionID = id
-        }
+        guard !Task.isCancelled else { return false }
         do {
             try await Task.sleep(for: .milliseconds(16))
         } catch {
@@ -477,7 +597,7 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = id
+            requestScroll(to: id)
             positionedLyricID = id
             positionedInterludeID = nil
             visualHighlightedLyricID = id
@@ -492,7 +612,7 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = interlude.id
+            requestScroll(to: interlude.id)
             positionedLyricID = interlude.precedingLyricID
             positionedInterludeID = interlude.id
             visualHighlightedLyricID = nil
@@ -522,22 +642,29 @@ struct DesktopLyricsScrollView: View {
         to interlude: LyricInterlude
     ) async {
         guard positionedInterludeID != interlude.id
-                || scrollPositionID != interlude.id else { return }
+                || requestedScrollID != interlude.id else { return }
 
-        let animation: Animation? = if reduceMotion
+        let animationDuration: TimeInterval? = if reduceMotion
                 || !isActive
-                || scrollPositionID == nil {
+                || isViewportChanging
+                || requestedScrollID == nil {
             nil
         } else {
-            .smooth(duration: 0.5)
+            0.5
         }
         lyricMovementTransition = nil
         lyricMovementOffsetByID.removeAll()
         updateVisualColorFocus(to: nil)
+        let animation = animationDuration.map {
+            Animation.smooth(duration: $0)
+        }
         withAnimation(animation) {
             visualCascadeFocusLyricID = nil
-            scrollPositionID = interlude.id
         }
+        requestScroll(
+            to: interlude.id,
+            animationDuration: animationDuration
+        )
         positionedLyricID = interlude.precedingLyricID
         positionedInterludeID = interlude.id
         await Task.yield()
@@ -573,7 +700,7 @@ struct DesktopLyricsScrollView: View {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                scrollPositionID = highlightedID
+                requestScroll(to: highlightedID)
                 visualHighlightedLyricID = highlightedID
                 lyricFocusColorTransition = nil
                 visualCascadeFocusLyricID = highlightedID
@@ -595,6 +722,7 @@ struct DesktopLyricsScrollView: View {
         }
 
         guard isActive,
+              !isViewportChanging,
               !reduceMotion,
               handsOffFromInterlude
                 || isForwardAdjacentTransition(
@@ -715,7 +843,7 @@ struct DesktopLyricsScrollView: View {
         withTransaction(preparation) {
             lyricMovementOffsetByID = preparedOffsets
             lyricMovementTransition = preparedTransition
-            scrollPositionID = highlightedID
+            requestScroll(to: highlightedID)
         }
         self.positionedLyricID = highlightedID
         await Task.yield()
@@ -930,7 +1058,7 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            scrollPositionID = id
+            requestScroll(to: id)
             visualCascadeFocusLyricID = id
             lyricMovementOffsetByID = focusedLineFollowingOffsets(for: id)
             lyricMovementTransition = nil
@@ -994,41 +1122,22 @@ struct DesktopLyricsScrollView: View {
         for attempt in 0..<3 {
             guard !Task.isCancelled else { return false }
 
-            if forcesScrollTargetReapplication
-                || scrollPositionID == id
-                || attempt > 0 {
-                var resetTransaction = Transaction(animation: nil)
-                resetTransaction.disablesAnimations = true
-                withTransaction(resetTransaction) {
-                    scrollPositionID = nil
-                }
-                await Task.yield()
-                if Task.isCancelled {
-                    let currentTarget = playbackFocus?.interludeID
-                        ?? highlightedID
-                        ?? visualCascadeFocusLyricID
-                    withTransaction(resetTransaction) {
-                        scrollPositionID = currentTarget
-                    }
-                    return false
-                }
-            }
-
             let duration = animationDuration
                 ?? LyricPlaybackTimeline.focusAnimationDuration(
                     for: id,
                     in: model.lyrics.lyrics
                 )
-            withAnimation(
-                animated
+            let requestAnimationDuration = animated
                     && attempt == 0
                     && !reduceMotion
                     && isActive
-                    ? .smooth(duration: duration)
-                    : nil
-            ) {
-                scrollPositionID = id
-            }
+                    && !isViewportChanging
+                ? duration
+                : nil
+            requestScroll(
+                to: id,
+                animationDuration: requestAnimationDuration
+            )
             await Task.yield()
             guard !Task.isCancelled else { return false }
             if await waitForPreparedFocus(
@@ -1053,7 +1162,7 @@ struct DesktopLyricsScrollView: View {
     private func updateVisualFocus(to highlightedID: LyricLine.ID) {
         updateVisualColorFocus(to: highlightedID)
         withAnimation(
-            isActive
+            isActive && !isViewportChanging
                 ? DesktopLyricsAnimations.focusScaleAnimation(
                     settings: model.settings,
                     highlightedID: highlightedID,
@@ -1070,7 +1179,7 @@ struct DesktopLyricsScrollView: View {
     private func updateVisualColorFocus(
         to highlightedID: LyricLine.ID?
     ) {
-        guard !reduceMotion, isActive else {
+        guard !reduceMotion, isActive, !isViewportChanging else {
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) {
@@ -1149,6 +1258,15 @@ struct DesktopLyricsScrollView: View {
     private func surfacedScrollView(viewportSize: CGSize) -> some View {
         let lyrics = model.lyrics.lyrics
         let viewportHeight = viewportSize.height
+        let textLayoutWidth = DesktopLyricsLayoutMetrics.textLayoutWidth(
+            viewportWidth: viewportSize.width,
+            compact: compact
+        )
+        let visualFocusAnchorY =
+            DesktopLyricsLayoutMetrics.visualFocusAnchorY(
+                viewportHeight: viewportHeight,
+                focusPosition: focusPosition
+            )
         let topPadding: CGFloat = compact
             ? max(viewportHeight * focusPosition, 44)
             : max(viewportHeight * focusPosition, 40)
@@ -1179,59 +1297,67 @@ struct DesktopLyricsScrollView: View {
             where: \.isSyllableSynced
         )
 
-        let scrollView = ScrollView {
-            LazyVStack(
-                alignment: .leading,
-                spacing: lineSpacing
-            ) {
-                ForEach(lyrics) { line in
-                    if let layoutInterlude,
-                       layoutInterlude.displayBeforeLyricID == line.id {
-                        AppleMusicLyricInterludeView(
-                            interlude: layoutInterlude,
-                            advanceTime: effectiveLyricsAdvanceTime,
-                            fontSize: lyricFontSize,
-                            onInterfaceInteraction: nil
-                        )
-                        .environment(model.player)
-                        .id(layoutInterlude.id)
-                    }
-
-                    lyricLine(
-                        line,
-                        viewportSize: viewportSize,
-                        isPrecedingFocusLine: line.id == precedingFocusID,
-                        isFollowingFocusLine: line.id == followingFocusID,
-                        hasTranslations: hasTranslations,
-                        hasRomanizations: hasRomanizations,
-                        hasSyllableSyncedLyrics:
-                            containsSyllableSyncedLyrics
-                    )
-                        .id(line.id)
-                }
-            }
-            .animation(
-                reduceMotion ? nil : .smooth(duration: 0.5),
-                value: layoutInterlude?.id
-            )
-            .padding(.top, topPadding)
-            .padding(.bottom, bottomPadding)
-            .padding(.horizontal, compact ? 24 : 0)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .scrollTargetLayout()
-        }
-        .scrollIndicators(compact ? .automatic : .hidden)
-        .scrollClipDisabled(!compact)
-        .scrollPosition(id: $scrollPositionID, anchor: focusAnchor)
-        .transaction { transaction in
-            if !isInitialFocusPrepared
-                || (
-                    keepsPlaybackFocusSynchronized
-                        && isPresented
-                        && !isActive
+        let scrollView = ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: lineSpacing
                 ) {
-                transaction.animation = nil
-                transaction.disablesAnimations = true
+                    ForEach(lyrics) { line in
+                        if let layoutInterlude,
+                           layoutInterlude.displayBeforeLyricID == line.id {
+                            AppleMusicLyricInterludeView(
+                                interlude: layoutInterlude,
+                                advanceTime: effectiveLyricsAdvanceTime,
+                                fontSize: lyricFontSize,
+                                onInterfaceInteraction: nil
+                            )
+                            .environment(model.player)
+                            .id(layoutInterlude.id)
+                        }
+
+                        lyricLine(
+                            line,
+                            layoutWidth: textLayoutWidth,
+                            visualFocusAnchorY: visualFocusAnchorY,
+                            isPrecedingFocusLine: line.id == precedingFocusID,
+                            isFollowingFocusLine: line.id == followingFocusID,
+                            hasTranslations: hasTranslations,
+                            hasRomanizations: hasRomanizations,
+                            hasSyllableSyncedLyrics:
+                                containsSyllableSyncedLyrics
+                        )
+                            .id(line.id)
+                    }
+                }
+                .animation(
+                    reduceMotion ? nil : .smooth(duration: 0.5),
+                    value: layoutInterlude?.id
+                )
+                .padding(.top, topPadding)
+                .padding(.bottom, bottomPadding)
+                .padding(.horizontal, compact ? 24 : 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(compact ? .automatic : .hidden)
+            .scrollClipDisabled(!compact)
+            .defaultScrollAnchor(focusAnchor, for: .sizeChanges)
+            .onChange(of: scrollRequest, initial: true) { _, request in
+                guard let request else { return }
+                performScroll(request, with: proxy)
+            }
+            .transaction { transaction in
+                if !isInitialFocusPrepared
+                    || isViewportChanging
+                    || (
+                        keepsPlaybackFocusSynchronized
+                            && isPresented
+                            && !isActive
+                    ) {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
             }
         }
 
@@ -1286,7 +1412,8 @@ struct DesktopLyricsScrollView: View {
 
     private func lyricLine(
         _ line: LyricLine,
-        viewportSize: CGSize,
+        layoutWidth: CGFloat,
+        visualFocusAnchorY: CGFloat,
         isPrecedingFocusLine: Bool,
         isFollowingFocusLine: Bool,
         hasTranslations: Bool,
@@ -1304,8 +1431,8 @@ struct DesktopLyricsScrollView: View {
             visualHighlightedLyricID: visualHighlightedLyricID,
             focusColorTransition: lyricFocusColorTransition,
             movementPhase: lyricMovementPhase(for: line.id),
-            viewportSize: viewportSize,
-            focusPosition: focusPosition,
+            layoutWidth: layoutWidth,
+            visualFocusAnchorY: visualFocusAnchorY,
             compact: compact,
             allowsLyricBlur: allowsLyricBlur,
             foregroundColor: foregroundColor,
@@ -1359,6 +1486,7 @@ struct DesktopLyricsScrollView: View {
             return
         }
         if id == visualCascadeFocusLyricID,
+           !isViewportChanging,
            lyricMovementTransition == nil,
            update.layoutHeightChanged {
             scheduleStationaryFollowingOffsetsSynchronization()
@@ -1375,6 +1503,7 @@ struct DesktopLyricsScrollView: View {
             return
         }
         if id == visualCascadeFocusLyricID,
+           !isViewportChanging,
            lyricMovementTransition == nil {
             scheduleStationaryFollowingOffsetsSynchronization()
         }
