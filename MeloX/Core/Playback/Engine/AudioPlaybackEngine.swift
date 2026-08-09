@@ -197,8 +197,8 @@ final class AudioPlaybackEngine {
         }
         cancelAutoMix()
         let position = max(0, seconds)
-        seekGeneration += 1
         if item.status != .readyToPlay {
+            seekGeneration += 1
             pendingSeekTime = position
             suppressesProgressUpdates = position > 0
             onProgressChanged?(position)
@@ -206,16 +206,11 @@ final class AudioPlaybackEngine {
         }
 
         pendingSeekTime = 0
-        suppressesProgressUpdates = false
-        activeDeck.player.seek(
-            to: CMTime(
-                seconds: position,
-                preferredTimescale: 600
-            ),
-            toleranceBefore: .zero,
-            toleranceAfter: .zero
+        applySeek(
+            to: position,
+            for: item,
+            reportsTargetImmediately: true
         )
-        onProgressChanged?(position)
     }
 
     func setVolume(_ volume: Double) {
@@ -399,9 +394,10 @@ final class AudioPlaybackEngine {
             if pendingSeekTime > 0 {
                 let position = pendingSeekTime
                 pendingSeekTime = 0
-                applyInitialSeek(
+                applySeek(
                     to: position,
-                    for: item
+                    for: item,
+                    reportsTargetImmediately: false
                 )
                 return
             }
@@ -498,33 +494,35 @@ final class AudioPlaybackEngine {
         onProgressChanged?(max(0, seconds))
     }
 
-    private func applyInitialSeek(
+    private func applySeek(
         to position: TimeInterval,
-        for item: AVPlayerItem
+        for item: AVPlayerItem,
+        reportsTargetImmediately: Bool
     ) {
         seekGeneration += 1
         let generation = seekGeneration
-        activeDeck.player.seek(
+        let seekingPlayer = activeDeck.player
+        suppressesProgressUpdates = true
+        if reportsTargetImmediately {
+            onProgressChanged?(position)
+        }
+        seekingPlayer.seek(
             to: CMTime(
                 seconds: position,
                 preferredTimescale: 600
             ),
             toleranceBefore: .zero,
             toleranceAfter: .zero
-        ) { [weak self] finished in
+        ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor [self] in
                 guard generation == self.seekGeneration,
-                      self.activeDeck.player.currentItem
-                        === item else {
+                      self.activeDeck.player === seekingPlayer,
+                      seekingPlayer.currentItem === item else {
                     return
                 }
                 self.suppressesProgressUpdates = false
-                if finished {
-                    self.onProgressChanged?(position)
-                } else {
-                    self.publishProgressIfAvailable()
-                }
+                self.publishProgressIfAvailable()
                 self.resumePlaybackIfNeeded()
             }
         }
