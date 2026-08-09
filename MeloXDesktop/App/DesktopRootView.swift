@@ -38,6 +38,7 @@ struct DesktopRootView: View {
             )
         }
         .toolbar(removing: .sidebarToggle)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             if ui.isNowPlayingPresented {
                 DesktopNowPlayingToolbarContent(model: model)

@@ -486,8 +486,22 @@ final class NeteaseAPI {
         )
     }
 
-    func dailySongs() async throws -> [Song] {
-        let response: DailySongsResponse = try await client.eapi("/api/v3/discovery/recommend/songs")
+    func dailySongs(afresh: Bool = false) async throws -> [Song] {
+        let path = "/api/v3/discovery/recommend/songs"
+        let data: [String: Any] = afresh ? ["afresh": true] : [:]
+        let response: DailySongsResponse
+        do {
+            // Keep the stable transport already used by the iOS client. This
+            // route frequently returns HTTP 200 with an empty weapi body
+            // through CFNetwork, including after its built-in retries.
+            response = try await client.eapi(path, data: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch APIError.emptyResponse {
+            // Preserve the original route and `afresh` parameter if eapi ever
+            // returns an empty body, changing only the transport.
+            response = try await client.weapi(path, data: data)
+        }
         return response.data.dailySongs
     }
 
