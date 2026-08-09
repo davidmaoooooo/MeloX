@@ -297,11 +297,13 @@ private struct DesktopHomeQuickActionButton: View {
                 .frame(width: width, height: height)
 
                 if isActive {
-                    ProgressView()
-                        .controlSize(.large)
+                    Image(systemName: "waveform")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.primary)
                         .padding(18)
                         .background(.regularMaterial, in: .circle)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accessibilityLabel("正在启动\(action.title)")
                 }
             }
             .frame(width: width, height: height)

@@ -146,6 +146,16 @@ struct DesktopRootView: View {
         isPresented: Bool
     ) async {
         guard isPresented else {
+            if !reduceMotion {
+                do {
+                    try await Task.sleep(
+                        for: DesktopPlayerMotion.nowPlayingContentDelay
+                    )
+                } catch {
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
             commitNowPlayingRenderingActivity(false)
             return
         }
@@ -166,6 +176,7 @@ struct DesktopRootView: View {
     }
 
     private func commitNowPlayingRenderingActivity(_ isActive: Bool) {
+        guard isNowPlayingRenderingActive != isActive else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
@@ -182,9 +193,6 @@ struct DesktopTabPage: View {
     var body: some View {
         @Bindable var ui = model.ui
         let isInspectorPresented = ui.inspector != nil
-        let reservedTrailingWidth = isInspectorPresented
-            ? DesktopMainWindowMetrics.playerSidePanelWidth
-            : 0
 
         let pageContent = NavigationStack(path: $ui.path) {
             DesktopSectionContentView(section: section)
@@ -198,21 +206,7 @@ struct DesktopTabPage: View {
         ZStack(alignment: .trailing) {
             pageContent
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if model.player.currentSong != nil {
-                        HStack(spacing: 0) {
-                            Spacer(minLength: 0)
-                            DesktopBottomPlayer()
-                                .frame(maxWidth: 780)
-                            Spacer(minLength: 0)
-                        }
-                            .frame(maxWidth: .infinity)
-                            .padding(.leading, 24)
-                            .padding(
-                                .trailing,
-                                24 + reservedTrailingWidth
-                            )
-                            .padding(.bottom, 10)
-                    }
+                    DesktopGlobalBottomPlayerInset()
                 }
 
             DesktopPlayerSidePanel(
@@ -238,6 +232,23 @@ struct DesktopTabPage: View {
                 value: isInspectorPresented
             )
         }
+        .anchorPreference(
+            key: DesktopTabContentBoundsPreferenceKey.self,
+            value: .bounds
+        ) { bounds in
+            [section: bounds]
+        }
+    }
+}
+
+struct DesktopTabContentBoundsPreferenceKey: PreferenceKey {
+    static var defaultValue: [DesktopSection: Anchor<CGRect>] = [:]
+
+    static func reduce(
+        value: inout [DesktopSection: Anchor<CGRect>],
+        nextValue: () -> [DesktopSection: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue()) { _, latest in latest }
     }
 }
 

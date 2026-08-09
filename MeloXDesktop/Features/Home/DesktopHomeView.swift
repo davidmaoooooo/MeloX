@@ -23,10 +23,9 @@ struct DesktopHomeView: View {
                 0
             )
             let totalSpacing = spacing * CGFloat(max(columnCount - 1, 0))
-            return max(
-                (usableWidth - totalSpacing) / CGFloat(columnCount),
-                1
-            )
+            let rawWidth = (usableWidth - totalSpacing)
+                / CGFloat(columnCount)
+            return max(rawWidth.rounded(.down), 1)
         }
     }
 
@@ -126,7 +125,12 @@ struct DesktopHomeView: View {
                 if model.home.phase == .loading {
                     HStack {
                         Spacer()
-                        ProgressView("正在载入为你准备的内容…")
+                        Label(
+                            "正在载入为你准备的内容…",
+                            systemImage: "sparkles"
+                        )
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                         Spacer()
                     }
                     .frame(height: 270)

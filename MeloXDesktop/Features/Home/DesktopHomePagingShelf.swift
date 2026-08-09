@@ -44,28 +44,13 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
                                 .id(item.id)
                         }
                     }
-                    .scrollTargetLayout()
                 }
-                .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
                 .scrollIndicators(.hidden)
                 .clipped()
-                .onScrollTargetVisibilityChange(
-                    idType: Item.ID.self,
-                    threshold: 0.5
-                ) { visibleIDs in
-                    let visibleIndices = visibleIDs.compactMap { visibleID in
-                        items.firstIndex { $0.id == visibleID }
-                    }
-                    if let firstVisibleIndex = visibleIndices.min() {
-                        leadingIndex = min(
-                            firstVisibleIndex,
-                            lastPageStart
-                        )
-                    }
-                }
-                .onChange(of: items.map(\.id), initial: true) {
-                    _, _ in
-                    leadingIndex = min(leadingIndex, lastPageStart)
+                .onChange(of: items.map(\.id), initial: true) { _, _ in
+                    let clampedIndex = min(leadingIndex, lastPageStart)
+                    guard clampedIndex != leadingIndex else { return }
+                    leadingIndex = clampedIndex
                 }
 
                 HStack(spacing: 0) {

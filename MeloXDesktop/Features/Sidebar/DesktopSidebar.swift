@@ -41,6 +41,23 @@ struct DesktopSidebar: View {
             DesktopSidebarVisibilityLock()
                 .frame(width: 0, height: 0)
         }
+        .overlayPreferenceValue(
+            DesktopTabContentBoundsPreferenceKey.self
+        ) { boundsBySection in
+            GeometryReader { proxy in
+                if let bounds = boundsBySection[model.ui.selection] {
+                    let frame = proxy[bounds]
+
+                    DesktopGlobalBottomPlayer()
+                        .frame(
+                            width: frame.width,
+                            height: frame.height,
+                            alignment: .bottom
+                        )
+                        .position(x: frame.midX, y: frame.midY)
+                }
+            }
+        }
     }
 
     private func tab(

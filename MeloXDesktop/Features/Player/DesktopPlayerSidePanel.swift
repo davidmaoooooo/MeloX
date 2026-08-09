@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A resident trailing overlay whose real pages stay mounted. Keeping both page
-/// trees alive preserves lyrics and queue state while their visibility fades.
+/// A trailing overlay that keeps only its visible page mounted. In particular,
+/// the geometry-heavy lyrics view must not keep measuring while the panel is
+/// outside the window.
 struct DesktopPlayerSidePanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var renderingSelection: DesktopInspector?
@@ -42,17 +43,13 @@ struct DesktopPlayerSidePanel: View {
 
     private var crossfadingContent: some View {
         ZStack {
-            ForEach(DesktopInspector.allCases) { inspector in
-                let isSelected = selection == inspector
-
+            if isPresented || renderingSelection != nil {
                 DesktopPlayerInspector(
-                    kind: inspector,
-                    isActive: renderingSelection == inspector
+                    kind: selection,
+                    isActive: renderingSelection == selection
                 )
-                .opacity(isSelected ? 1 : 0)
-                .allowsHitTesting(isSelected)
-                .accessibilityHidden(!isSelected)
-                .zIndex(isSelected ? 1 : 0)
+                .id(selection)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -74,6 +71,18 @@ struct DesktopPlayerSidePanel: View {
 
     private func updateRenderingSelection() async {
         guard isPresented else {
+            if !reduceMotion {
+                do {
+                    try await Task.sleep(
+                        for: .seconds(
+                            DesktopMainWindowMetrics.presentationDuration
+                        )
+                    )
+                } catch {
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
             commitRenderingSelection(nil)
             return
         }
@@ -103,6 +112,7 @@ struct DesktopPlayerSidePanel: View {
     private func commitRenderingSelection(
         _ selection: DesktopInspector?
     ) {
+        guard renderingSelection != selection else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {

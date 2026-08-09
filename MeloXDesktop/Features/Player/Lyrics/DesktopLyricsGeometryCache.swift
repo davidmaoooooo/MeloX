@@ -17,6 +17,7 @@ final class DesktopLyricsGeometryCache {
     private(set) var layoutHeightByID: [LyricLine.ID: CGFloat] = [:]
     private(set) var annotationHeightByID: [LyricLine.ID: CGFloat] = [:]
     private(set) var viewportSize: CGSize = .zero
+    private var pendingLayoutSynchronization: Task<Void, Never>?
 
     func recordViewportSize(_ size: CGSize) {
         guard size.width.isFinite,
@@ -73,9 +74,27 @@ final class DesktopLyricsGeometryCache {
     }
 
     func removeAllMeasurements() {
+        pendingLayoutSynchronization?.cancel()
+        pendingLayoutSynchronization = nil
         frameByID.removeAll(keepingCapacity: true)
         layoutHeightByID.removeAll(keepingCapacity: true)
         annotationHeightByID.removeAll(keepingCapacity: true)
+    }
+
+    /// Coalesces layout-derived state changes and runs them after the current
+    /// AppKit layout pass. Updating SwiftUI state directly from a geometry
+    /// callback can recursively enter `layoutSubtreeIfNeeded` while a window
+    /// is being resized.
+    func scheduleLayoutSynchronization(
+        _ action: @escaping @MainActor () -> Void
+    ) {
+        pendingLayoutSynchronization?.cancel()
+        pendingLayoutSynchronization = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            action()
+            self?.pendingLayoutSynchronization = nil
+        }
     }
 
     private static func isApproximatelyEqual(

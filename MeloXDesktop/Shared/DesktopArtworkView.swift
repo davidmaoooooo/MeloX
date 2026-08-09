@@ -6,14 +6,10 @@ struct DesktopArtworkView: View {
     var contentMode: ContentMode = .fill
 
     var body: some View {
-        AsyncImage(url: url, transaction: Transaction(animation: .easeInOut)) {
-            phase in
+        AsyncImage(url: url) { phase in
             switch phase {
             case .empty:
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.quaternary.opacity(0.35))
+                placeholder(systemImage: "music.note")
             case .success(let image):
                 image
                     .resizable()
@@ -30,6 +26,17 @@ struct DesktopArtworkView: View {
             }
         }
         .clipShape(.rect(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    private func placeholder(systemImage: String) -> some View {
+        ZStack {
+            Color.secondary.opacity(0.10)
+
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

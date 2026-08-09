@@ -36,10 +36,10 @@ struct DesktopNowPlayingProgress: View {
                     .contentTransition(
                         .numericText(value: Double(elapsedSecond))
                     )
-                    .animation(
-                        numericTextAnimation,
-                        value: elapsedSecond
-                    )
+                    .transaction { transaction in
+                        guard let numericTextAnimation else { return }
+                        transaction.animation = numericTextAnimation
+                    }
 
                 Spacer()
 
@@ -47,10 +47,10 @@ struct DesktopNowPlayingProgress: View {
                     .contentTransition(
                         .numericText(value: Double(remainingSecond))
                     )
-                    .animation(
-                        numericTextAnimation,
-                        value: remainingSecond
-                    )
+                    .transaction { transaction in
+                        guard let numericTextAnimation else { return }
+                        transaction.animation = numericTextAnimation
+                    }
             }
             .font(.system(size: 10).monospacedDigit())
             .foregroundStyle(tint.opacity(0.82))

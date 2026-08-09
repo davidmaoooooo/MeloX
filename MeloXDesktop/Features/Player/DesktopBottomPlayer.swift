@@ -2,6 +2,54 @@ import SwiftUI
 
 private enum DesktopBottomPlayerMetrics {
     static let collapsedProgressHorizontalScale: CGFloat = 0.97
+    static let regularGlobalInsetHeight: CGFloat = 70
+    static let issueGlobalInsetHeight: CGFloat = 100
+}
+
+/// Installs one player bar for the main window instead of recreating it in
+/// every tab's navigation root.
+struct DesktopGlobalBottomPlayer: View {
+    @Environment(DesktopAppModel.self) private var model
+
+    var body: some View {
+        if model.player.currentSong != nil {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                DesktopBottomPlayer()
+                    .frame(maxWidth: 780)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.leading, 24)
+            .padding(.trailing, 24 + reservedTrailingWidth)
+            .padding(.bottom, 10)
+        }
+    }
+
+    private var reservedTrailingWidth: CGFloat {
+        model.ui.inspector == nil
+            ? 0
+            : DesktopMainWindowMetrics.playerSidePanelWidth
+    }
+}
+
+/// Reserves content space for the single player bar rendered by the app shell.
+struct DesktopGlobalBottomPlayerInset: View {
+    @Environment(DesktopAppModel.self) private var model
+
+    var body: some View {
+        if model.player.currentSong != nil {
+            Color.clear
+                .frame(height: insetHeight)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var insetHeight: CGFloat {
+        model.player.playbackIssue == nil
+            ? DesktopBottomPlayerMetrics.regularGlobalInsetHeight
+            : DesktopBottomPlayerMetrics.issueGlobalInsetHeight
+    }
 }
 
 struct DesktopBottomPlayer: View {

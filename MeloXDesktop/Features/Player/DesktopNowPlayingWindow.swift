@@ -144,7 +144,9 @@ struct DesktopNowPlayingWindow: View {
                     compact: false,
                     foregroundColor: artworkInfluencedForeground,
                     initialFocusID: initialLyricsFocusID,
-                    isActive: isRenderingActive
+                    isActive: isRenderingActive,
+                    isPresented: isActive,
+                    keepsPlaybackFocusSynchronized: true
                 )
                 .padding(.trailing, 72)
             } else {
