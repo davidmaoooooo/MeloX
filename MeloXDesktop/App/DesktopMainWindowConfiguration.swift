@@ -206,10 +206,12 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
                 )
             )
 
-            window.contentMinSize = NSSize(
+            let minimumContentSize = NSSize(
                 width: minimumWidth,
                 height: DesktopMainWindowMetrics.minimumContentHeight
             )
+            guard window.contentMinSize != minimumContentSize else { return }
+            window.contentMinSize = minimumContentSize
         }
 
         private func setFrame(_ frame: NSRect, on window: NSWindow) {

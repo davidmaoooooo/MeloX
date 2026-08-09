@@ -4,6 +4,7 @@ struct DesktopRootView: View {
     @Environment(DesktopAppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isNowPlayingLayerMounted = false
     @State private var isNowPlayingRenderingActive = false
 
     var body: some View {
@@ -13,10 +14,12 @@ struct DesktopRootView: View {
             DesktopSidebar()
 
             GeometryReader { proxy in
-                nowPlayingLayer(
-                    isPresented: ui.isNowPlayingPresented,
-                    isRenderingActive: isNowPlayingRenderingActive
-                )
+                if ui.isNowPlayingPresented
+                    || isNowPlayingLayerMounted {
+                    nowPlayingLayer(
+                        isPresented: ui.isNowPlayingPresented,
+                        isRenderingActive: isNowPlayingRenderingActive
+                    )
                     .frame(
                         width: proxy.size.width,
                         height: proxy.size.height
@@ -28,6 +31,8 @@ struct DesktopRootView: View {
                     )
                     .allowsHitTesting(ui.isNowPlayingPresented)
                     .accessibilityHidden(!ui.isNowPlayingPresented)
+                    .transition(.move(edge: .bottom))
+                }
             }
             .zIndex(1)
             .animation(
@@ -75,7 +80,7 @@ struct DesktopRootView: View {
         .desktopLaunchExperience()
         .task { await model.bootstrap() }
         .task(id: ui.isNowPlayingPresented) {
-            await updateNowPlayingRenderingActivity(
+            await updateNowPlayingLifecycle(
                 isPresented: ui.isNowPlayingPresented
             )
         }
@@ -142,24 +147,27 @@ struct DesktopRootView: View {
         }
     }
 
-    private func updateNowPlayingRenderingActivity(
+    private func updateNowPlayingLifecycle(
         isPresented: Bool
     ) async {
-        guard isPresented else {
-            if !reduceMotion {
-                do {
-                    try await Task.sleep(
-                        for: DesktopPlayerMotion.nowPlayingContentDelay
-                    )
-                } catch {
-                    return
-                }
-            }
-            guard !Task.isCancelled else { return }
-            commitNowPlayingRenderingActivity(false)
+        if isPresented {
+            commitNowPlayingLayerMounted(true)
+            guard await waitForNowPlayingTransition() else { return }
+            guard model.ui.isNowPlayingPresented else { return }
+            commitNowPlayingRenderingActivity(true)
             return
         }
 
+        // Stop display-linked and geometry-driven work before the page starts
+        // moving. The mounted layer stays around only to draw the exit frame.
+        commitNowPlayingRenderingActivity(false)
+        guard isNowPlayingLayerMounted else { return }
+        guard await waitForNowPlayingTransition() else { return }
+        guard !model.ui.isNowPlayingPresented else { return }
+        commitNowPlayingLayerMounted(false)
+    }
+
+    private func waitForNowPlayingTransition() async -> Bool {
         if reduceMotion {
             await Task.yield()
         } else {
@@ -168,11 +176,19 @@ struct DesktopRootView: View {
                     for: DesktopPlayerMotion.nowPlayingContentDelay
                 )
             } catch {
-                return
+                return false
             }
         }
-        guard !Task.isCancelled else { return }
-        commitNowPlayingRenderingActivity(true)
+        return !Task.isCancelled
+    }
+
+    private func commitNowPlayingLayerMounted(_ isMounted: Bool) {
+        guard isNowPlayingLayerMounted != isMounted else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isNowPlayingLayerMounted = isMounted
+        }
     }
 
     private func commitNowPlayingRenderingActivity(_ isActive: Bool) {
@@ -206,7 +222,7 @@ struct DesktopTabPage: View {
         ZStack(alignment: .trailing) {
             pageContent
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    DesktopGlobalBottomPlayerInset()
+                    DesktopTabBottomPlayerInset()
                 }
 
             DesktopPlayerSidePanel(
@@ -231,24 +247,17 @@ struct DesktopTabPage: View {
                     : DesktopMainWindowMetrics.presentationAnimation,
                 value: isInspectorPresented
             )
-        }
-        .anchorPreference(
-            key: DesktopTabContentBoundsPreferenceKey.self,
-            value: .bounds
-        ) { bounds in
-            [section: bounds]
-        }
-    }
-}
 
-struct DesktopTabContentBoundsPreferenceKey: PreferenceKey {
-    static var defaultValue: [DesktopSection: Anchor<CGRect>] = [:]
-
-    static func reduce(
-        value: inout [DesktopSection: Anchor<CGRect>],
-        nextValue: () -> [DesktopSection: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue()) { _, latest in latest }
+            if section == ui.selection {
+                DesktopTabBottomPlayer()
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .bottom
+                    )
+                    .zIndex(3)
+            }
+        }
     }
 }
 

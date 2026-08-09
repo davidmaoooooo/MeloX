@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// A trailing overlay that keeps only its visible page mounted. In particular,
-/// the geometry-heavy lyrics view must not keep measuring while the panel is
-/// outside the window.
+/// A trailing overlay that mounts its real page after the window finishes
+/// expanding, then removes it after the closing animation. In particular, the
+/// geometry-heavy lyrics view must not measure while the panel is offscreen or
+/// while AppKit is applying the new window frame.
 struct DesktopPlayerSidePanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var renderingSelection: DesktopInspector?
@@ -23,30 +24,34 @@ struct DesktopPlayerSidePanel: View {
 
     @ViewBuilder
     private var surfacedPanel: some View {
-        if #available(macOS 26.0, *) {
-            crossfadingContent
-                .background {
-                    Color.clear
-                        .glassEffect(
-                            .regular,
-                            in: .rect(cornerRadius: 0)
-                        )
-                }
+        if isPresented || renderingSelection != nil {
+            if #available(macOS 26.0, *) {
+                crossfadingContent
+                    .background {
+                        Color.clear
+                            .glassEffect(
+                                .regular,
+                                in: .rect(cornerRadius: 0)
+                            )
+                    }
+            } else {
+                crossfadingContent
+                    .background {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                    }
+            }
         } else {
-            crossfadingContent
-                .background {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                }
+            Color.clear
         }
     }
 
     private var crossfadingContent: some View {
         ZStack {
-            if isPresented || renderingSelection != nil {
+            if renderingSelection != nil {
                 DesktopPlayerInspector(
                     kind: selection,
-                    isActive: renderingSelection == selection
+                    isActive: isPresented && renderingSelection == selection
                 )
                 .id(selection)
                 .transition(.opacity)

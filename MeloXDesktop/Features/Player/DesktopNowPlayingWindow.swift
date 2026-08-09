@@ -11,7 +11,6 @@ struct DesktopNowPlayingWindow: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: DesktopInspector? = .lyrics
-    @State private var isLyricsContentReady = false
     @State private var palette = ArtworkDetailPalette.fallback(
         prefersDarkAppearance: true
     )
@@ -70,9 +69,6 @@ struct DesktopNowPlayingWindow: View {
                 for: artworkURL,
                 fallbackPrefersDarkAppearance: true
             )
-        }
-        .task {
-            await prepareLyricsContent()
         }
     }
 
@@ -139,19 +135,15 @@ struct DesktopNowPlayingWindow: View {
     private func nowPlayingPanel(_ page: DesktopInspector) -> some View {
         switch page {
         case .lyrics:
-            if isLyricsContentReady {
-                DesktopLyricsScrollView(
-                    compact: false,
-                    foregroundColor: artworkInfluencedForeground,
-                    initialFocusID: initialLyricsFocusID,
-                    isActive: isRenderingActive,
-                    isPresented: isActive,
-                    keepsPlaybackFocusSynchronized: true
-                )
-                .padding(.trailing, 72)
-            } else {
-                Color.clear
-            }
+            DesktopLyricsScrollView(
+                compact: false,
+                foregroundColor: artworkInfluencedForeground,
+                initialFocusID: initialLyricsFocusID,
+                isActive: isRenderingActive,
+                isPresented: isActive,
+                keepsPlaybackFocusSynchronized: true
+            )
+            .padding(.trailing, 72)
         case .queue:
             DesktopQueueView(presentation: .nowPlaying)
         }
@@ -159,27 +151,6 @@ struct DesktopNowPlayingWindow: View {
 
     private var initialLyricsFocusID: LyricLine.ID? {
         model.currentLyricsFocusID
-    }
-
-    private func prepareLyricsContent() async {
-        if reduceMotion {
-            await Task.yield()
-        } else {
-            do {
-                try await Task.sleep(
-                    for: DesktopPlayerMotion.nowPlayingContentDelay
-                )
-            } catch {
-                return
-            }
-        }
-        guard !Task.isCancelled else { return }
-
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            isLyricsContentReady = true
-        }
     }
 
     private var playerChrome: some View {

@@ -74,11 +74,15 @@ final class DesktopLyricsGeometryCache {
     }
 
     func removeAllMeasurements() {
-        pendingLayoutSynchronization?.cancel()
-        pendingLayoutSynchronization = nil
+        cancelPendingLayoutSynchronization()
         frameByID.removeAll(keepingCapacity: true)
         layoutHeightByID.removeAll(keepingCapacity: true)
         annotationHeightByID.removeAll(keepingCapacity: true)
+    }
+
+    func cancelPendingLayoutSynchronization() {
+        pendingLayoutSynchronization?.cancel()
+        pendingLayoutSynchronization = nil
     }
 
     /// Coalesces layout-derived state changes and runs them after the current

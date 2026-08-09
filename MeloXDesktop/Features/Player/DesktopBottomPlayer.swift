@@ -6,9 +6,10 @@ private enum DesktopBottomPlayerMetrics {
     static let issueGlobalInsetHeight: CGFloat = 100
 }
 
-/// Installs one player bar for the main window instead of recreating it in
-/// every tab's navigation root.
-struct DesktopGlobalBottomPlayer: View {
+/// Renders the single player bar in the selected tab's content coordinate
+/// space. The tab page owns selection gating so hidden tabs do not keep extra
+/// player trees alive.
+struct DesktopTabBottomPlayer: View {
     @Environment(DesktopAppModel.self) private var model
 
     var body: some View {
@@ -34,7 +35,7 @@ struct DesktopGlobalBottomPlayer: View {
 }
 
 /// Reserves content space for the single player bar rendered by the app shell.
-struct DesktopGlobalBottomPlayerInset: View {
+struct DesktopTabBottomPlayerInset: View {
     @Environment(DesktopAppModel.self) private var model
 
     var body: some View {
@@ -203,19 +204,22 @@ struct DesktopBottomPlayer: View {
         return Button {
             model.ui.toggleInspector(destination)
         } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isSelected ? Color.red : Color.primary)
-                .frame(width: 30, height: 30)
-                .background(
-                    isSelected ? Color.red.opacity(0.14) : Color.clear,
-                    in: .circle
-                )
-                .contentShape(.circle)
-                .animation(
-                    .snappy(duration: 0.24, extraBounce: 0.04),
-                    value: isSelected
-                )
+            ZStack {
+                Circle()
+                    .fill(Color.red.opacity(0.14))
+                    .opacity(isSelected ? 1 : 0)
+                    .scaleEffect(isSelected ? 1 : 0.84)
+                    .animation(
+                        .snappy(duration: 0.24, extraBounce: 0.04),
+                        value: isSelected
+                    )
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.red : Color.primary)
+            }
+            .frame(width: 30, height: 30)
+            .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .help(title)

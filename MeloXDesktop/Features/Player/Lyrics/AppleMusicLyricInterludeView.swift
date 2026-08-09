@@ -30,6 +30,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
             .onChange(of: synchronizationTrigger, initial: true) {
+                guard isActive else { return }
                 synchronizeImmediately()
             }
             .onChange(of: player.progress) {
@@ -37,6 +38,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
                 synchronizeImmediately()
             }
             .task(id: synchronizationTrigger) {
+                guard isActive else { return }
                 await synchronizeAtTransitions()
             }
     }

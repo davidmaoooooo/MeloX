@@ -169,6 +169,14 @@ struct DesktopLyricsScrollView: View {
         return isActive ? .active : .opening
     }
 
+    private var acceptsGeometryUpdates: Bool {
+        !keepsPlaybackFocusSynchronized || isPresented
+    }
+
+    private var coordinatesPlaybackFocus: Bool {
+        isActive && acceptsGeometryUpdates
+    }
+
     var body: some View {
         GeometryReader { geometry in
             Group {
@@ -192,6 +200,7 @@ struct DesktopLyricsScrollView: View {
                 }
             }
             .onChange(of: geometry.size, initial: true) { _, size in
+                guard acceptsGeometryUpdates else { return }
                 geometryCache.recordViewportSize(size)
                 settleMovementForViewportChange()
             }
@@ -199,11 +208,15 @@ struct DesktopLyricsScrollView: View {
         .onChange(of: model.lyrics.songID) { _, _ in
             resetLyricsSession()
         }
+        .onChange(of: acceptsGeometryUpdates) { _, acceptsUpdates in
+            guard !acceptsUpdates else { return }
+            geometryCache.cancelPendingLayoutSynchronization()
+        }
         .background {
             AppleMusicLyricsFocusCoordinator(
                 lyrics: model.lyrics.lyrics,
                 interludes: interludes,
-                isActive: isActive || keepsPlaybackFocusSynchronized,
+                isActive: coordinatesPlaybackFocus,
                 playbackFocus: $playbackFocus,
                 timelineHighlightedLyricID: $timelineHighlightedLyricID
             )
@@ -214,7 +227,10 @@ struct DesktopLyricsScrollView: View {
             \.effectiveLyricsRefreshRate,
             model.settings.lyricsRefreshRate
         )
-        .environment(\.lyricsRenderingIsActive, isActive)
+        .environment(
+            \.lyricsRenderingIsActive,
+            isActive && acceptsGeometryUpdates
+        )
     }
 
     private func resetLyricsSession() {
@@ -279,9 +295,7 @@ struct DesktopLyricsScrollView: View {
                         )
                         return
                     }
-                    if await prepareFocusForPresentationIfNeeded(
-                        viewportHeight: viewportSize.height
-                    ) {
+                    if await prepareFocusForPresentationIfNeeded() {
                         return
                     }
                     await movePlaybackFocus(to: activeInterlude)
@@ -320,9 +334,7 @@ struct DesktopLyricsScrollView: View {
                     )
                     return
                 }
-                if await prepareFocusForPresentationIfNeeded(
-                    viewportHeight: viewportSize.height
-                ) {
+                if await prepareFocusForPresentationIfNeeded() {
                     return
                 }
                 if isActive,
@@ -397,9 +409,7 @@ struct DesktopLyricsScrollView: View {
         initialFocusPreparationRevision &+= 1
     }
 
-    private func prepareFocusForPresentationIfNeeded(
-        viewportHeight: CGFloat
-    ) async -> Bool {
+    private func prepareFocusForPresentationIfNeeded() async -> Bool {
         switch presentationPhase {
         case .unmanaged, .active:
             return false
@@ -409,29 +419,8 @@ struct DesktopLyricsScrollView: View {
             return true
 
         case .hidden:
-            if reduceMotion {
-                await Task.yield()
-            } else {
-                do {
-                    try await Task.sleep(
-                        for: DesktopPlayerMotion.nowPlayingContentDelay
-                    )
-                } catch {
-                    return true
-                }
-            }
-            guard !Task.isCancelled,
-                  presentationPhase == .hidden else { return true }
-        }
-
-        guard let focus = resolvedPresentationPlaybackFocus else {
             return true
         }
-        await synchronizePresentationFocus(
-            to: focus,
-            viewportHeight: viewportHeight
-        )
-        return true
     }
 
     private func settlePresentationTransitions() {
@@ -453,41 +442,6 @@ struct DesktopLyricsScrollView: View {
                 visualCascadeFocusLyricID = settledFocusID
                 lyricMovementOffsetByID = settledOffsets
             }
-        }
-    }
-
-    private var resolvedPresentationPlaybackFocus:
-        AppleMusicLyricsPlaybackFocus? {
-        if let playbackFocus {
-            return playbackFocus
-        }
-        return (
-            timelineHighlightedLyricID
-                ?? model.currentLyricsFocusID
-                ?? model.lyrics.lyrics.first?.id
-        ).map(AppleMusicLyricsPlaybackFocus.lyric)
-    }
-
-    private func synchronizePresentationFocus(
-        to focus: AppleMusicLyricsPlaybackFocus,
-        viewportHeight: CGFloat
-    ) async {
-        switch focus {
-        case let .lyric(id):
-            prepareInitialFocus(at: id)
-            _ = await ensureFocusAlignment(
-                to: id,
-                viewportHeight: viewportHeight,
-                animated: false,
-                forcesScrollTargetReapplication: true
-            )
-
-        case let .interlude(id):
-            guard let interlude = interludes.first(
-                where: { $0.id == id }
-            ) else { return }
-            prepareInitialFocus(at: interlude)
-            _ = await reapplyScrollTarget(id)
         }
     }
 
@@ -1359,6 +1313,7 @@ struct DesktopLyricsScrollView: View {
             hasRomanizations: hasRomanizations,
             hasSyllableSyncedLyrics: hasSyllableSyncedLyrics,
             onAnnotationHeightChange: { height in
+                guard acceptsGeometryUpdates else { return }
                 recordAnnotationHeight(height, for: line.id)
             }
         )
@@ -1367,6 +1322,7 @@ struct DesktopLyricsScrollView: View {
                 geometry.frame(in: .scrollView(axis: .vertical))
             )
         } action: { frame in
+            guard acceptsGeometryUpdates else { return }
             recordLyricGeometry(frame, for: line.id)
         }
         .onDisappear {
@@ -1394,6 +1350,7 @@ struct DesktopLyricsScrollView: View {
         _ frame: CGRect,
         for id: LyricLine.ID
     ) {
+        guard acceptsGeometryUpdates else { return }
         guard frame.minY.isFinite,
               frame.maxY.isFinite,
               frame.height.isFinite,
@@ -1412,6 +1369,7 @@ struct DesktopLyricsScrollView: View {
         _ height: CGFloat,
         for id: LyricLine.ID
     ) {
+        guard acceptsGeometryUpdates else { return }
         guard height.isFinite, height > 0 else { return }
         guard geometryCache.recordAnnotationHeight(height, for: id) else {
             return
