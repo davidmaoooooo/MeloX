@@ -27,6 +27,7 @@ struct DesktopLyricLineView: View {
     let hasRomanizations: Bool
     let hasSyllableSyncedLyrics: Bool
     let onAnnotationHeightChange: (CGFloat) -> Void
+    let onSeek: () -> Void
 
     var body: some View {
         let fontSize = compact ? min(lyricFontSize, 23) : lyricFontSize
@@ -99,6 +100,7 @@ struct DesktopLyricLineView: View {
                 ) { focusProgress in
                     Button {
                         if model.settings.lyricsTapToSeek {
+                            onSeek()
                             model.player.seek(to: line.time)
                         }
                     } label: {

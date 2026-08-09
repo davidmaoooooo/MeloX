@@ -8,15 +8,33 @@ struct DesktopLyricsInteractionSettingsView: View {
 
         ScrollView {
             Form {
-                Section("浏览与跳转") {
+                Section {
                     Toggle(
                         "单击歌词跳转",
                         isOn: $settings.lyricsTapToSeek
                     )
                     Toggle(
-                        "自动跟随当前歌词",
+                        "浏览后恢复跟随",
                         isOn: $settings.lyricsAutoFollow
                     )
+
+                    if settings.lyricsAutoFollow {
+                        HStack {
+                            Text("恢复跟随等待")
+                            Slider(
+                                value: $settings.lyricsFollowDelay,
+                                in: 1...10,
+                                step: 1
+                            )
+                            Text("\(Int(settings.lyricsFollowDelay)) 秒")
+                                .monospacedDigit()
+                                .frame(width: 60, alignment: .trailing)
+                        }
+                    }
+                } header: {
+                    Text("浏览与跳转")
+                } footer: {
+                    Text("开启自动跟随后，手动浏览结束并等待指定时间，歌词会返回当前播放行。")
                 }
 
                 Section("同步") {
