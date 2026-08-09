@@ -20,6 +20,8 @@ enum NowPlayingPageTransition {
         Animation.smooth(duration: 0.24)
     private static let incomingAnimation =
         Animation.smooth(duration: 0.22).delay(0.07)
+    private static let songHeaderIncomingAnimation =
+        Animation.smooth(duration: 0.4).delay(0.08)
     private static let delayedResidentPageEntranceAnimation =
         Animation.smooth(duration: 0.34).delay(0.11)
 
@@ -59,7 +61,14 @@ enum NowPlayingPageTransition {
 
     static func songHeader(reducesMotion: Bool) -> AnyTransition {
         guard !reducesMotion else { return .opacity }
-        return stagedOffsetAndOpacity(y: songHeaderOffset)
+        return .asymmetric(
+            insertion:
+                offsetAndOpacity(y: songHeaderOffset)
+                .animation(songHeaderIncomingAnimation),
+            removal:
+                offsetAndOpacity(y: songHeaderOffset)
+                .animation(outgoingAnimation)
+        )
     }
 
     static func selectionAnimation(
