@@ -10,6 +10,7 @@ final class DesktopAppModel {
     let cloud: CloudMusicStore
     let downloads: DownloadStore
     let player: PlayerStore
+    let playbackVolume: DesktopPlaybackVolumeController
     let listenTogether: ListenTogetherStore
     let lyrics: LyricsStore
     let lyricsNotifications: LyricsNotificationController
@@ -47,6 +48,10 @@ final class DesktopAppModel {
         self.downloads = downloads
         self.lyricsNotifications = notifications
         self.player = player
+        playbackVolume = DesktopPlaybackVolumeController(
+            settings: settings,
+            player: player
+        )
         listenTogether = ListenTogetherStore(api: api, player: player)
         lyrics = LyricsStore(api: api)
         screenAwakeCoordinator = ScreenAwakeCoordinator()

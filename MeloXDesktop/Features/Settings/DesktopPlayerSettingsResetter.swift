@@ -12,7 +12,7 @@ enum DesktopPlayerSettingsResetter {
         }
 
         await Task.yield()
-        model.player.applyVolumeControlMode()
+        model.playbackVolume.applyControlMode()
         model.player.applySpatialAudioSettings()
         model.player.applyEqualizerSettings()
         model.player.applyAutoMixSettings()

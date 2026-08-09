@@ -366,7 +366,7 @@ private struct DesktopPlaybackSettingsView: View {
             }
         }
         .onChange(of: settings.playerVolumeControlMode) { _, _ in
-            model.player.applyVolumeControlMode()
+            model.playbackVolume.applyControlMode()
         }
         .onChange(of: settings.spatialAudioMode) { _, _ in
             model.player.applySpatialAudioSettings()

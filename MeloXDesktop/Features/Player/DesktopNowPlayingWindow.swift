@@ -306,11 +306,11 @@ struct DesktopNowPlayingWindowControls: View {
 
 struct DesktopNowPlayingVolumeControl: View {
     @Environment(DesktopAppModel.self) private var model
-    @State private var systemVolume = 1.0
-    @State private var lastAudibleVolume = 0.8
 
     var body: some View {
-        surfacedContent
+        if model.playbackVolume.isControlVisible {
+            surfacedContent
+        }
     }
 
     @ViewBuilder
@@ -323,12 +323,7 @@ struct DesktopNowPlayingVolumeControl: View {
             indicatedVolumeSlider
 
             Button {
-                if currentVolume > 0.001 {
-                    lastAudibleVolume = currentVolume
-                    setVolume(0)
-                } else {
-                    setVolume(max(lastAudibleVolume, 0.2))
-                }
+                model.playbackVolume.toggleMuted(minimumRestoreVolume: 0.2)
             } label: {
                 Label(
                     currentVolume > 0.001 ? "静音" : "取消静音",
@@ -343,9 +338,6 @@ struct DesktopNowPlayingVolumeControl: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .frame(height: 36)
-        .task(id: model.settings.playerVolumeControlMode) {
-            await refreshSystemVolumeIfNeeded()
-        }
     }
 
     @ViewBuilder
@@ -373,42 +365,12 @@ struct DesktopNowPlayingVolumeControl: View {
     private var volumeBinding: Binding<Double> {
         Binding(
             get: { currentVolume },
-            set: { setVolume($0) }
+            set: { model.playbackVolume.setVolume($0) }
         )
     }
 
     private var currentVolume: Double {
-        model.settings.playerVolumeControlMode == .system
-            ? systemVolume
-            : model.player.volume
-    }
-
-    private func setVolume(_ value: Double) {
-        let normalizedValue = min(max(value, 0), 1)
-        if normalizedValue > 0.001 {
-            lastAudibleVolume = normalizedValue
-        }
-
-        if model.settings.playerVolumeControlMode == .system,
-           DesktopSystemVolumeController.setVolume(normalizedValue) {
-            systemVolume = normalizedValue
-        } else {
-            model.player.setVolume(normalizedValue)
-        }
-    }
-
-    private func refreshSystemVolumeIfNeeded() async {
-        guard model.settings.playerVolumeControlMode == .system else { return }
-
-        let volume = await Task.detached(priority: .userInitiated) {
-            DesktopSystemVolumeController.volume()
-        }.value
-        guard !Task.isCancelled, let volume else { return }
-
-        systemVolume = volume
-        if volume > 0.001 {
-            lastAudibleVolume = volume
-        }
+        model.playbackVolume.volume
     }
 
     private var volumeSymbol: String {

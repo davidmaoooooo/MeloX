@@ -67,7 +67,8 @@ struct DesktopRootView: View {
                 )
 
                 DesktopNowPlayingTrailingAccessoryInstaller(
-                    isPresented: ui.isNowPlayingPresented,
+                    isPresented: ui.isNowPlayingPresented
+                        && model.playbackVolume.isControlVisible,
                     model: model
                 )
             }

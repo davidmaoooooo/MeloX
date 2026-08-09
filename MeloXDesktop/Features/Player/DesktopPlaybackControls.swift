@@ -162,24 +162,25 @@ struct DesktopVolumeControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var tint: Color = .primary
     @State private var isExpanded = false
-    @State private var lastAudibleVolume = 0.8
     @State private var volumeAnimationTrigger = 0
     @State private var isVolumeTrackHovered = false
 
     var body: some View {
-        surfacedControl
-            .fixedSize(horizontal: true, vertical: false)
-            .contentShape(.capsule)
-            .onHover { hovering in
-                guard !hovering, isExpanded else { return }
-                setExpanded(false)
-            }
-            .animation(
-                reduceMotion
-                    ? nil
-                    : DesktopPlayerMotion.volume(expanded: isExpanded),
-                value: isExpanded
-            )
+        if model.playbackVolume.isControlVisible {
+            surfacedControl
+                .fixedSize(horizontal: true, vertical: false)
+                .contentShape(.capsule)
+                .onHover { hovering in
+                    guard !hovering, isExpanded else { return }
+                    setExpanded(false)
+                }
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : DesktopPlayerMotion.volume(expanded: isExpanded),
+                    value: isExpanded
+                )
+        }
     }
 
     @ViewBuilder
@@ -246,7 +247,7 @@ struct DesktopVolumeControl: View {
     private var volumeSlider: some View {
         Slider(
             value: Binding(
-                get: { model.player.volume },
+                get: { model.playbackVolume.volume },
                 set: { setExpandedVolume($0) }
             ),
             in: 0...1
@@ -259,10 +260,7 @@ struct DesktopVolumeControl: View {
     }
 
     private func setExpandedVolume(_ value: Double) {
-        if value > 0.001 {
-            lastAudibleVolume = value
-        }
-        model.player.setVolume(value)
+        model.playbackVolume.setVolume(value)
     }
 
     private func handleVolumeButton() {
@@ -271,12 +269,7 @@ struct DesktopVolumeControl: View {
             return
         }
 
-        if model.player.volume > 0.001 {
-            lastAudibleVolume = model.player.volume
-            model.player.setVolume(0)
-        } else {
-            model.player.setVolume(max(lastAudibleVolume, 0.08))
-        }
+        model.playbackVolume.toggleMuted()
         volumeAnimationTrigger += 1
     }
 
@@ -292,7 +285,7 @@ struct DesktopVolumeControl: View {
     }
 
     private var volumeSymbol: String {
-        switch model.player.volume {
+        switch model.playbackVolume.volume {
         case ...0.001: "speaker.slash.fill"
         case ..<0.35: "speaker.wave.1.fill"
         case ..<0.7: "speaker.wave.2.fill"

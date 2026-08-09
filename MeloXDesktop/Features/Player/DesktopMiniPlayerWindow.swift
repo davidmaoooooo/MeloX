@@ -115,6 +115,11 @@ struct DesktopMiniPlayerWindow: View {
                     fallbackPrefersDarkAppearance: true
                 )
         }
+        .onChange(of: model.settings.playerVolumeControlMode) { _, mode in
+            if mode == .hidden {
+                isVolumePresented = false
+            }
+        }
     }
 
     private var compactPlayer: some View {
@@ -289,7 +294,7 @@ struct DesktopMiniPlayerWindow: View {
         HStack(spacing: 0) {
             miniWindowButtons
 
-            if isVolumePresented {
+            if isVolumePresented, model.playbackVolume.isControlVisible {
                 miniFlexibleDragRegion
 
                 miniExpandedVolumeControl
@@ -297,7 +302,11 @@ struct DesktopMiniPlayerWindow: View {
 
                 Spacer().frame(width: 8)
             } else {
-                miniFixedDragRegion(width: 44)
+                if model.playbackVolume.isControlVisible {
+                    miniFixedDragRegion(width: 44)
+                } else {
+                    miniFlexibleDragRegion
+                }
 
                 miniMoreMenu
 
@@ -305,10 +314,11 @@ struct DesktopMiniPlayerWindow: View {
 
                 miniInspectorButtons
 
-                Spacer().frame(width: 9)
+                if model.playbackVolume.isControlVisible {
+                    Spacer().frame(width: 9)
 
-                miniVolumeButton
-
+                    miniVolumeButton
+                }
                 Spacer().frame(width: 8)
             }
         }
@@ -321,7 +331,7 @@ struct DesktopMiniPlayerWindow: View {
         HStack(spacing: 0) {
             miniWindowButtons
 
-            if isVolumePresented {
+            if isVolumePresented, model.playbackVolume.isControlVisible {
                 miniFlexibleDragRegion
 
                 miniExpandedVolumeControl
@@ -333,10 +343,11 @@ struct DesktopMiniPlayerWindow: View {
 
                 miniInspectorButtons
 
-                Spacer().frame(width: 9)
+                if model.playbackVolume.isControlVisible {
+                    Spacer().frame(width: 9)
 
-                miniVolumeButton
-
+                    miniVolumeButton
+                }
                 Spacer().frame(width: 8)
             }
         }
@@ -449,8 +460,8 @@ struct DesktopMiniPlayerWindow: View {
     private var miniVolumeSlider: some View {
         Slider(
             value: Binding(
-                get: { model.player.volume },
-                set: { model.player.setVolume($0) }
+                get: { model.playbackVolume.volume },
+                set: { model.playbackVolume.setVolume($0) }
             ),
             in: 0...1
         )
@@ -690,7 +701,7 @@ struct DesktopMiniPlayerWindow: View {
     }
 
     private var miniVolumeSymbol: String {
-        switch model.player.volume {
+        switch model.playbackVolume.volume {
         case ...0.001: "speaker.slash.fill"
         case ..<0.35: "speaker.wave.1.fill"
         case ..<0.7: "speaker.wave.2.fill"

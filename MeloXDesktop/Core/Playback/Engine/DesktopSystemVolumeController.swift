@@ -1,9 +1,14 @@
 import AudioToolbox
 import CoreAudio
+import Dispatch
 
 nonisolated enum DesktopSystemVolumeController {
     static func volume() -> Double? {
         guard let deviceID = defaultOutputDevice() else { return nil }
+
+        if isMuted(on: deviceID) {
+            return 0
+        }
 
         for address in volumeAddresses {
             if let value = readVolume(on: deviceID, address: address) {
@@ -40,6 +45,7 @@ nonisolated enum DesktopSystemVolumeController {
                 &scalar
             )
             if status == noErr {
+                unmuteIfNeeded(on: deviceID, volume: scalar)
                 return true
             }
         }
@@ -61,10 +67,19 @@ nonisolated enum DesktopSystemVolumeController {
             )
             changedChannel = changedChannel || status == noErr
         }
+        if changedChannel {
+            unmuteIfNeeded(on: deviceID, volume: scalar)
+        }
         return changedChannel
     }
 
-    private static var volumeAddresses: [AudioObjectPropertyAddress] {
+    static func observeVolume(
+        _ changeHandler: @escaping @Sendable (Double?) -> Void
+    ) -> DesktopSystemVolumeObservation {
+        DesktopSystemVolumeObservation(changeHandler: changeHandler)
+    }
+
+    fileprivate static var volumeAddresses: [AudioObjectPropertyAddress] {
         [
             volumeAddress(
                 selector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
@@ -77,12 +92,46 @@ nonisolated enum DesktopSystemVolumeController {
         ]
     }
 
-    private static func defaultOutputDevice() -> AudioDeviceID? {
-        var address = AudioObjectPropertyAddress(
+    fileprivate static var muteAddresses: [AudioObjectPropertyAddress] {
+        [
+            volumeAddress(
+                selector: kAudioDevicePropertyMute,
+                element: kAudioObjectPropertyElementMain
+            ),
+            volumeAddress(
+                selector: kAudioDevicePropertyMute,
+                element: 1
+            ),
+            volumeAddress(
+                selector: kAudioDevicePropertyMute,
+                element: 2
+            ),
+        ]
+    }
+
+    fileprivate static var observedPropertyAddresses:
+        [AudioObjectPropertyAddress] {
+        volumeAddresses
+            + [UInt32(1), UInt32(2)].map { channel in
+                volumeAddress(
+                    selector: kAudioDevicePropertyVolumeScalar,
+                    element: channel
+                )
+            }
+            + muteAddresses
+    }
+
+    fileprivate static var defaultOutputDeviceAddress:
+        AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
+    }
+
+    fileprivate static func defaultOutputDevice() -> AudioDeviceID? {
+        var address = defaultOutputDeviceAddress
         var deviceID = AudioDeviceID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         let status = AudioObjectGetPropertyData(
@@ -117,6 +166,52 @@ nonisolated enum DesktopSystemVolumeController {
         return min(max(scalar, 0), 1)
     }
 
+    private static func isMuted(on deviceID: AudioDeviceID) -> Bool {
+        muteAddresses.contains { address in
+            readMute(on: deviceID, address: address) == true
+        }
+    }
+
+    private static func readMute(
+        on deviceID: AudioDeviceID,
+        address: AudioObjectPropertyAddress
+    ) -> Bool? {
+        var mutableAddress = address
+        guard AudioObjectHasProperty(deviceID, &mutableAddress) else { return nil }
+        var muted = UInt32.zero
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &mutableAddress,
+            0,
+            nil,
+            &size,
+            &muted
+        )
+        guard status == noErr else { return nil }
+        return muted != 0
+    }
+
+    private static func unmuteIfNeeded(
+        on deviceID: AudioDeviceID,
+        volume: Float32
+    ) {
+        guard volume > 0.001 else { return }
+        var muted = UInt32.zero
+
+        for var address in muteAddresses
+        where isSettable(on: deviceID, address: address) {
+            AudioObjectSetPropertyData(
+                deviceID,
+                &address,
+                0,
+                nil,
+                UInt32(MemoryLayout<UInt32>.size),
+                &muted
+            )
+        }
+    }
+
     private static func isSettable(
         on deviceID: AudioDeviceID,
         address: AudioObjectPropertyAddress
@@ -132,7 +227,7 @@ nonisolated enum DesktopSystemVolumeController {
         return status == noErr && settable.boolValue
     }
 
-    private static func volumeAddress(
+    fileprivate static func volumeAddress(
         selector: AudioObjectPropertySelector,
         element: AudioObjectPropertyElement
     ) -> AudioObjectPropertyAddress {
@@ -141,5 +236,118 @@ nonisolated enum DesktopSystemVolumeController {
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: element
         )
+    }
+}
+
+nonisolated final class DesktopSystemVolumeObservation: @unchecked Sendable {
+    private let listenerQueue = DispatchQueue(
+        label: "MeloX.DesktopSystemVolumeObservation"
+    )
+    private let changeHandler: @Sendable (Double?) -> Void
+    private var defaultOutputListener: AudioObjectPropertyListenerBlock?
+    private var volumeListener: AudioObjectPropertyListenerBlock?
+    private var observesDefaultOutputDevice = false
+    private var observedDeviceID: AudioDeviceID?
+    private var observedAddresses: [AudioObjectPropertyAddress] = []
+
+    fileprivate init(
+        changeHandler: @escaping @Sendable (Double?) -> Void
+    ) {
+        self.changeHandler = changeHandler
+
+        let defaultOutputListener: AudioObjectPropertyListenerBlock = {
+            [weak self] _, _ in
+            self?.defaultOutputDeviceDidChange()
+        }
+        let volumeListener: AudioObjectPropertyListenerBlock = {
+            [weak self] _, _ in
+            self?.publishVolume()
+        }
+        self.defaultOutputListener = defaultOutputListener
+        self.volumeListener = volumeListener
+
+        installDefaultOutputListener(defaultOutputListener)
+        replaceDeviceObservation(using: volumeListener)
+        publishVolume()
+    }
+
+    deinit {
+        removeDeviceObservation()
+        guard observesDefaultOutputDevice,
+              let defaultOutputListener else { return }
+
+        var address = DesktopSystemVolumeController.defaultOutputDeviceAddress
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            defaultOutputListener
+        )
+    }
+
+    private func installDefaultOutputListener(
+        _ listener: @escaping AudioObjectPropertyListenerBlock
+    ) {
+        var address = DesktopSystemVolumeController.defaultOutputDeviceAddress
+        observesDefaultOutputDevice = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            listener
+        ) == noErr
+    }
+
+    private func defaultOutputDeviceDidChange() {
+        guard let volumeListener else { return }
+        replaceDeviceObservation(using: volumeListener)
+        publishVolume()
+    }
+
+    private func replaceDeviceObservation(
+        using listener: @escaping AudioObjectPropertyListenerBlock
+    ) {
+        removeDeviceObservation()
+        guard let deviceID = DesktopSystemVolumeController
+            .defaultOutputDevice() else { return }
+
+        observedDeviceID = deviceID
+        for candidate in DesktopSystemVolumeController.observedPropertyAddresses {
+            var address = candidate
+            guard AudioObjectHasProperty(deviceID, &address) else { continue }
+            let status = AudioObjectAddPropertyListenerBlock(
+                deviceID,
+                &address,
+                listenerQueue,
+                listener
+            )
+            if status == noErr {
+                observedAddresses.append(candidate)
+            }
+        }
+    }
+
+    private func removeDeviceObservation() {
+        guard let observedDeviceID,
+              let volumeListener else {
+            observedAddresses.removeAll()
+            self.observedDeviceID = nil
+            return
+        }
+
+        for candidate in observedAddresses {
+            var address = candidate
+            AudioObjectRemovePropertyListenerBlock(
+                observedDeviceID,
+                &address,
+                listenerQueue,
+                volumeListener
+            )
+        }
+        observedAddresses.removeAll()
+        self.observedDeviceID = nil
+    }
+
+    private func publishVolume() {
+        changeHandler(DesktopSystemVolumeController.volume())
     }
 }
