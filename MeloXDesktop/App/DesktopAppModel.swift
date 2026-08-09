@@ -91,18 +91,24 @@ final class DesktopAppModel {
     }
 
     func accountCookieDidChange() async {
+        async let homeLoad: Void = home.load(force: true)
         await library.refresh(force: true)
         await cloud.refresh(force: true)
         await listenTogether.accountDidChange(
             hasCredentials: library.isLoggedIn
         )
+        _ = await homeLoad
     }
 
     func logOut() {
         settings.clearAccount()
         library.clearAccountData()
         Task {
-            await listenTogether.accountDidChange(hasCredentials: false)
+            async let homeLoad: Void = home.load(force: true)
+            async let roomUpdate: Void = listenTogether.accountDidChange(
+                hasCredentials: false
+            )
+            _ = await (homeLoad, roomUpdate)
         }
     }
 

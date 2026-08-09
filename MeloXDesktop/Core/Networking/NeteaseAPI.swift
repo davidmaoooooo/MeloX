@@ -556,20 +556,43 @@ final class NeteaseAPI {
         )
     }
 
-    func dailySongs() async throws -> [Song] {
-        let response: DailySongsResponse = try await client.eapi("/api/v3/discovery/recommend/songs")
+    func dailySongs(afresh: Bool = false) async throws -> [Song] {
+        let path = "/api/v3/discovery/recommend/songs"
+        let data: [String: Any] = afresh ? ["afresh": true] : [:]
+        let response: DailySongsResponse
+        do {
+            response = try await client.eapi(path, data: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch APIError.emptyResponse {
+            response = try await client.weapi(path, data: data)
+        }
         return response.data.dailySongs
     }
 
     func similarSongs(id: Int, limit: Int = 50) async throws -> [Song] {
-        let response: SimilarSongsResponse = try await client.weapi(
-            "/api/v1/discovery/simiSong",
-            data: [
-                "songid": id,
-                "limit": limit,
-                "offset": 0,
-            ]
-        )
+        let path = "/api/v1/discovery/simiSong"
+        let data: [String: Any] = [
+            "songid": id,
+            "limit": limit,
+            "offset": 0,
+        ]
+        let response: SimilarSongsResponse
+        do {
+            // Mirrors @neteaseapireborn/api/module/simi_song.js.
+            response = try await client.weapi(path, data: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch APIError.emptyResponse {
+            // NetEase occasionally replies to the web transport with an
+            // HTTP 200 and no body. Keep the original route and parameters,
+            // changing only the transport for the retry.
+            response = try await client.eapi(
+                path,
+                data: data,
+                authenticated: true
+            )
+        }
         return response.songs
     }
 

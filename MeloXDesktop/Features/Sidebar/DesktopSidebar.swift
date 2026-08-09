@@ -37,6 +37,10 @@ struct DesktopSidebar: View {
             DesktopSidebarAccountFooter()
         }
         .toolbar(removing: .sidebarToggle)
+        .background {
+            DesktopSidebarVisibilityLock()
+                .frame(width: 0, height: 0)
+        }
     }
 
     private func tab(

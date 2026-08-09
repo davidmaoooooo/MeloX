@@ -9,6 +9,10 @@ struct DesktopRouteView: View {
             DesktopAlbumDetailView(albumID: id)
         case .artist(let id):
             DesktopArtistDetailView(artistID: id)
+        case .dailySongs:
+            DesktopPersonalizedPlaylistView(kind: .dailySongs)
+        case .privateRoaming:
+            DesktopPersonalizedPlaylistView(kind: .privateRoaming)
         case .playlist(let id):
             DesktopPlaylistDetailView(playlistID: id)
         case .podcast(let id):
@@ -17,10 +21,22 @@ struct DesktopRouteView: View {
             DesktopPodcastCategoryView(categoryID: id, title: title)
         case .section(let section):
             DesktopSectionContentView(section: section)
+        case .similarSongs(let songID):
+            DesktopPersonalizedPlaylistView(
+                kind: .similarSongs(seedSongID: songID)
+            )
         case .song(let id):
             DesktopSongDetailView(songID: id)
         }
     }
+}
+
+struct DesktopCollectionSupplementaryAction {
+    let title: String
+    let systemImage: String
+    var isRunning = false
+    var isDisabled = false
+    let action: () -> Void
 }
 
 struct DesktopCollectionHeader: View {
@@ -35,6 +51,9 @@ struct DesktopCollectionHeader: View {
     var isFavorite = false
     var favoriteAction: (() -> Void)?
     var shareURL: URL?
+    var artworkSystemImage: String?
+    var artworkTint: Color = .red
+    var supplementaryAction: DesktopCollectionSupplementaryAction?
 
     @Environment(DesktopAppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -51,7 +70,7 @@ struct DesktopCollectionHeader: View {
     }
 
     private func artwork(size: CGFloat) -> some View {
-        DesktopArtworkView(url: artworkURL, cornerRadius: 11)
+        artworkContent
             .frame(width: size, height: size)
             .scaleEffect(isArtworkHovered ? 1.012 : 1)
             .shadow(
@@ -66,6 +85,23 @@ struct DesktopCollectionHeader: View {
                     : .snappy(duration: 0.25, extraBounce: 0.04),
                 value: isArtworkHovered
             )
+    }
+
+    @ViewBuilder
+    private var artworkContent: some View {
+        if let artworkSystemImage {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(artworkTint.opacity(0.14))
+                Image(systemName: artworkSystemImage)
+                    .font(.system(size: 92, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(artworkTint)
+            }
+            .clipShape(.rect(cornerRadius: 11, style: .continuous))
+        } else {
+            DesktopArtworkView(url: artworkURL, cornerRadius: 11)
+        }
     }
 
     private var details: some View {
@@ -138,6 +174,26 @@ struct DesktopCollectionHeader: View {
             }
             .buttonStyle(.bordered)
             .disabled(songs.isEmpty)
+
+            if let supplementaryAction {
+                Button(action: supplementaryAction.action) {
+                    Label {
+                        Text(supplementaryAction.title)
+                    } icon: {
+                        if supplementaryAction.isRunning {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: supplementaryAction.systemImage)
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    supplementaryAction.isDisabled
+                        || supplementaryAction.isRunning
+                )
+            }
 
             if let favoriteAction {
                 Button(action: favoriteAction) {

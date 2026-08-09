@@ -12,6 +12,7 @@ final class DesktopHomeStore {
     private(set) var podcastPrograms: [PodcastProgram] = []
     private(set) var featuredPodcasts: [Podcast] = []
     private(set) var podcastCategories: [PodcastCategory] = []
+    private(set) var privateRadarPlaylist: Playlist?
     private(set) var phase: LoadingPhase = .loaded
     private(set) var warningMessage: String?
 
@@ -65,6 +66,9 @@ final class DesktopHomeStore {
         async let categoriesResult = capture {
             try await self.api.podcastCategories()
         }
+        async let homePageResult = capture {
+            try await self.api.homePage(refresh: force)
+        }
 
         let results = await (
             playlistsResult,
@@ -74,7 +78,8 @@ final class DesktopHomeStore {
             songsResult,
             programsResult,
             podcastsResult,
-            categoriesResult
+            categoriesResult,
+            homePageResult
         )
 
         recommendedPlaylists = results.0.value ?? recommendedPlaylists
@@ -85,6 +90,9 @@ final class DesktopHomeStore {
         podcastPrograms = results.5.value ?? podcastPrograms
         featuredPodcasts = results.6.value ?? featuredPodcasts
         podcastCategories = results.7.value ?? podcastCategories
+        if let payload = results.8.value {
+            privateRadarPlaylist = Self.privateRadarPlaylist(in: payload)
+        }
 
         let errors = [
             results.0.error,
@@ -95,6 +103,7 @@ final class DesktopHomeStore {
             results.5.error,
             results.6.error,
             results.7.error,
+            results.8.error,
         ].compactMap { $0?.localizedDescription }
         let wasCancelled = [
             results.0.wasCancelled,
@@ -105,6 +114,7 @@ final class DesktopHomeStore {
             results.5.wasCancelled,
             results.6.wasCancelled,
             results.7.wasCancelled,
+            results.8.wasCancelled,
         ].contains(true)
         let hasContent = !recommendedPlaylists.isEmpty
             || !newAlbums.isEmpty
@@ -127,6 +137,20 @@ final class DesktopHomeStore {
         } else {
             phase = .loaded
         }
+    }
+
+    private static func privateRadarPlaylist(
+        in payload: HomePagePayload
+    ) -> Playlist? {
+        payload.blocks.first { block in
+            let code = block.blockCode.uppercased()
+            let title = block.title?
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+                .joined() ?? ""
+            return code == "HOMEPAGE_BLOCK_MGC_PLAYLIST"
+                || title.contains("雷达歌单")
+        }?.playlists.first
     }
 
     private func capture<Value>(

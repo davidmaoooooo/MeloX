@@ -65,7 +65,7 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
         private weak var installedWindow: NSWindow?
         private var requestedPresentation = false
         private var appliedPresentation = false
-        private var retainedExpandedFrameWidth: CGFloat?
+        private var presentationFrameAdjustment: FrameAdjustment?
 
         func update(
             isPlayerSidePanelPresented: Bool
@@ -82,7 +82,7 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
 
             installedWindow = window
             appliedPresentation = false
-            retainedExpandedFrameWidth = nil
+            presentationFrameAdjustment = nil
             applyPresentationChangeIfNeeded()
             applyMinimumContentSize()
         }
@@ -90,12 +90,15 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
         func detach() {
             installedWindow = nil
             appliedPresentation = false
-            retainedExpandedFrameWidth = nil
+            presentationFrameAdjustment = nil
         }
 
         private func applyPresentationChangeIfNeeded() {
             guard let window = installedWindow else { return }
             guard appliedPresentation != requestedPresentation else {
+                if !requestedPresentation {
+                    contractIfNeeded(window)
+                }
                 applyMinimumContentSize()
                 return
             }
@@ -103,10 +106,10 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
             if requestedPresentation {
                 expandIfNeeded(window)
             } else if appliedPresentation {
-                // Closing the panel only releases its minimum-width
-                // constraint. The window deliberately keeps the width that
-                // was added for the panel, matching Apple Music.
-                retainedExpandedFrameWidth = window.frame.width
+                // Release the expanded minimum before removing the width
+                // that was added for the panel.
+                applyMinimumContentSize()
+                contractIfNeeded(window)
             }
             appliedPresentation = requestedPresentation
             applyMinimumContentSize()
@@ -116,10 +119,6 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
             let initialFrame = window.frame
 
             guard !window.styleMask.contains(.fullScreen) else { return }
-            if let retainedExpandedFrameWidth,
-               abs(initialFrame.width - retainedExpandedFrameWidth) < 1.5 {
-                return
-            }
 
             var targetFrame = initialFrame
             let requestedWidth = initialFrame.width
@@ -144,7 +143,37 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
             }
 
             setFrame(targetFrame, on: window)
-            retainedExpandedFrameWidth = targetFrame.width
+            presentationFrameAdjustment = FrameAdjustment(
+                originX: targetFrame.origin.x - initialFrame.origin.x,
+                width: targetFrame.width - initialFrame.width
+            )
+        }
+
+        private func contractIfNeeded(_ window: NSWindow) {
+            guard let adjustment = presentationFrameAdjustment else { return }
+            guard !window.styleMask.contains(.fullScreen) else { return }
+
+            var targetFrame = window.frame
+            targetFrame.origin.x -= adjustment.originX
+            targetFrame.size.width -= adjustment.width
+
+            let minimumContentRect = NSRect(
+                origin: .zero,
+                size: NSSize(
+                    width: DesktopMainWindowMetrics.minimumContentWidth,
+                    height: DesktopMainWindowMetrics.minimumContentHeight
+                )
+            )
+            let minimumFrameWidth = window.frameRect(
+                forContentRect: minimumContentRect
+            ).width
+            targetFrame.size.width = max(
+                targetFrame.width,
+                minimumFrameWidth
+            )
+
+            setFrame(targetFrame, on: window)
+            presentationFrameAdjustment = nil
         }
 
         private func applyMinimumContentSize() {
@@ -176,6 +205,11 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
             // relayout on every animation tick. Apply the native window size
             // once, then let only the lightweight side panel animate.
             window.setFrame(frame, display: true)
+        }
+
+        private struct FrameAdjustment {
+            let originX: CGFloat
+            let width: CGFloat
         }
     }
 }

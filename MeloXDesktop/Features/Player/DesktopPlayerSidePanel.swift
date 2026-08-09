@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// A resident trailing overlay whose real pages stay side by side. Keeping the
-/// two page trees alive avoids rebuilding lyrics and queue content while the
-/// window is expanding.
+/// A resident trailing overlay whose real pages stay mounted. Keeping both page
+/// trees alive preserves lyrics and queue state while their visibility fades.
 struct DesktopPlayerSidePanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var renderingSelection: DesktopInspector?
@@ -13,6 +12,7 @@ struct DesktopPlayerSidePanel: View {
     var body: some View {
         surfacedPanel
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .top)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(selection.accessibilityTitle)
             .task(id: renderingRequest) {
@@ -23,67 +23,45 @@ struct DesktopPlayerSidePanel: View {
     @ViewBuilder
     private var surfacedPanel: some View {
         if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
-                pagedContent
-                    .glassEffect(
-                        .regular,
-                        in: .rect(cornerRadius: 0)
-                    )
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            crossfadingContent
+                .background {
+                    Color.clear
+                        .glassEffect(
+                            .regular,
+                            in: .rect(cornerRadius: 0)
+                        )
+                }
         } else {
-            pagedContent
-                .background(.ultraThinMaterial)
+            crossfadingContent
+                .background {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                }
         }
     }
 
-    private var pagedContent: some View {
-        GeometryReader { geometry in
-            let pageWidth = max(geometry.size.width, 0)
-            let pageHeight = max(geometry.size.height, 0)
+    private var crossfadingContent: some View {
+        ZStack {
+            ForEach(DesktopInspector.allCases) { inspector in
+                let isSelected = selection == inspector
 
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(spacing: 0) {
-                        ForEach(DesktopInspector.allCases) { inspector in
-                            DesktopPlayerInspector(
-                                kind: inspector,
-                                isActive: renderingSelection == inspector
-                            )
-                            .frame(width: pageWidth, height: pageHeight)
-                            .id(inspector)
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.paging)
-                .scrollIndicators(.hidden)
-                .onAppear {
-                    var transaction = Transaction(animation: nil)
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        proxy.scrollTo(selection, anchor: .leading)
-                    }
-                }
-                .onChange(of: selection) { _, newSelection in
-                    withAnimation(
-                        reduceMotion
-                            ? nil
-                            : DesktopMainWindowMetrics.presentationAnimation
-                    ) {
-                        proxy.scrollTo(newSelection, anchor: .leading)
-                    }
-                }
-                .onChange(of: pageWidth) {
-                    var transaction = Transaction(animation: nil)
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        proxy.scrollTo(selection, anchor: .leading)
-                    }
-                }
+                DesktopPlayerInspector(
+                    kind: inspector,
+                    isActive: renderingSelection == inspector
+                )
+                .opacity(isSelected ? 1 : 0)
+                .allowsHitTesting(isSelected)
+                .accessibilityHidden(!isSelected)
+                .zIndex(isSelected ? 1 : 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(
+            reduceMotion
+                ? nil
+                : DesktopMainWindowMetrics.presentationAnimation,
+            value: selection
+        )
         .clipped()
     }
 
@@ -95,8 +73,15 @@ struct DesktopPlayerSidePanel: View {
     }
 
     private func updateRenderingSelection() async {
-        commitRenderingSelection(nil)
-        guard isPresented else { return }
+        guard isPresented else {
+            commitRenderingSelection(nil)
+            return
+        }
+
+        if renderingSelection != nil {
+            commitRenderingSelection(selection)
+            return
+        }
 
         if reduceMotion {
             await Task.yield()

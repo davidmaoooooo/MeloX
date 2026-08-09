@@ -52,10 +52,13 @@ enum DesktopSection: String, CaseIterable, Identifiable, Hashable {
 enum DesktopRoute: Hashable {
     case album(Int)
     case artist(Int)
+    case dailySongs
+    case privateRoaming
     case playlist(Int)
     case podcast(Int)
     case podcastCategory(id: Int, title: String)
     case section(DesktopSection)
+    case similarSongs(Int)
     case song(Int)
 }
 

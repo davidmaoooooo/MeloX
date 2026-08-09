@@ -52,6 +52,16 @@ struct DesktopHomeView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 32) {
+                    Text("主页")
+                        .font(.system(size: 46, weight: .bold))
+
+                    DesktopHomeQuickActionsView(
+                        cardWidth: heroCardWidth,
+                        spacing: Metrics.heroSpacing,
+                        visibleItemCount: Metrics.heroColumns,
+                        trailingOverlayInset: reservedTrailingWidth
+                    )
+
                     heroSection(
                         cardWidth: heroCardWidth,
                         trailingOverlayInset: reservedTrailingWidth
@@ -97,7 +107,7 @@ struct DesktopHomeView: View {
                     }
                 }
                 .padding(.horizontal, Metrics.horizontalPadding)
-                .padding(.top, 0)
+                .padding(.top, 22)
                 .padding(.bottom, 34)
                 .animation(
                     reduceMotion
@@ -116,32 +126,36 @@ struct DesktopHomeView: View {
         cardWidth: CGFloat,
         trailingOverlayInset: CGFloat
     ) -> some View {
-        if model.home.recommendedPlaylists.isEmpty {
-            if model.home.phase == .loading {
-                HStack {
-                    Spacer()
-                    ProgressView("正在载入为你准备的内容…")
-                    Spacer()
+        VStack(alignment: .leading, spacing: 14) {
+            DesktopSectionHeader(title: "推荐歌单")
+
+            if model.home.recommendedPlaylists.isEmpty {
+                if model.home.phase == .loading {
+                    HStack {
+                        Spacer()
+                        ProgressView("正在载入为你准备的内容…")
+                        Spacer()
+                    }
+                    .frame(height: 270)
                 }
-                .frame(height: 270)
-            }
-        } else {
-            DesktopHomePagingShelf(
-                items: Array(model.home.recommendedPlaylists.prefix(7)),
-                cardWidth: cardWidth,
-                spacing: Metrics.heroSpacing,
-                visibleItemCount: Metrics.heroColumns,
-                trailingOverlayInset: trailingOverlayInset
-            ) { playlist in
-                DesktopHeroCard(
-                    title: playlist.name,
-                    subtitle: playlist.creator?.nickname,
-                    eyebrow: playlist.copywriter ?? "专属推荐",
-                    artworkURL: playlist.artworkURL,
-                    playCount: playlist.playCount,
-                    showsPlayCount: model.settings.showPlayCount
-                ) {
-                    model.ui.navigate(to: .playlist(playlist.id))
+            } else {
+                DesktopHomePagingShelf(
+                    items: Array(model.home.recommendedPlaylists.prefix(7)),
+                    cardWidth: cardWidth,
+                    spacing: Metrics.heroSpacing,
+                    visibleItemCount: Metrics.heroColumns,
+                    trailingOverlayInset: trailingOverlayInset
+                ) { playlist in
+                    DesktopHeroCard(
+                        title: playlist.name,
+                        subtitle: playlist.creator?.nickname,
+                        eyebrow: playlist.copywriter ?? "专属推荐",
+                        artworkURL: playlist.artworkURL,
+                        playCount: playlist.playCount,
+                        showsPlayCount: model.settings.showPlayCount
+                    ) {
+                        model.ui.navigate(to: .playlist(playlist.id))
+                    }
                 }
             }
         }
