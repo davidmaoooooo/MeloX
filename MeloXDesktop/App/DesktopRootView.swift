@@ -39,11 +39,6 @@ struct DesktopRootView: View {
         }
         .toolbar(removing: .sidebarToggle)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbar {
-            if ui.isNowPlayingPresented {
-                DesktopNowPlayingToolbarContent(model: model)
-            }
-        }
         .background {
             ZStack {
                 DesktopMainWindowConfiguration(
@@ -64,6 +59,11 @@ struct DesktopRootView: View {
                                 .bringToFrontAfterOpening()
                         }
                     }
+                )
+
+                DesktopNowPlayingTrailingAccessoryInstaller(
+                    isPresented: ui.isNowPlayingPresented,
+                    model: model
                 )
             }
             .allowsHitTesting(false)
@@ -182,6 +182,9 @@ struct DesktopTabPage: View {
     var body: some View {
         @Bindable var ui = model.ui
         let isInspectorPresented = ui.inspector != nil
+        let reservedTrailingWidth = isInspectorPresented
+            ? DesktopMainWindowMetrics.playerSidePanelWidth
+            : 0
 
         let pageContent = NavigationStack(path: $ui.path) {
             DesktopSectionContentView(section: section)
@@ -206,11 +209,7 @@ struct DesktopTabPage: View {
                             .padding(.leading, 24)
                             .padding(
                                 .trailing,
-                                24
-                                    + (isInspectorPresented
-                                        ? DesktopMainWindowMetrics
-                                            .playerSidePanelWidth
-                                        : 0)
+                                24 + reservedTrailingWidth
                             )
                             .padding(.bottom, 10)
                     }

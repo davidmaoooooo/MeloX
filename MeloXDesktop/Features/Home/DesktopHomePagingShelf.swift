@@ -92,12 +92,6 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
                         trailingOverlayInset + 8
                     )
                 }
-                .animation(
-                    reduceMotion
-                        ? nil
-                        : DesktopMainWindowMetrics.presentationAnimation,
-                    value: trailingOverlayInset
-                )
             }
             .contentShape(.rect)
             .onHover { isShelfHovered = $0 }

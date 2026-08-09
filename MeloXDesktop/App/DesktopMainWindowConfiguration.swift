@@ -66,6 +66,7 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
         private var requestedPresentation = false
         private var appliedPresentation = false
         private var presentationFrameAdjustment: FrameAdjustment?
+        private var isApplyingPresentationChange = false
 
         func update(
             isPlayerSidePanelPresented: Bool
@@ -76,13 +77,12 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
 
         func attach(to window: NSWindow?) {
             guard installedWindow !== window else {
-                applyMinimumContentSize()
+                applyPresentationChangeIfNeeded()
                 return
             }
 
+            detach()
             installedWindow = window
-            appliedPresentation = false
-            presentationFrameAdjustment = nil
             applyPresentationChangeIfNeeded()
             applyMinimumContentSize()
         }
@@ -95,6 +95,11 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
 
         private func applyPresentationChangeIfNeeded() {
             guard let window = installedWindow else { return }
+            guard !isApplyingPresentationChange else { return }
+
+            isApplyingPresentationChange = true
+            defer { isApplyingPresentationChange = false }
+
             guard appliedPresentation != requestedPresentation else {
                 if !requestedPresentation {
                     contractIfNeeded(window)
@@ -103,15 +108,20 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
                 return
             }
 
+            let wasPresented = appliedPresentation
+            // `setFrame` performs layout synchronously. Commit the logical
+            // state first so a reentrant SwiftUI update cannot apply the same
+            // expansion or contraction for a second time.
+            appliedPresentation = requestedPresentation
+
             if requestedPresentation {
                 expandIfNeeded(window)
-            } else if appliedPresentation {
+            } else if wasPresented {
                 // Release the expanded minimum before removing the width
                 // that was added for the panel.
                 applyMinimumContentSize()
                 contractIfNeeded(window)
             }
-            appliedPresentation = requestedPresentation
             applyMinimumContentSize()
         }
 
@@ -142,11 +152,11 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
                 targetFrame.size.width = requestedWidth
             }
 
-            setFrame(targetFrame, on: window)
             presentationFrameAdjustment = FrameAdjustment(
                 originX: targetFrame.origin.x - initialFrame.origin.x,
                 width: targetFrame.width - initialFrame.width
             )
+            setFrame(targetFrame, on: window)
         }
 
         private func contractIfNeeded(_ window: NSWindow) {
@@ -172,8 +182,11 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
                 minimumFrameWidth
             )
 
-            setFrame(targetFrame, on: window)
+            // Clear the adjustment before `setFrame` starts a synchronous
+            // layout pass. This prevents the collapsed frame from being
+            // treated as another pending contraction during reentry.
             presentationFrameAdjustment = nil
+            setFrame(targetFrame, on: window)
         }
 
         private func applyMinimumContentSize() {
@@ -201,9 +214,6 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
 
         private func setFrame(_ frame: NSRect, on window: NSWindow) {
             guard frame != window.frame else { return }
-            // Animating NSWindow's frame forces the complete SwiftUI tree to
-            // relayout on every animation tick. Apply the native window size
-            // once, then let only the lightweight side panel animate.
             window.setFrame(frame, display: true)
         }
 
@@ -211,6 +221,7 @@ struct DesktopMainWindowConfiguration: NSViewRepresentable {
             let originX: CGFloat
             let width: CGFloat
         }
+
     }
 }
 

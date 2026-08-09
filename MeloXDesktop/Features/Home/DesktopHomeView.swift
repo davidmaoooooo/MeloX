@@ -2,7 +2,6 @@ import SwiftUI
 
 struct DesktopHomeView: View {
     @Environment(DesktopAppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Metrics {
         static let horizontalPadding: CGFloat = 52
@@ -109,12 +108,6 @@ struct DesktopHomeView: View {
                 .padding(.horizontal, Metrics.horizontalPadding)
                 .padding(.top, 22)
                 .padding(.bottom, 34)
-                .animation(
-                    reduceMotion
-                        ? nil
-                        : DesktopMainWindowMetrics.presentationAnimation,
-                    value: isInspectorPresented
-                )
             }
         }
         .navigationTitle("")
