@@ -72,21 +72,48 @@ struct DesktopLibraryView: View {
 
     @ViewBuilder
     private var content: some View {
+        if isAwaitingInitialContent {
+            Color.clear
+                .frame(maxWidth: .infinity, minHeight: 340)
+        } else {
+            switch section {
+            case .recent:
+                songList(model.library.recentSongs)
+            case .songs:
+                songList(model.library.favoriteSongs)
+            case .downloads:
+                songList(model.downloads.downloadedSongs)
+            case .cloud:
+                cloudList
+            case .playlists:
+                playlistGrid
+            case .podcasts:
+                podcastGrid
+            default:
+                EmptyView()
+            }
+        }
+    }
+
+    private var isAwaitingInitialContent: Bool {
         switch section {
         case .recent:
-            songList(model.library.recentSongs)
+            model.library.phase == .loading
+                && model.library.recentSongs.isEmpty
         case .songs:
-            songList(model.library.favoriteSongs)
-        case .downloads:
-            songList(model.downloads.downloadedSongs)
-        case .cloud:
-            cloudList
+            model.library.phase == .loading
+                && model.library.favoriteSongs.isEmpty
         case .playlists:
-            playlistGrid
+            model.library.phase == .loading
+                && model.library.favoritePlaylists.isEmpty
         case .podcasts:
-            podcastGrid
+            model.library.phase == .loading
+                && model.library.subscribedPodcasts.isEmpty
+        case .cloud:
+            (model.cloud.phase == .loading || model.cloud.isUploading)
+                && model.cloud.items.isEmpty
         default:
-            EmptyView()
+            false
         }
     }
 
@@ -151,9 +178,6 @@ struct DesktopLibraryView: View {
 
     @ViewBuilder
     private var cloudList: some View {
-        if model.cloud.isUploading {
-            ProgressView("正在上传音乐…")
-        }
         if model.cloud.items.isEmpty {
             libraryEmptyView
         } else {

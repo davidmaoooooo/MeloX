@@ -5,11 +5,26 @@ import SwiftUI
 ///
 /// SwiftUI can remove its standard toolbar item, but it does not expose the
 /// AppKit flags that prevent a macOS sidebar from being collapsed by dragging
-/// its divider or by resizing the window. This probe only configures those
-/// native behaviors; the sidebar itself remains fully SwiftUI-owned.
+/// its divider or by resizing the window. This probe also reports the native
+/// sidebar frame so SwiftUI can align fixed content with the resizable column.
+/// The sidebar content itself remains fully SwiftUI-owned.
 struct DesktopSidebarVisibilityLock: NSViewRepresentable {
+    @Binding private var sidebarFrame: CGRect
+    let reservedBottomInset: CGFloat
+
+    init(
+        sidebarFrame: Binding<CGRect>,
+        reservedBottomInset: CGFloat = 0
+    ) {
+        _sidebarFrame = sidebarFrame
+        self.reservedBottomInset = reservedBottomInset
+    }
+
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(
+            sidebarFrame: $sidebarFrame,
+            reservedBottomInset: reservedBottomInset
+        )
     }
 
     func makeNSView(context: Context) -> DesktopSidebarVisibilityProbe {
@@ -24,6 +39,8 @@ struct DesktopSidebarVisibilityLock: NSViewRepresentable {
         _ nsView: DesktopSidebarVisibilityProbe,
         context: Context
     ) {
+        context.coordinator.sidebarFrame = $sidebarFrame
+        context.coordinator.reservedBottomInset = reservedBottomInset
         context.coordinator.attach(to: nsView.window)
     }
 
@@ -39,8 +56,22 @@ struct DesktopSidebarVisibilityLock: NSViewRepresentable {
     final class Coordinator {
         private weak var installedWindow: NSWindow?
         private weak var installedSidebarItem: NSSplitViewItem?
+        private weak var installedSidebarScrollView: NSScrollView?
         private var windowUpdateObserver: NSObjectProtocol?
         private var deferredConfigurationTask: Task<Void, Never>?
+        private var frameReportingTask: Task<Void, Never>?
+        private var reportedSidebarFrame: CGRect?
+        private var originalBottomContentInset: CGFloat?
+        var sidebarFrame: Binding<CGRect>
+        var reservedBottomInset: CGFloat
+
+        init(
+            sidebarFrame: Binding<CGRect>,
+            reservedBottomInset: CGFloat
+        ) {
+            self.sidebarFrame = sidebarFrame
+            self.reservedBottomInset = reservedBottomInset
+        }
 
         func attach(to window: NSWindow?) {
             guard installedWindow !== window else {
@@ -73,13 +104,19 @@ struct DesktopSidebarVisibilityLock: NSViewRepresentable {
         func detach() {
             deferredConfigurationTask?.cancel()
             deferredConfigurationTask = nil
+            frameReportingTask?.cancel()
+            frameReportingTask = nil
 
             if let windowUpdateObserver {
                 NotificationCenter.default.removeObserver(windowUpdateObserver)
             }
             windowUpdateObserver = nil
+            restoreOriginalBottomContentInset()
             installedSidebarItem = nil
+            installedSidebarScrollView = nil
             installedWindow = nil
+            reportedSidebarFrame = nil
+            originalBottomContentInset = nil
         }
 
         private func configureWindow() {
@@ -195,6 +232,75 @@ struct DesktopSidebarVisibilityLock: NSViewRepresentable {
             }
             if item.isSpringLoaded {
                 item.isSpringLoaded = false
+            }
+
+            reserveFooterSpace(below: item.viewController.view)
+            reportFrame(of: item)
+        }
+
+        private func reserveFooterSpace(below view: NSView) {
+            guard let scrollView = firstScrollView(below: view) else { return }
+
+            if installedSidebarScrollView !== scrollView {
+                restoreOriginalBottomContentInset()
+                installedSidebarScrollView = scrollView
+                originalBottomContentInset = scrollView.contentInsets.bottom
+            }
+
+            var contentInsets = scrollView.contentInsets
+            contentInsets.bottom = (originalBottomContentInset ?? 0)
+                + reservedBottomInset
+            guard abs(scrollView.contentInsets.bottom - contentInsets.bottom)
+                > .ulpOfOne else {
+                return
+            }
+            scrollView.contentInsets = contentInsets
+        }
+
+        private func firstScrollView(below view: NSView) -> NSScrollView? {
+            if let scrollView = view as? NSScrollView {
+                return scrollView
+            }
+
+            for subview in view.subviews {
+                if let scrollView = firstScrollView(below: subview) {
+                    return scrollView
+                }
+            }
+            return nil
+        }
+
+        private func restoreOriginalBottomContentInset() {
+            guard let scrollView = installedSidebarScrollView,
+                  let originalBottomContentInset else {
+                return
+            }
+
+            var contentInsets = scrollView.contentInsets
+            contentInsets.bottom = originalBottomContentInset
+            scrollView.contentInsets = contentInsets
+        }
+
+        private func reportFrame(of item: NSSplitViewItem) {
+            guard let contentView = installedWindow?.contentView else { return }
+
+            let sidebarView = item.viewController.view
+            let frame = sidebarView.convert(sidebarView.bounds, to: contentView)
+            guard frame.width > 0,
+                  frame.height > 0,
+                  reportedSidebarFrame != frame else {
+                return
+            }
+
+            reportedSidebarFrame = frame
+            frameReportingTask?.cancel()
+            frameReportingTask = Task { @MainActor [weak self] in
+                await Task.yield()
+                guard !Task.isCancelled,
+                      self?.reportedSidebarFrame == frame else {
+                    return
+                }
+                self?.sidebarFrame.wrappedValue = frame
             }
         }
     }

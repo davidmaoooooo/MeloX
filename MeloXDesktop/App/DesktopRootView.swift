@@ -219,6 +219,11 @@ struct DesktopTabPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar(removing: .sidebarToggle)
+        .onPreferenceChange(
+            DesktopLoadingStatusPreferenceKey.self
+        ) { message in
+            model.ui.setContextualLoadingMessage(message, for: section)
+        }
 
         ZStack(alignment: .trailing) {
             pageContent

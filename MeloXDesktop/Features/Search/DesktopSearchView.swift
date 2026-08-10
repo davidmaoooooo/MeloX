@@ -11,35 +11,51 @@ private final class DesktopSearchStore {
     private(set) var isSearching = false
     private(set) var errorMessage: String?
 
+    @ObservationIgnored
+    private var activeSearchID: UUID?
+
     func search(using model: DesktopAppModel) async {
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else {
+            activeSearchID = nil
+            isSearching = false
             payload = nil
             errorMessage = nil
             return
         }
 
+        let searchID = UUID()
+        activeSearchID = searchID
         isSearching = true
         errorMessage = nil
+        defer {
+            if activeSearchID == searchID {
+                isSearching = false
+            }
+        }
+
         do {
+            let loadedPayload: SearchPayload
             if source == .catalog {
-                payload = try await model.api.search(
+                loadedPayload = try await model.api.search(
                     keyword,
                     kind: kind,
                     limit: 60
                 )
             } else {
-                payload = libraryPayload(
+                loadedPayload = libraryPayload(
                     matching: keyword,
                     library: model.library
                 )
             }
+            guard activeSearchID == searchID else { return }
+            payload = loadedPayload
         } catch is CancellationError {
             return
         } catch {
+            guard activeSearchID == searchID else { return }
             errorMessage = error.localizedDescription
         }
-        isSearching = false
     }
 
     private func libraryPayload(
@@ -138,10 +154,7 @@ struct DesktopSearchView: View {
 
             ScrollView {
                 Group {
-                    if store.isSearching {
-                        ProgressView("正在搜索…")
-                            .frame(maxWidth: .infinity, minHeight: 320)
-                    } else if let error = store.errorMessage {
+                    if let error = store.errorMessage {
                         ContentUnavailableView(
                             "搜索失败",
                             systemImage: "exclamationmark.magnifyingglass",
@@ -150,6 +163,9 @@ struct DesktopSearchView: View {
                         .frame(maxWidth: .infinity, minHeight: 320)
                     } else if let payload = store.payload {
                         results(payload)
+                    } else if store.isSearching {
+                        Color.clear
+                            .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
                         ContentUnavailableView(
                             "搜索 MeloX",
@@ -163,6 +179,10 @@ struct DesktopSearchView: View {
                 .padding(.vertical, 24)
             }
         }
+        .desktopLoadingStatus(
+            "正在搜索…",
+            isPresented: store.isSearching
+        )
         .animation(.smooth(duration: 0.22), value: store.query.isEmpty)
         .toolbar {
             if !model.ui.isNowPlayingPresented {

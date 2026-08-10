@@ -139,7 +139,11 @@ struct DesktopMessagesView: View {
             .overlay {
                 switch phase {
                 case .loading where conversations.isEmpty:
-                    ProgressView("正在读取私信")
+                    Color.clear
+                        .desktopLoadingStatus(
+                            "正在读取私信…",
+                            isPresented: true
+                        )
                 case .failed(let message) where conversations.isEmpty:
                     ContentUnavailableView(
                         "无法读取私信",
@@ -244,7 +248,11 @@ private struct DesktopConversationPane: View {
                 .overlay {
                     switch phase {
                     case .loading where messages.isEmpty:
-                        ProgressView("正在读取对话")
+                        Color.clear
+                            .desktopLoadingStatus(
+                                "正在读取对话…",
+                                isPresented: true
+                            )
                     case .failed(let message) where messages.isEmpty:
                         ContentUnavailableView(
                             "无法读取对话",
@@ -370,7 +378,6 @@ private struct DesktopNewMessageSheet: View {
     let onSelect: (NeteaseMessageContact) -> Void
     @State private var contacts: [NeteaseMessageContact] = []
     @State private var query = ""
-    @State private var isLoading = true
 
     private var filteredContacts: [NeteaseMessageContact] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -417,13 +424,16 @@ private struct DesktopNewMessageSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .overlay {
-                if isLoading { ProgressView("正在读取联系人") }
-            }
         }
         .frame(width: 480, height: 600)
         .task {
-            defer { isLoading = false }
+            let loadingMessage = "正在读取联系人…"
+            model.ui.setPresentedLoadingMessage(loadingMessage)
+            defer {
+                model.ui.clearPresentedLoadingMessage(
+                    ifMatching: loadingMessage
+                )
+            }
             guard let id = model.library.profile?.id else { return }
             contacts = (try? await model.api.messageContacts(userID: id)) ?? []
         }

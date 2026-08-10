@@ -108,6 +108,12 @@ final class DesktopUIState {
     var isPlayerHovered = false
     var isPlayerProgressHovered = false
     var isNowPlayingPresented = false
+    private(set) var contextualLoadingMessages: [DesktopSection: String] = [:]
+    private(set) var presentedLoadingMessage: String?
+
+    var contextualLoadingMessage: String? {
+        contextualLoadingMessages[selection]
+    }
 
     func navigate(to route: DesktopRoute) {
         path.append(route)
@@ -120,5 +126,25 @@ final class DesktopUIState {
             retainedInspector = requested
             inspector = requested
         }
+    }
+
+    func setContextualLoadingMessage(
+        _ message: String?,
+        for section: DesktopSection
+    ) {
+        if let message {
+            contextualLoadingMessages[section] = message
+        } else {
+            contextualLoadingMessages.removeValue(forKey: section)
+        }
+    }
+
+    func setPresentedLoadingMessage(_ message: String?) {
+        presentedLoadingMessage = message
+    }
+
+    func clearPresentedLoadingMessage(ifMatching message: String) {
+        guard presentedLoadingMessage == message else { return }
+        presentedLoadingMessage = nil
     }
 }

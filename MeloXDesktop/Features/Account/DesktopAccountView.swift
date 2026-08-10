@@ -17,7 +17,7 @@ struct DesktopAccountView: View {
             if let profile = model.library.profile {
                 loggedInContent(profile)
             } else if model.library.isLoggedIn {
-                ProgressView("正在读取网易云账户")
+                Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .task { await model.library.refresh(force: true) }
             } else {

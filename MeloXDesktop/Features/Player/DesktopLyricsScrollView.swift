@@ -208,9 +208,7 @@ struct DesktopLyricsScrollView: View {
         GeometryReader { geometry in
             Group {
                 if model.lyrics.isLoading {
-                    Text("正在载入歌词…")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(foregroundColor.opacity(0.58))
+                    Color.clear
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if model.lyrics.lyrics.isEmpty {
                     ContentUnavailableView(

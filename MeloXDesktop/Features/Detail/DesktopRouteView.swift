@@ -330,40 +330,9 @@ struct DesktopDetailLoadingView: View {
     let message: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 34) {
-            HStack(alignment: .bottom, spacing: 34) {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(.quaternary)
-                    .frame(width: 278, height: 278)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach([72.0, 310.0, 190.0, 250.0], id: \.self) { width in
-                        Capsule()
-                            .fill(.quaternary)
-                            .frame(width: width, height: width == 310 ? 30 : 12)
-                    }
-                }
-                Spacer()
-            }
-
-            Divider()
-
-            VStack(spacing: 12) {
-                ForEach(0..<5, id: \.self) { _ in
-                    Capsule()
-                        .fill(.quaternary)
-                        .frame(height: 12)
-                }
-            }
-        }
-        .padding(42)
-        .redacted(reason: .placeholder)
-        .overlay {
-            ProgressView(message)
-                .padding(14)
-                .background(.regularMaterial, in: .capsule)
-        }
+        Color.clear
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .desktopLoadingStatus(message, isPresented: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(message)
     }

@@ -123,16 +123,7 @@ struct DesktopHomeView: View {
 
             if model.home.recommendedPlaylists.isEmpty {
                 if model.home.phase == .loading {
-                    HStack {
-                        Spacer()
-                        Label(
-                            "正在载入为你准备的内容…",
-                            systemImage: "sparkles"
-                        )
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        Spacer()
-                    }
+                    Color.clear
                     .frame(height: 270)
                 }
             } else {

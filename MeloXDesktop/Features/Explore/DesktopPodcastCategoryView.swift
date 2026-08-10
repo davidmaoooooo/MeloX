@@ -38,6 +38,10 @@ struct DesktopPodcastCategoryView: View {
             .padding(.vertical, 28)
         }
         .navigationTitle(title)
+        .desktopLoadingStatus(
+            "正在载入\(title)…",
+            isPresented: isLoading
+        )
         .task(id: categoryID) {
             await reload()
         }
@@ -50,7 +54,7 @@ struct DesktopPodcastCategoryView: View {
     @ViewBuilder
     private var content: some View {
         if podcasts.isEmpty, isLoading {
-            ProgressView("正在载入\(title)…")
+            Color.clear
                 .frame(maxWidth: .infinity, minHeight: 320)
         } else if podcasts.isEmpty, let errorMessage {
             ContentUnavailableView {
@@ -89,10 +93,8 @@ struct DesktopPodcastCategoryView: View {
     @ViewBuilder
     private var paginationFooter: some View {
         if isLoading {
-            ProgressView()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
+            Color.clear
+                .frame(height: 37)
         } else if let errorMessage, !podcasts.isEmpty {
             Button("继续载入", systemImage: "arrow.clockwise") {
                 Task { await loadNextPage() }
