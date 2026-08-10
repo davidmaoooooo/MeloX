@@ -26,6 +26,11 @@ struct DesktopNowPlayingProgress: View {
 
     let tint: Color
     let isActive: Bool
+    var scale: CGFloat = 1
+
+    private var contentScale: CGFloat {
+        max(scale, 1)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,9 +57,12 @@ struct DesktopNowPlayingProgress: View {
                         transaction.animation = numericTextAnimation
                     }
             }
-            .font(.system(size: 10).monospacedDigit())
+            .font(
+                .system(size: 10 * contentScale)
+                    .monospacedDigit()
+            )
             .foregroundStyle(tint.opacity(0.82))
-            .padding(.top, 3)
+            .padding(.top, 3 * contentScale)
         }
         .onChange(of: isActive, initial: true) { _, isActive in
             guard !isActive else { return }
@@ -74,7 +82,7 @@ struct DesktopNowPlayingProgress: View {
                 .opacity(0.001)
                 .allowsHitTesting(true)
         }
-        .frame(height: Self.expandedTrackHeight)
+        .frame(height: Self.expandedTrackHeight * contentScale)
         .contentShape(.rect)
     }
 
@@ -142,9 +150,9 @@ struct DesktopNowPlayingProgress: View {
     }
 
     private var trackHeight: CGFloat {
-        isTrackExpanded
+        (isTrackExpanded
             ? Self.expandedTrackHeight
-            : Self.idleTrackHeight
+            : Self.idleTrackHeight) * contentScale
     }
 
     private var elapsedSecond: Int {

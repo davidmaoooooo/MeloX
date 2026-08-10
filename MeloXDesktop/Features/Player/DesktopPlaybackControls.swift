@@ -6,7 +6,12 @@ struct DesktopPlaybackControls: View {
     var tint: Color = .primary
     var prominentWidth: CGFloat = 320
     var prominentEdgeInset: CGFloat = 0
+    var prominentScale: CGFloat = 1
     var secondaryTintOpacity = 0.58
+
+    private var controlScale: CGFloat {
+        prominent ? max(prominentScale, 1) : 1
+    }
 
     var body: some View {
         Group {
@@ -23,19 +28,19 @@ struct DesktopPlaybackControls: View {
     private var prominentControls: some View {
         HStack(spacing: 0) {
             shuffleButton
-                .frame(width: 28)
+                .frame(width: 28 * controlScale)
             Spacer(minLength: 0)
             previousButton
-                .frame(width: 36)
+                .frame(width: 36 * controlScale)
             Spacer(minLength: 0)
             playButton
-                .frame(width: 48)
+                .frame(width: 48 * controlScale)
             Spacer(minLength: 0)
             nextButton
-                .frame(width: 36)
+                .frame(width: 36 * controlScale)
             Spacer(minLength: 0)
             repeatButton
-                .frame(width: 28)
+                .frame(width: 28 * controlScale)
         }
         .padding(.horizontal, prominentEdgeInset)
         .frame(width: prominentWidth)
@@ -56,7 +61,12 @@ struct DesktopPlaybackControls: View {
             model.player.toggleShuffle()
         } label: {
             Image(systemName: "shuffle")
-                .font(.system(size: prominent ? 16 : 12, weight: .semibold))
+                .font(
+                    .system(
+                        size: (prominent ? 16 : 12) * controlScale,
+                        weight: .semibold
+                    )
+                )
                 .foregroundStyle(
                     model.player.isShuffled
                         ? .red
@@ -71,7 +81,12 @@ struct DesktopPlaybackControls: View {
             Task { await model.player.previous() }
         } label: {
             Image(systemName: "backward.fill")
-                .font(.system(size: prominent ? 24 : 15, weight: .semibold))
+                .font(
+                    .system(
+                        size: (prominent ? 24 : 15) * controlScale,
+                        weight: .semibold
+                    )
+                )
         }
         .help("上一首")
     }
@@ -81,7 +96,12 @@ struct DesktopPlaybackControls: View {
             model.player.togglePlayback()
         } label: {
             Image(systemName: model.player.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: prominent ? 30 : 20, weight: .semibold))
+                .font(
+                    .system(
+                        size: (prominent ? 30 : 20) * controlScale,
+                        weight: .semibold
+                    )
+                )
                 .contentTransition(
                     .symbolEffect(
                         .replace,
@@ -98,7 +118,12 @@ struct DesktopPlaybackControls: View {
             Task { await model.player.next() }
         } label: {
             Image(systemName: "forward.fill")
-                .font(.system(size: prominent ? 24 : 15, weight: .semibold))
+                .font(
+                    .system(
+                        size: (prominent ? 24 : 15) * controlScale,
+                        weight: .semibold
+                    )
+                )
         }
         .disabled(!model.player.canPlayNext)
         .help("下一首")
@@ -109,7 +134,12 @@ struct DesktopPlaybackControls: View {
             model.player.cycleRepeatMode()
         } label: {
             Image(systemName: model.player.repeatMode.systemImage)
-                .font(.system(size: prominent ? 16 : 12, weight: .semibold))
+                .font(
+                    .system(
+                        size: (prominent ? 16 : 12) * controlScale,
+                        weight: .semibold
+                    )
+                )
                 .foregroundStyle(
                     model.player.repeatMode == .off
                         ? tint.opacity(secondaryTintOpacity)

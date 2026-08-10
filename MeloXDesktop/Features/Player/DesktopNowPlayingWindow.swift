@@ -87,7 +87,7 @@ struct DesktopNowPlayingWindow: View {
                             alignment: .top
                         )
 
-                    nowPlayingPanel(page)
+                    nowPlayingPanel(page, layout: layout)
                         .frame(
                             maxWidth: .infinity,
                             maxHeight: layout.contentHeight,
@@ -132,7 +132,10 @@ struct DesktopNowPlayingWindow: View {
     }
 
     @ViewBuilder
-    private func nowPlayingPanel(_ page: DesktopInspector) -> some View {
+    private func nowPlayingPanel(
+        _ page: DesktopInspector,
+        layout: DesktopNowPlayingLayout
+    ) -> some View {
         switch page {
         case .lyrics:
             DesktopPlaybackPositionedLyricsView(
@@ -140,7 +143,8 @@ struct DesktopNowPlayingWindow: View {
                 foregroundColor: artworkInfluencedForeground,
                 isActive: isRenderingActive,
                 isPresented: isActive,
-                keepsPlaybackFocusSynchronized: true
+                keepsPlaybackFocusSynchronized: true,
+                visualScale: layout.lyricsScale
             )
             .padding(.trailing, 72)
         case .queue:
@@ -161,7 +165,9 @@ struct DesktopNowPlayingWindow: View {
     }
 
     private func playerColumn(layout: DesktopNowPlayingLayout) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let elementScale = layout.elementScale
+
+        return VStack(alignment: .leading, spacing: 0) {
 
             DesktopNowPlayingArtwork(
                 artworkURL: model.player.currentSong?.album?.artworkURL,
@@ -173,10 +179,15 @@ struct DesktopNowPlayingWindow: View {
             .frame(maxWidth: .infinity)
             .padding(.top, layout.artworkTopInset)
 
-            HStack(alignment: .bottom, spacing: 10) {
-                VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .bottom, spacing: 10 * elementScale) {
+                VStack(alignment: .leading, spacing: 5 * elementScale) {
                     Text(model.player.currentSong?.name ?? "未在播放")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(
+                            .system(
+                                size: 18 * elementScale,
+                                weight: .bold
+                            )
+                        )
                         .lineLimit(1)
                     Text(
                         [
@@ -186,12 +197,17 @@ struct DesktopNowPlayingWindow: View {
                         .compactMap { $0 }
                         .joined(separator: " — ")
                     )
-                    .font(.system(size: 14, weight: .medium))
+                    .font(
+                        .system(
+                            size: 14 * elementScale,
+                            weight: .medium
+                        )
+                    )
                     .foregroundStyle(.white.opacity(0.60))
                     .lineLimit(1)
                 }
 
-                Spacer(minLength: 6)
+                Spacer(minLength: 6 * elementScale)
 
                 Button {
                     guard let song = model.player.currentSong else { return }
@@ -202,7 +218,16 @@ struct DesktopNowPlayingWindow: View {
                             model.library.contains(song: $0)
                         } == true ? "star.fill" : "star"
                     )
-                    .frame(width: 28, height: 28)
+                    .font(
+                        .system(
+                            size: 13 * elementScale,
+                            weight: .semibold
+                        )
+                    )
+                    .frame(
+                        width: 28 * elementScale,
+                        height: 28 * elementScale
+                    )
                     .contentShape(.circle)
                 }
                 .buttonStyle(.plain)
@@ -232,7 +257,16 @@ struct DesktopNowPlayingWindow: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .frame(width: 28, height: 28)
+                        .font(
+                            .system(
+                                size: 13 * elementScale,
+                                weight: .semibold
+                            )
+                        )
+                        .frame(
+                            width: 28 * elementScale,
+                            height: 28 * elementScale
+                        )
                         .contentShape(.circle)
                 }
                 .menuStyle(.borderlessButton)
@@ -246,17 +280,19 @@ struct DesktopNowPlayingWindow: View {
 
             DesktopNowPlayingProgress(
                 tint: artworkInfluencedForeground,
-                isActive: isActive
+                isActive: isActive,
+                scale: elementScale
             )
-                .padding(.top, 23)
+                .padding(.top, 23 * elementScale)
 
             DesktopPlaybackControls(
                 prominent: true,
                 tint: .white,
-                prominentWidth: layout.playerWidth
+                prominentWidth: layout.playerWidth,
+                prominentScale: elementScale
             )
                 .frame(maxWidth: .infinity)
-                .padding(.top, 22)
+                .padding(.top, 22 * elementScale)
 
             Spacer()
         }
