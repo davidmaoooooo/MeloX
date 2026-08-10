@@ -47,6 +47,26 @@ enum DesktopSection: String, CaseIterable, Identifiable, Hashable {
         case .messages: "bubble.left.and.bubble.right"
         }
     }
+
+    var requiredContentFeature: ContentFeature? {
+        switch self {
+        case .radio, .podcasts:
+            .podcasts
+        case .downloads:
+            .downloads
+        case .cloud:
+            .cloudMusic
+        case .recent:
+            .listeningHistory
+        case .search,
+             .home,
+             .discovery,
+             .songs,
+             .playlists,
+             .messages:
+            nil
+        }
+    }
 }
 
 enum DesktopRoute: Hashable {

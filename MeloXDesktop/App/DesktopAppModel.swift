@@ -55,7 +55,7 @@ final class DesktopAppModel {
         listenTogether = ListenTogetherStore(api: api, player: player)
         lyrics = LyricsStore(api: api)
         screenAwakeCoordinator = ScreenAwakeCoordinator()
-        home = DesktopHomeStore(api: api)
+        home = DesktopHomeStore(api: api, settings: settings)
 
         if !settings.hasCompletedOnboarding {
             ui.sheet = .onboarding
@@ -72,7 +72,7 @@ final class DesktopAppModel {
             .refreshAuthorizationStatus()
         if library.isLoggedIn {
             async let libraryLoad: Void = library.refresh()
-            async let cloudLoad: Void = cloud.refresh()
+            async let cloudLoad: Void = refreshCloudIfEnabled()
             async let roomLoad: Void = listenTogether
                 .accountDidChange(hasCredentials: true)
             _ = await (libraryLoad, cloudLoad, roomLoad)
@@ -91,14 +91,14 @@ final class DesktopAppModel {
     func refreshAll() async {
         async let homeLoad: Void = home.load(force: true)
         async let libraryLoad: Void = library.refresh(force: true)
-        async let cloudLoad: Void = cloud.refresh(force: true)
+        async let cloudLoad: Void = refreshCloudIfEnabled(force: true)
         _ = await (homeLoad, libraryLoad, cloudLoad)
     }
 
     func accountCookieDidChange() async {
         async let homeLoad: Void = home.load(force: true)
         await library.refresh(force: true)
-        await cloud.refresh(force: true)
+        await refreshCloudIfEnabled(force: true)
         await listenTogether.accountDidChange(
             hasCredentials: library.isLoggedIn
         )
@@ -119,6 +119,27 @@ final class DesktopAppModel {
 
     func clearLaunchError() {
         launchErrorMessage = nil
+    }
+
+    func isSectionEnabled(_ section: DesktopSection) -> Bool {
+        guard let feature = section.requiredContentFeature else {
+            return true
+        }
+        return settings.isContentFeatureEnabled(feature)
+    }
+
+    func ensureSelectedSectionIsEnabled() {
+        guard !isSectionEnabled(ui.selection) else { return }
+        ui.selection = .home
+    }
+
+    private func refreshCloudIfEnabled(
+        force: Bool = false
+    ) async {
+        guard settings.isContentFeatureEnabled(.cloudMusic) else {
+            return
+        }
+        await cloud.refresh(force: force)
     }
 
     private func startHeartModeOnLaunchIfNeeded() async {

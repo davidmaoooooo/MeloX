@@ -20,10 +20,14 @@ final class DesktopHomeStore {
     private let api: NeteaseAPI
 
     @ObservationIgnored
+    private let settings: AppSettings
+
+    @ObservationIgnored
     private var hasLoaded = false
 
-    init(api: NeteaseAPI) {
+    init(api: NeteaseAPI, settings: AppSettings) {
         self.api = api
+        self.settings = settings
     }
 
     func load(force: Bool = false) async {
@@ -58,13 +62,13 @@ final class DesktopHomeStore {
             )
         }
         async let programsResult = capture {
-            try await self.api.recommendedPodcastPrograms(limit: 12)
+            try await self.podcastPrograms()
         }
         async let podcastsResult = capture {
-            try await self.api.featuredPodcasts()
+            try await self.podcasts()
         }
         async let categoriesResult = capture {
-            try await self.api.podcastCategories()
+            try await self.podcastCategories()
         }
         async let homePageResult = capture {
             try await self.api.homePage(refresh: force)
@@ -137,6 +141,27 @@ final class DesktopHomeStore {
         } else {
             phase = .loaded
         }
+    }
+
+    private func podcastPrograms() async throws -> [PodcastProgram] {
+        guard settings.isContentFeatureEnabled(.podcasts) else {
+            return []
+        }
+        return try await api.recommendedPodcastPrograms(limit: 12)
+    }
+
+    private func podcasts() async throws -> [Podcast] {
+        guard settings.isContentFeatureEnabled(.podcasts) else {
+            return []
+        }
+        return try await api.featuredPodcasts()
+    }
+
+    private func podcastCategories() async throws -> [PodcastCategory] {
+        guard settings.isContentFeatureEnabled(.podcasts) else {
+            return []
+        }
+        return try await api.podcastCategories()
     }
 
     private static func privateRadarPlaylist(

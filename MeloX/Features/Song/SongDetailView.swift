@@ -5,6 +5,7 @@ struct SongDetailView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
     @Environment(DownloadStore.self) private var downloads
+    @Environment(AppSettings.self) private var settings
 
     @State private var song: Song
     @State private var presentedSheet: SongDetailSheet?
@@ -23,7 +24,7 @@ struct SongDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if AppFeatureAvailability.downloads {
+                if settings.isContentFeatureEnabled(.downloads) {
                     Menu {
                         if downloads.isDownloading(songID: song.id) {
                             Button {

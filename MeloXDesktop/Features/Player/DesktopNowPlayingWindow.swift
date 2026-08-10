@@ -235,8 +235,13 @@ struct DesktopNowPlayingWindow: View {
 
                 Menu {
                     if let song = model.player.currentSong {
-                        Button("下载", systemImage: "arrow.down.circle") {
-                            model.downloads.start(song, quality: model.settings.quality)
+                        if model.settings.isContentFeatureEnabled(.downloads) {
+                            Button("下载", systemImage: "arrow.down.circle") {
+                                model.downloads.start(
+                                    song,
+                                    quality: model.settings.quality
+                                )
+                            }
                         }
                         DesktopPlaybackQualityMenu(model: model)
                         Button("桌面歌词", systemImage: "text.quote") {

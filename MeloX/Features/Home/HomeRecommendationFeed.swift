@@ -138,7 +138,8 @@ struct HomeRecommendationFeed {
         blocks: [HomePageBlock],
         fallbacks: [
             HomeRecommendationSlot: HomeRecommendationFallback
-        ] = [:]
+        ] = [:],
+        includesPodcasts: Bool = true
     ) {
         var blocksBySlot: [
             HomeRecommendationSlot: HomePageBlock
@@ -153,7 +154,11 @@ struct HomeRecommendationFeed {
             blocksBySlot[slot] = block
         }
 
-        sections = HomeRecommendationSlot.allCases.compactMap {
+        let availableSlots = HomeRecommendationSlot.allCases.filter {
+            includesPodcasts
+                || $0 != .listenedPodcastRecommendations
+        }
+        sections = availableSlots.compactMap {
             slot in
             if let block = blocksBySlot[slot],
                let section = HomeRecommendationSection(

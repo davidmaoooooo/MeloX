@@ -28,12 +28,12 @@ struct DesktopSidebar: View {
         @Bindable var ui = model.ui
 
         TabView(selection: $ui.selection) {
-            ForEach(primarySections) { section in
+            ForEach(primarySections.filter(model.isSectionEnabled)) { section in
                 tab(for: section)
             }
 
             TabSection("音乐库") {
-                ForEach(librarySections) { section in
+                ForEach(librarySections.filter(model.isSectionEnabled)) { section in
                     tab(for: section)
                 }
             }
@@ -52,6 +52,11 @@ struct DesktopSidebar: View {
                 reservedBottomInset: pinnedFooterHeight
             )
                 .frame(width: 0, height: 0)
+        }
+        .onChange(
+            of: model.settings.contentFeatures.disabledFeatures
+        ) { _, _ in
+            model.ensureSelectedSectionIsEnabled()
         }
     }
 
@@ -82,23 +87,27 @@ struct DesktopSidebar: View {
         if let message = model.ui.presentedLoadingMessage {
             return message
         }
-        if model.cloud.isUploading {
+        if model.settings.isContentFeatureEnabled(.cloudMusic),
+           model.cloud.isUploading {
             return "正在上传音乐…"
         }
         if let message = model.ui.contextualLoadingMessage {
             return message
         }
         if model.library.phase == .loading
-            || model.cloud.phase == .loading {
+            || (model.settings.isContentFeatureEnabled(.cloudMusic)
+                && model.cloud.phase == .loading) {
             return "正在载入云端资料库…"
         }
-        if model.cloud.isLoadingMore {
+        if model.settings.isContentFeatureEnabled(.cloudMusic),
+           model.cloud.isLoadingMore {
             return "正在载入更多云盘歌曲…"
         }
         if model.library.isLoadingMoreFavoriteSongs {
             return "正在载入更多收藏歌曲…"
         }
-        if model.library.isLoadingMoreSubscribedPodcasts {
+        if model.settings.isContentFeatureEnabled(.podcasts),
+           model.library.isLoadingMoreSubscribedPodcasts {
             return "正在载入更多订阅播客…"
         }
         if model.home.phase == .loading {

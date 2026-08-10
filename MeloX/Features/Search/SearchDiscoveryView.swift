@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SearchDiscoveryView: View {
     @Environment(NeteaseAPI.self) private var api
+    @Environment(AppSettings.self) private var settings
 
     @State private var recommendations: [Playlist] = []
     @State private var phase: LoadingPhase = .loading
@@ -22,7 +23,7 @@ struct SearchDiscoveryView: View {
                         .font(.title2.bold())
 
                     LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(SearchMusicCategory.all) { category in
+                        ForEach(visibleCategories) { category in
                             NavigationLink(value: category.route) {
                                 SearchCategoryCard(category: category)
                             }
@@ -40,6 +41,15 @@ struct SearchDiscoveryView: View {
         .task(id: reloadToken) {
             guard recommendations.isEmpty else { return }
             await loadRecommendations()
+        }
+    }
+
+    private var visibleCategories: [SearchMusicCategory] {
+        SearchMusicCategory.all.filter { category in
+            guard let feature = category.requiredContentFeature else {
+                return true
+            }
+            return settings.isContentFeatureEnabled(feature)
         }
     }
 
@@ -141,6 +151,10 @@ private struct SearchMusicCategory: Identifiable {
     let colors: [Color]
 
     var id: String { name }
+
+    var requiredContentFeature: ContentFeature? {
+        name == "播客" ? .podcasts : nil
+    }
 
     var route: MusicRoute {
         switch name {

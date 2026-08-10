@@ -85,8 +85,10 @@ private struct DesktopNavigationCommands: Commands {
                 .keyboardShortcut("1", modifiers: .command)
             Button("新发现") { model.ui.selection = .discovery }
                 .keyboardShortcut("2", modifiers: .command)
-            Button("广播") { model.ui.selection = .radio }
-                .keyboardShortcut("3", modifiers: .command)
+            if model.isSectionEnabled(.radio) {
+                Button("广播") { model.ui.selection = .radio }
+                    .keyboardShortcut("3", modifiers: .command)
+            }
         }
     }
 }

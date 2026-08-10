@@ -8,6 +8,7 @@ enum SettingsRoute: Hashable {
     case systemPlayback
     case general
     case tabLayout
+    case contentFeatures
     case content
     case storage
     case skylineLyrics
@@ -141,6 +142,22 @@ enum SettingsCatalog {
         SettingsCatalogSection(
             title: "内容与存储",
             items: [
+                SettingsCatalogItem(
+                    route: .contentFeatures,
+                    title: "功能模块",
+                    subtitle: "启用或停用播客、下载、云盘与最近播放",
+                    systemImage: "switch.2",
+                    keywords: [
+                        "开关",
+                        "隐藏",
+                        "播客",
+                        "广播",
+                        "下载",
+                        "云盘",
+                        "最近播放",
+                        "播放记录",
+                    ]
+                ),
                 SettingsCatalogItem(
                     route: .content,
                     title: "发现内容",

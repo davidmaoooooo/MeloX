@@ -204,26 +204,31 @@ struct DesktopCollectionHeader: View {
                 .help(isFavorite ? "取消收藏" : "收藏")
             }
 
-            Menu {
-                Button("下载全部", systemImage: "arrow.down.circle") {
-                    model.downloads.start(
-                        songs,
-                        quality: model.settings.quality
-                    )
-                }
-                .disabled(songs.isEmpty)
-
-                if let shareURL {
-                    ShareLink(item: shareURL) {
-                        Label("分享", systemImage: "square.and.arrow.up")
+            if model.settings.isContentFeatureEnabled(.downloads)
+                || shareURL != nil {
+                Menu {
+                    if model.settings.isContentFeatureEnabled(.downloads) {
+                        Button("下载全部", systemImage: "arrow.down.circle") {
+                            model.downloads.start(
+                                songs,
+                                quality: model.settings.quality
+                            )
+                        }
+                        .disabled(songs.isEmpty)
                     }
+
+                    if let shareURL {
+                        ShareLink(item: shareURL) {
+                            Label("分享", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
                 }
-            } label: {
-                Image(systemName: "ellipsis")
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("更多")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("更多")
         }
     }
 }

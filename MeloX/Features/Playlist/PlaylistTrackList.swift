@@ -55,6 +55,7 @@ private struct PlaylistTrackRow: View {
     @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
     @Environment(DownloadStore.self) private var downloads
+    @Environment(AppSettings.self) private var settings
 
     @State private var presentedSheet: PlaylistSongSheet?
 
@@ -118,7 +119,7 @@ private struct PlaylistTrackRow: View {
             .accessibilityLabel(primaryActionAccessibilityLabel)
             .accessibilityValue(primaryActionAccessibilityValue)
 
-            if AppFeatureAvailability.downloads {
+            if settings.isContentFeatureEnabled(.downloads) {
                 if downloads.isDownloading(songID: song.id) {
                     ProgressView()
                         .controlSize(.mini)
@@ -143,7 +144,7 @@ private struct PlaylistTrackRow: View {
                         )
                     }
 
-                    if AppFeatureAvailability.downloads {
+                    if settings.isContentFeatureEnabled(.downloads) {
                         if downloads.isDownloading(songID: song.id) {
                             Button {
                                 downloads.cancel(songID: song.id)

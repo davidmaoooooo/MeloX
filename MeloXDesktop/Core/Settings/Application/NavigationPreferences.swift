@@ -76,6 +76,30 @@ enum AppTab: String, CaseIterable, Identifiable {
         libraryPage?.settingsTitle ?? title
     }
 
+    var requiredContentFeature: ContentFeature? {
+        switch self {
+        case .podcasts:
+            .podcasts
+        case .libraryPodcasts:
+            .podcasts
+        case .libraryDownloads:
+            .downloads
+        case .libraryCloud:
+            .cloudMusic
+        case .libraryHistory:
+            .listeningHistory
+        case .home,
+             .recommended,
+             .music,
+             .explore,
+             .library,
+             .librarySongs,
+             .libraryPlaylists,
+             .search:
+            nil
+        }
+    }
+
     var allowedPlacements: [AppPagePlacement] {
         if self == .recommended {
             return [.home]
@@ -189,6 +213,16 @@ enum LibraryPage: String, CaseIterable, Identifiable {
         case .downloads: "下载"
         case .cloud: "云盘"
         case .history: "最近播放"
+        }
+    }
+
+    var requiredContentFeature: ContentFeature? {
+        switch self {
+        case .podcasts: .podcasts
+        case .downloads: .downloads
+        case .cloud: .cloudMusic
+        case .history: .listeningHistory
+        case .songs, .playlists: nil
         }
     }
 }

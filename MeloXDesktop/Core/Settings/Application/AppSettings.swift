@@ -494,7 +494,8 @@ final class AppSettings {
 
     var embeddedLibraryPages: [LibraryPage] {
         LibraryPage.availableCases.filter {
-            !separatedLibraryPages.contains($0)
+            isLibraryPageEnabled($0)
+                && !separatedLibraryPages.contains($0)
         }
     }
 
@@ -503,6 +504,7 @@ final class AppSettings {
             homeTabOrder,
             separatedLibraryPages: separatedLibraryPages
         )
+        .filter(isNavigationTabEnabled)
     }
 
     var visibleTabs: [AppTab] {
@@ -511,6 +513,7 @@ final class AppSettings {
             separatedLibraryPages: separatedLibraryPages,
             homeTabs: homeTabs
         )
+        .filter(isNavigationTabEnabled)
     }
 
     var launchTab: AppTab {
@@ -555,6 +558,7 @@ final class AppSettings {
         placement: AppPagePlacement
     ) {
         guard AppTab.configurablePages.contains(tab),
+              isNavigationTabEnabled(tab),
               tab.allowedPlacements.contains(placement) else {
             return
         }
@@ -602,18 +606,46 @@ final class AppSettings {
     }
 
     func setHomeTabOrder(_ tabs: [AppTab]) {
+        let disabledTabs = homeTabOrder.filter {
+            !isNavigationTabEnabled($0)
+        }
         homeTabOrder = Self.normalizedHomeTabOrder(
-            tabs,
+            tabs + disabledTabs,
             separatedLibraryPages: separatedLibraryPages
         )
     }
 
     func setVisibleTabOrder(_ tabs: [AppTab]) {
+        let disabledTabs = tabOrder.filter {
+            !isNavigationTabEnabled($0)
+        }
         tabOrder = Self.normalizedTabOrder(
-            tabs,
+            tabs + disabledTabs,
             separatedLibraryPages: separatedLibraryPages,
             homeTabs: homeTabs
         )
+    }
+
+    func isContentFeatureEnabled(_ feature: ContentFeature) -> Bool {
+        contentFeatures.isEnabled(feature)
+    }
+
+    func setContentFeature(
+        _ feature: ContentFeature,
+        isEnabled: Bool
+    ) {
+        contentFeatures.setEnabled(isEnabled, for: feature)
+        normalizeNavigationSelections()
+    }
+
+    func isNavigationTabEnabled(_ tab: AppTab) -> Bool {
+        guard let feature = tab.requiredContentFeature else { return true }
+        return isContentFeatureEnabled(feature)
+    }
+
+    func isLibraryPageEnabled(_ page: LibraryPage) -> Bool {
+        guard let feature = page.requiredContentFeature else { return true }
+        return isContentFeatureEnabled(feature)
     }
 
     func resetTabLayout() {
@@ -1183,6 +1215,7 @@ final class AppSettings {
     let floatingLyrics: FloatingLyricsPreferences
     let lyricsNotifications: LyricsNotificationPreferences
     let songRecognition: SongRecognitionPreferences
+    let contentFeatures: ContentFeaturePreferences
 
     @ObservationIgnored
     private let defaults: UserDefaults
@@ -1198,6 +1231,7 @@ final class AppSettings {
             defaults: defaults
         )
         songRecognition = SongRecognitionPreferences(defaults: defaults)
+        contentFeatures = ContentFeaturePreferences(defaults: defaults)
         hasCompletedOnboarding = defaults.bool(
             forKey: Key.hasCompletedOnboarding
         )

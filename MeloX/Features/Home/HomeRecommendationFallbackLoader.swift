@@ -10,12 +10,14 @@ struct HomeRecommendationFallbackLoader {
     private let ownedPlaylists: [Playlist]
     private let favoritePlaylists: [Playlist]
     private let likedSong: Song?
+    private let includesPodcasts: Bool
 
     init(
         api: NeteaseAPI,
         library: LibraryStore,
         serverFeed: HomeRecommendationFeed,
-        region: HomeMusicRegion
+        region: HomeMusicRegion,
+        includesPodcasts: Bool
     ) {
         self.api = api
         self.serverFeed = serverFeed
@@ -25,6 +27,7 @@ struct HomeRecommendationFallbackLoader {
         ownedPlaylists = library.ownedPlaylists
         favoritePlaylists = library.favoritePlaylists
         likedSong = library.favoriteSongs.first
+        self.includesPodcasts = includesPodcasts
     }
 
     func load(
@@ -117,7 +120,8 @@ struct HomeRecommendationFallbackLoader {
     }
 
     private func podcastPrograms() async -> [PodcastProgram] {
-        guard !serverFeed.contains(
+        guard includesPodcasts,
+              !serverFeed.contains(
             .listenedPodcastRecommendations
         ) else {
             return []

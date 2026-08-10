@@ -140,7 +140,10 @@ final class DownloadStore {
     }
 
     func start(_ songs: [Song], quality: MusicQuality) {
-        guard AppFeatureAvailability.downloads else { return }
+        guard AppFeatureAvailability.downloads,
+              settings.isContentFeatureEnabled(.downloads) else {
+            return
+        }
         guard database != nil else {
             errorMessage = DownloadDatabaseError.unavailable.localizedDescription
             return
@@ -176,7 +179,10 @@ final class DownloadStore {
     }
 
     func recordPlayback(_ song: Song) {
-        guard AppFeatureAvailability.downloads else { return }
+        guard AppFeatureAvailability.downloads,
+              settings.isContentFeatureEnabled(.downloads) else {
+            return
+        }
         do {
             guard let database else { return }
             let count = try database.recordPlayback(songID: song.id)

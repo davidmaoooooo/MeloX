@@ -24,7 +24,9 @@ struct HomeRecommendedView: View {
     private var feed: HomeRecommendationFeed {
         HomeRecommendationFeed(
             blocks: payload?.blocks ?? [],
-            fallbacks: fallbacks
+            fallbacks: fallbacks,
+            includesPodcasts:
+                settings.isContentFeatureEnabled(.podcasts)
         )
     }
 
@@ -46,6 +48,8 @@ struct HomeRecommendedView: View {
                 accountID: library.profile?.id,
                 isLoggedIn: library.isLoggedIn,
                 musicArea: settings.musicArea,
+                podcastsEnabled:
+                    settings.isContentFeatureEnabled(.podcasts),
                 favoritePlaylistIDs:
                     library.favoritePlaylists.map(\.id),
                 likedSongID: library.favoriteSongs.first?.id
@@ -298,7 +302,9 @@ struct HomeRecommendedView: View {
 
         let requestedBlockIDs = payload.blocks.map(\.id)
         let serverFeed = HomeRecommendationFeed(
-            blocks: payload.blocks
+            blocks: payload.blocks,
+            includesPodcasts:
+                settings.isContentFeatureEnabled(.podcasts)
         )
         let fallbackLoader = HomeRecommendationFallbackLoader(
             api: api,
@@ -306,7 +312,9 @@ struct HomeRecommendedView: View {
             serverFeed: serverFeed,
             region: HomeMusicRegion(
                 settingValue: settings.musicArea
-            )
+            ),
+            includesPodcasts:
+                settings.isContentFeatureEnabled(.podcasts)
         )
         let newFallbacks = await fallbackLoader.load(
             charts: charts
@@ -340,6 +348,7 @@ private struct HomeRecommendedFallbackLoadRequest: Hashable {
     let accountID: Int?
     let isLoggedIn: Bool
     let musicArea: String
+    let podcastsEnabled: Bool
     let favoritePlaylistIDs: [Int]
     let likedSongID: Int?
 }

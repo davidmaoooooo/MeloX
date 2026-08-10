@@ -17,6 +17,10 @@ struct DesktopSettingsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .tabItem { Label("通用", systemImage: "gearshape") }
                     .tag(DesktopSettingsTab.general)
+                DesktopContentFeatureSettingsView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .tabItem { Label("功能", systemImage: "switch.2") }
+                    .tag(DesktopSettingsTab.features)
                 DesktopPlaybackAndLyricsSettingsView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .tabItem { Label("播放", systemImage: "play.circle") }
@@ -96,6 +100,7 @@ struct DesktopSettingsView: View {
 
 private enum DesktopSettingsTab: Hashable {
     case general
+    case features
     case playback
     case files
     case advanced
@@ -103,6 +108,7 @@ private enum DesktopSettingsTab: Hashable {
     var contentHeight: CGFloat {
         switch self {
         case .general: 570
+        case .features: 480
         case .playback: 620
         case .files: 620
         case .advanced: 600

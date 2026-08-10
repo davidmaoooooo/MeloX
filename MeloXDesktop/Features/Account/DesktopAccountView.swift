@@ -59,17 +59,23 @@ struct DesktopAccountView: View {
                         model.ui.sheet = nil
                         model.ui.navigate(to: .section(.messages))
                     }
-                    Divider()
-                        .padding(.leading, 12)
-                    accountAction("音乐云盘") {
-                        model.ui.sheet = nil
-                        model.ui.navigate(to: .section(.cloud))
+
+                    if model.isSectionEnabled(.cloud) {
+                        Divider()
+                            .padding(.leading, 12)
+                        accountAction("音乐云盘") {
+                            model.ui.sheet = nil
+                            model.ui.navigate(to: .section(.cloud))
+                        }
                     }
-                    Divider()
-                        .padding(.leading, 12)
-                    accountAction("下载") {
-                        model.ui.sheet = nil
-                        model.ui.navigate(to: .section(.downloads))
+
+                    if model.isSectionEnabled(.downloads) {
+                        Divider()
+                            .padding(.leading, 12)
+                        accountAction("下载") {
+                            model.ui.sheet = nil
+                            model.ui.navigate(to: .section(.downloads))
+                        }
                     }
                 }
             }

@@ -98,6 +98,9 @@ final class LibraryStore {
     }
 
     func recordRecentlyPlayed(_ song: Song) {
+        guard settings.isContentFeatureEnabled(.listeningHistory) else {
+            return
+        }
         recentSongs.removeAll { $0.id == song.id }
         recentSongs.insert(song, at: 0)
         if recentSongs.count > 100 {
@@ -166,27 +169,29 @@ final class LibraryStore {
                 partialFailures.append("歌单：\(error.localizedDescription)")
             }
 
-            do {
-                let page = try await api.subscribedPodcasts(
-                    limit: subscribedPodcastPageSize
-                )
-                try Task.checkCancellation()
-                subscribedPodcasts = normalizedSubscribedPodcasts(
-                    page.podcasts
-                )
-                subscribedPodcastTotalCount = max(
-                    page.totalCount ?? subscribedPodcasts.count,
-                    subscribedPodcasts.count
-                )
-                subscribedPodcastsNextOffset = page.podcasts.count
-                hasMoreSubscribedPodcasts = page.hasMore
-                subscribedPodcastsLoadMoreError = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                partialFailures.append(
-                    "订阅播客：\(error.localizedDescription)"
-                )
+            if settings.isContentFeatureEnabled(.podcasts) {
+                do {
+                    let page = try await api.subscribedPodcasts(
+                        limit: subscribedPodcastPageSize
+                    )
+                    try Task.checkCancellation()
+                    subscribedPodcasts = normalizedSubscribedPodcasts(
+                        page.podcasts
+                    )
+                    subscribedPodcastTotalCount = max(
+                        page.totalCount ?? subscribedPodcasts.count,
+                        subscribedPodcasts.count
+                    )
+                    subscribedPodcastsNextOffset = page.podcasts.count
+                    hasMoreSubscribedPodcasts = page.hasMore
+                    subscribedPodcastsLoadMoreError = nil
+                } catch is CancellationError {
+                    return
+                } catch {
+                    partialFailures.append(
+                        "订阅播客：\(error.localizedDescription)"
+                    )
+                }
             }
 
             do {
@@ -212,12 +217,16 @@ final class LibraryStore {
                 partialFailures.append("收藏歌曲：\(error.localizedDescription)")
             }
 
-            do {
-                recentSongs = try await api.recentSongs()
-            } catch is CancellationError {
-                return
-            } catch {
-                partialFailures.append("播放历史：\(error.localizedDescription)")
+            if settings.isContentFeatureEnabled(.listeningHistory) {
+                do {
+                    recentSongs = try await api.recentSongs()
+                } catch is CancellationError {
+                    return
+                } catch {
+                    partialFailures.append(
+                        "播放历史：\(error.localizedDescription)"
+                    )
+                }
             }
 
             if !partialFailures.isEmpty {
@@ -311,6 +320,7 @@ final class LibraryStore {
     }
 
     func loadMoreSubscribedPodcasts() async {
+        guard settings.isContentFeatureEnabled(.podcasts) else { return }
         if let subscribedPodcastPageLoadTask {
             await subscribedPodcastPageLoadTask.value
             return

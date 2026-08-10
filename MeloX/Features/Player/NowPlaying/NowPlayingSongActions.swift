@@ -91,15 +91,17 @@ struct NowPlayingSongActions: View {
                     )
                 }
 
-                Button {
-                    openMusicRoute(
-                        .podcast(podcast.podcastSummary)
-                    )
-                } label: {
-                    Label(
-                        "前往播客：\(podcast.radioName)",
-                        systemImage: "mic"
-                    )
+                if settings.isContentFeatureEnabled(.podcasts) {
+                    Button {
+                        openMusicRoute(
+                            .podcast(podcast.podcastSummary)
+                        )
+                    } label: {
+                        Label(
+                            "前往播客：\(podcast.radioName)",
+                            systemImage: "mic"
+                        )
+                    }
                 }
             } else {
                 ControlGroup {

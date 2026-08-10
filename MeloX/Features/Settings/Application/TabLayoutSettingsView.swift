@@ -27,7 +27,11 @@ struct TabLayoutSettingsView: View {
             }
 
             Section {
-                ForEach(AppTab.movablePrimaryContentPages) { tab in
+                ForEach(
+                    AppTab.movablePrimaryContentPages.filter(
+                        settings.isNavigationTabEnabled
+                    )
+                ) { tab in
                     placementPicker(for: tab)
                 }
             } header: {
@@ -37,7 +41,11 @@ struct TabLayoutSettingsView: View {
             }
 
             Section {
-                ForEach(AppTab.libraryContentPages) { tab in
+                ForEach(
+                    AppTab.libraryContentPages.filter(
+                        settings.isNavigationTabEnabled
+                    )
+                ) { tab in
                     placementPicker(for: tab)
                 }
             } header: {

@@ -65,7 +65,9 @@ struct DesktopHomeView: View {
                         trailingOverlayInset: reservedTrailingWidth
                     )
 
-                    if !recentSongs.isEmpty {
+                    if model.settings.isContentFeatureEnabled(
+                        .listeningHistory
+                    ), !recentSongs.isEmpty {
                         songCardSection(
                             title: "最近播放",
                             songs: Array(recentSongs.prefix(8)),
@@ -88,7 +90,8 @@ struct DesktopHomeView: View {
                         )
                     }
 
-                    if !model.home.podcastPrograms.isEmpty {
+                    if model.settings.isContentFeatureEnabled(.podcasts),
+                       !model.home.podcastPrograms.isEmpty {
                         podcastProgramSection(
                             cardWidth: mediaCardWidth,
                             trailingOverlayInset: reservedTrailingWidth

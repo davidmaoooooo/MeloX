@@ -45,7 +45,7 @@ private final class DesktopSearchStore {
             } else {
                 loadedPayload = libraryPayload(
                     matching: keyword,
-                    library: model.library
+                    model: model
                 )
             }
             guard activeSearchID == searchID else { return }
@@ -60,10 +60,14 @@ private final class DesktopSearchStore {
 
     private func libraryPayload(
         matching keyword: String,
-        library: LibraryStore
+        model: DesktopAppModel
     ) -> SearchPayload {
+        let library = model.library
         let songs = unique(
-            library.favoriteSongs + library.recentSongs,
+            library.favoriteSongs
+                + (model.settings.isContentFeatureEnabled(
+                    .listeningHistory
+                ) ? library.recentSongs : []),
             by: \.id
         )
         let matchingSongs = songs.filter {
@@ -87,9 +91,11 @@ private final class DesktopSearchStore {
         let playlists = library.favoritePlaylists.filter {
             matches(keyword, values: [$0.name, $0.creator?.nickname])
         }
-        let podcasts = library.subscribedPodcasts.filter {
-            matches(keyword, values: [$0.name, $0.subtitle])
-        }
+        let podcasts = model.settings.isContentFeatureEnabled(.podcasts)
+            ? library.subscribedPodcasts.filter {
+                matches(keyword, values: [$0.name, $0.subtitle])
+            }
+            : []
 
         return SearchPayload(
             songs: matchingSongs,
@@ -137,7 +143,7 @@ struct DesktopSearchView: View {
         VStack(spacing: 0) {
             if !store.query.isEmpty {
                 Picker("类型", selection: $store.kind) {
-                    ForEach(SearchKind.allCases) { kind in
+                    ForEach(availableSearchKinds) { kind in
                         Text(kind.title).tag(kind)
                     }
                 }
@@ -222,6 +228,20 @@ struct DesktopSearchView: View {
             try? await Task.sleep(for: .milliseconds(320))
             guard !Task.isCancelled else { return }
             await store.search(using: model)
+        }
+        .onChange(
+            of: model.settings.isContentFeatureEnabled(.podcasts)
+        ) { _, podcastsEnabled in
+            if !podcastsEnabled, store.kind == .podcasts {
+                store.kind = .songs
+            }
+        }
+    }
+
+    private var availableSearchKinds: [SearchKind] {
+        SearchKind.allCases.filter {
+            $0 != .podcasts
+                || model.settings.isContentFeatureEnabled(.podcasts)
         }
     }
 

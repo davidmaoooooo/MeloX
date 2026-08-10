@@ -145,8 +145,13 @@ struct DesktopBottomPlayer: View {
                 ) {
                     model.library.toggle(song: song)
                 }
-                Button("下载", systemImage: "arrow.down.circle") {
-                    model.downloads.start(song, quality: model.settings.quality)
+                if model.settings.isContentFeatureEnabled(.downloads) {
+                    Button("下载", systemImage: "arrow.down.circle") {
+                        model.downloads.start(
+                            song,
+                            quality: model.settings.quality
+                        )
+                    }
                 }
                 Button("前往当前歌曲", systemImage: "arrow.right.circle") {
                     model.ui.navigate(to: .song(song.id))

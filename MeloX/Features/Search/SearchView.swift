@@ -4,6 +4,7 @@ struct SearchView: View {
     @Environment(NeteaseAPI.self) private var api
     @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
+    @Environment(AppSettings.self) private var settings
 
     @State private var query = ""
     @State private var scope: SearchKind = .songs
@@ -36,7 +37,7 @@ struct SearchView: View {
             prompt: "音乐内容或网易云链接"
         )
         .searchScopes($scope) {
-            ForEach(SearchKind.allCases) { kind in
+            ForEach(availableSearchKinds) { kind in
                 Text(kind.title).tag(kind)
             }
         }
@@ -80,6 +81,20 @@ struct SearchView: View {
             let request = SearchRequest(query: query, kind: scope)
             guard completedRequest != request else { return }
             await search(request)
+        }
+        .onChange(
+            of: settings.isContentFeatureEnabled(.podcasts)
+        ) { _, podcastsEnabled in
+            if !podcastsEnabled, scope == .podcasts {
+                scope = .songs
+            }
+        }
+    }
+
+    private var availableSearchKinds: [SearchKind] {
+        SearchKind.allCases.filter {
+            $0 != .podcasts
+                || settings.isContentFeatureEnabled(.podcasts)
         }
     }
 
