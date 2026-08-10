@@ -136,7 +136,7 @@ private struct DesktopNowPlayingTrailingAccessoryContent: View {
 
     var body: some View {
         DesktopNowPlayingVolumeControl()
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: true, vertical: true)
             .padding(.trailing, 10)
             .environment(model)
             .transaction { transaction in
