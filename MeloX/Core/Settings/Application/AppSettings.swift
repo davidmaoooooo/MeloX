@@ -54,7 +54,7 @@ final class AppSettings {
     static let lyricsFocusCascadeDelayRange = 0.0...0.1
     static let defaultLyricsFocusCascadeDelayIncrease = 0.005
     static let lyricsFocusCascadeDelayIncreaseRange = 0.0...0.1
-    static let defaultLyricsFocusCascadeFollowingDelay = 0.048
+    static let defaultLyricsFocusCascadeFollowingDelay = 0.030
     static let lyricsFocusCascadeFollowingDelayRange = 0.0...0.2
     static let defaultLyricsFocusCascadeCatchUpRatio = 0.97
     static let lyricsFocusCascadeCatchUpRatioRange = 0.5...1.0
