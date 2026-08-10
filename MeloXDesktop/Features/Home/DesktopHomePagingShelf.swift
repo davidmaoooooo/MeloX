@@ -6,6 +6,13 @@ import SwiftUI
 struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private struct ScrollState: Equatable {
+        let leadingIndex: Int
+        let visibleItemCount: Int
+        let canRetreat: Bool
+        let canAdvance: Bool
+    }
+
     let items: [Item]
     let cardWidth: CGFloat
     let spacing: CGFloat
@@ -15,6 +22,7 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
 
     @State private var leadingIndex = 0
     @State private var isShelfHovered = false
+    @State private var scrollState: ScrollState?
 
     init(
         items: [Item],
@@ -44,8 +52,17 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
                                 .id(item.id)
                         }
                     }
+                    // Keep cards drawing beneath the overlay while reserving
+                    // enough scroll range to reveal the final card beside it.
+                    .padding(.trailing, trailingOverlayInset)
                 }
                 .clipped()
+                .onScrollGeometryChange(for: ScrollState.self) { geometry in
+                    scrollState(for: geometry)
+                } action: { _, newState in
+                    scrollState = newState
+                    leadingIndex = newState.leadingIndex
+                }
                 .onChange(of: items.map(\.id), initial: true) { _, _ in
                     let clampedIndex = min(leadingIndex, lastPageStart)
                     guard clampedIndex != leadingIndex else { return }
@@ -116,19 +133,56 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
     }
 
     private var canAdvance: Bool {
-        leadingIndex < lastPageStart
+        scrollState?.canAdvance ?? (leadingIndex < lastPageStart)
     }
 
     private var canRetreat: Bool {
-        leadingIndex > 0
+        scrollState?.canRetreat ?? (leadingIndex > 0)
     }
 
     private var pageSize: Int {
-        max(visibleItemCount, 1)
+        max(scrollState?.visibleItemCount ?? visibleItemCount, 1)
     }
 
     private var lastPageStart: Int {
         max(items.count - pageSize, 0)
+    }
+
+    private func scrollState(for geometry: ScrollGeometry) -> ScrollState {
+        let containerWidth = max(geometry.containerSize.width, 0)
+        // Paging uses only the unobscured portion of the full-width shelf.
+        let viewportWidth = max(
+            containerWidth - trailingOverlayInset,
+            0
+        )
+        let maximumOffset = max(
+            geometry.contentSize.width - containerWidth,
+            0
+        )
+        let offset = min(
+            max(geometry.contentOffset.x, 0),
+            maximumOffset
+        )
+        let itemStride = cardWidth + spacing
+        let actualVisibleItemCount = itemStride > 0
+            ? max(Int((viewportWidth + spacing) / itemStride), 1)
+            : 1
+        let actualLeadingIndex = if !items.isEmpty, itemStride > 0 {
+            min(
+                max(Int((offset / itemStride).rounded()), 0),
+                items.count - 1
+            )
+        } else {
+            0
+        }
+        let edgeTolerance: CGFloat = 1
+
+        return ScrollState(
+            leadingIndex: actualLeadingIndex,
+            visibleItemCount: actualVisibleItemCount,
+            canRetreat: offset > edgeTolerance,
+            canAdvance: offset < maximumOffset - edgeTolerance
+        )
     }
 
     private func page(_ direction: Int, proxy: ScrollViewProxy) {
