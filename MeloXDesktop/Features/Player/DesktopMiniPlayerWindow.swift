@@ -13,6 +13,7 @@ struct DesktopMiniPlayerWindow: View {
     @Environment(DesktopAppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("desktop.miniPlayer.showsLargeArtwork")
     private var showsLargeArtwork = false
@@ -54,7 +55,7 @@ struct DesktopMiniPlayerWindow: View {
                 .frame(width: 320, height: 600)
                 .environment(
                     \.colorScheme,
-                    artworkPalette.prefersDarkAppearance ? .dark : .light
+                    expandedPanelColorScheme
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -136,6 +137,11 @@ struct DesktopMiniPlayerWindow: View {
             .frame(width: 320, height: 51)
             .offset(y: -5)
         }
+    }
+
+    private var expandedPanelColorScheme: ColorScheme {
+        guard showsLargeArtwork else { return colorScheme }
+        return artworkPalette.prefersDarkAppearance ? .dark : .light
     }
 
     private var largeArtworkPlayer: some View {
