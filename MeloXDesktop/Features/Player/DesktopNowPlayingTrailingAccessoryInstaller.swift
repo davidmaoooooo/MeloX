@@ -59,11 +59,12 @@ struct DesktopNowPlayingTrailingAccessoryInstaller: NSViewRepresentable {
                     model: model
                 )
             )
-            hostingView.frame = NSRect(x: 0, y: 0, width: 186, height: 36)
+            hostingView.sizingOptions = [.intrinsicContentSize]
 
             accessoryController = NSTitlebarAccessoryViewController()
             accessoryController.layoutAttribute = .right
             accessoryController.view = hostingView
+            resizeHostingViewToFitContent()
         }
 
         func update(
@@ -74,6 +75,7 @@ struct DesktopNowPlayingTrailingAccessoryInstaller: NSViewRepresentable {
             hostingView.rootView = DesktopNowPlayingTrailingAccessoryContent(
                 model: model
             )
+            resizeHostingViewToFitContent()
             reconcileInstallation()
         }
 
@@ -104,6 +106,19 @@ struct DesktopNowPlayingTrailingAccessoryInstaller: NSViewRepresentable {
                 accessoryController.removeFromParent()
             }
         }
+
+        private func resizeHostingViewToFitContent() {
+            hostingView.invalidateIntrinsicContentSize()
+            hostingView.layoutSubtreeIfNeeded()
+            let fittingSize = hostingView.fittingSize
+            guard fittingSize.width > 0, fittingSize.height > 0 else { return }
+            hostingView.setFrameSize(
+                NSSize(
+                    width: ceil(fittingSize.width),
+                    height: ceil(fittingSize.height)
+                )
+            )
+        }
     }
 }
 
@@ -121,7 +136,7 @@ private struct DesktopNowPlayingTrailingAccessoryContent: View {
 
     var body: some View {
         DesktopNowPlayingVolumeControl()
-            .frame(width: 176, height: 36)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.trailing, 10)
             .environment(model)
             .transaction { transaction in

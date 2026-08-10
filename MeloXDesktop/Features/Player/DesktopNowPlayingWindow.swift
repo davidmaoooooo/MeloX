@@ -327,6 +327,7 @@ struct DesktopNowPlayingVolumeControl: View {
                 )
                     .labelStyle(.iconOnly)
                     .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 28, height: 24)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(currentVolume > 0.001 ? "静音" : "取消静音")
