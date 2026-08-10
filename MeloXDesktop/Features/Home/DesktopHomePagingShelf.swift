@@ -35,7 +35,7 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ZStack {
-                ScrollView(.horizontal) {
+                ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: spacing) {
                         ForEach(items) { item in
                             card(item)
@@ -45,7 +45,6 @@ struct DesktopHomePagingShelf<Item: Identifiable, Card: View>: View {
                         }
                     }
                 }
-                .scrollIndicators(.hidden)
                 .clipped()
                 .onChange(of: items.map(\.id), initial: true) { _, _ in
                     let clampedIndex = min(leadingIndex, lastPageStart)

@@ -1322,7 +1322,7 @@ struct DesktopLyricsScrollView: View {
         )
 
         let scrollView = ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(
                     alignment: .leading,
                     spacing: lineSpacing
@@ -1364,7 +1364,6 @@ struct DesktopLyricsScrollView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .scrollTargetLayout()
             }
-            .scrollIndicators(compact ? .automatic : .hidden)
             .scrollClipDisabled(!compact)
             .defaultScrollAnchor(focusAnchor, for: .sizeChanges)
             .onScrollPhaseChange { _, newPhase in
