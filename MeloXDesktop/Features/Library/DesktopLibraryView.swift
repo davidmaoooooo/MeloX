@@ -80,7 +80,7 @@ struct DesktopLibraryView: View {
             case .recent:
                 songList(model.library.recentSongs)
             case .songs:
-                songList(model.library.favoriteSongs)
+                favoriteSongList
             case .downloads:
                 songList(model.downloads.downloadedSongs)
             case .cloud:
@@ -91,6 +91,30 @@ struct DesktopLibraryView: View {
                 podcastGrid
             default:
                 EmptyView()
+            }
+        }
+    }
+
+    private var favoriteSongList: some View {
+        VStack(spacing: 0) {
+            songList(
+                model.library.favoriteSongs,
+                loadMoreToken: model.library.hasMoreFavoriteSongs
+                    ? model.library.favoriteSongsNextOffset
+                    : nil,
+                onLoadMore: {
+                    await model.library.loadMoreFavoriteSongs()
+                }
+            )
+
+            if model.library.hasMoreFavoriteSongs {
+                DesktopCollectionPaginationFooter(
+                    isLoading: model.library.isLoadingMoreFavoriteSongs,
+                    failureMessage:
+                        model.library.favoriteSongsLoadMoreError
+                ) {
+                    await model.library.loadMoreFavoriteSongs()
+                }
             }
         }
     }
@@ -118,18 +142,32 @@ struct DesktopLibraryView: View {
     }
 
     @ViewBuilder
-    private func songList(_ songs: [Song]) -> some View {
+    private func songList(
+        _ songs: [Song],
+        loadMoreToken: Int? = nil,
+        onLoadMore: (() async -> Void)? = nil
+    ) -> some View {
         if songs.isEmpty {
             libraryEmptyView
         } else {
             LazyVStack(spacing: 2) {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    DesktopTrackRow(
+                    let row = DesktopTrackRow(
                         song: song,
                         index: index,
                         songs: songs,
                         showsArtwork: true
                     )
+
+                    if song.id == songs.last?.id,
+                       let loadMoreToken,
+                       let onLoadMore {
+                        row.task(id: loadMoreToken) {
+                            await onLoadMore()
+                        }
+                    } else {
+                        row
+                    }
                 }
             }
         }
@@ -165,12 +203,35 @@ struct DesktopLibraryView: View {
         } else {
             LazyVGrid(columns: columns, spacing: 24) {
                 ForEach(podcasts) { podcast in
-                    DesktopMediaCard(
+                    let card = DesktopMediaCard(
                         title: podcast.name,
                         subtitle: podcast.subtitle,
                         artworkURL: podcast.artworkURL,
                         action: { model.ui.navigate(to: .podcast(podcast.id)) }
                     )
+
+                    if podcast.id == podcasts.last?.id,
+                       model.library.hasMoreSubscribedPodcasts {
+                        card.task(
+                            id: model.library.subscribedPodcastsNextOffset
+                        ) {
+                            await model.library.loadMoreSubscribedPodcasts()
+                        }
+                    } else {
+                        card
+                    }
+                }
+            }
+
+            if model.library.hasMoreSubscribedPodcasts {
+                DesktopCollectionPaginationFooter(
+                    isLoading:
+                        model.library.isLoadingMoreSubscribedPodcasts,
+                    failureMessage:
+                        model.library.subscribedPodcastsLoadMoreError,
+                    loadingTitle: "正在加载更多播客"
+                ) {
+                    await model.library.loadMoreSubscribedPodcasts()
                 }
             }
         }

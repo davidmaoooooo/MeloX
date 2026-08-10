@@ -9,6 +9,11 @@ struct DesktopPlaylistDetailView: View {
     @State private var songs: [Song] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var loadedTrackOffset = 0
+    @State private var isLoadingMoreTracks = false
+    @State private var loadMoreTracksError: String?
+
+    private let trackPageSize = 100
 
     var body: some View {
         Group {
@@ -34,7 +39,25 @@ struct DesktopPlaylistDetailView: View {
                         )
 
                         Divider()
-                        DesktopCollectionTrackList(songs: songs, sourceID: playlist.id)
+                        DesktopCollectionTrackList(
+                            songs: songs,
+                            sourceID: playlist.id,
+                            loadMoreToken: hasMoreTracks
+                                ? loadedTrackOffset
+                                : nil,
+                            onLoadMore: {
+                                await loadMoreTracks()
+                            }
+                        )
+
+                        if hasMoreTracks {
+                            DesktopCollectionPaginationFooter(
+                                isLoading: isLoadingMoreTracks,
+                                failureMessage: loadMoreTracksError
+                            ) {
+                                await loadMoreTracks()
+                            }
+                        }
                     }
                     .padding(.horizontal, 42)
                     .padding(.vertical, 34)
@@ -63,28 +86,74 @@ struct DesktopPlaylistDetailView: View {
         return parts.joined(separator: " · ")
     }
 
+    private var hasMoreTracks: Bool {
+        guard let playlist, !playlist.trackIDs.isEmpty else {
+            return false
+        }
+        return loadedTrackOffset < playlist.trackIDs.count
+    }
+
     private func load() async {
         isLoading = true
         errorMessage = nil
+        loadedTrackOffset = 0
+        loadMoreTracksError = nil
         do {
-            var detail = try await model.api.playlist(id: playlistID, trackLimit: 100)
-            var loadedSongs = detail.tracks
-            if detail.trackIDs.count > loadedSongs.count {
-                let ids = detail.trackIDs.map(\.id)
-                var offset = loadedSongs.count
-                while offset < ids.count {
-                    let page = try await model.api.songDetailsPage(ids: ids, offset: offset)
-                    loadedSongs.append(contentsOf: page.songs)
-                    guard page.nextOffset > offset else { break }
-                    offset = page.nextOffset
-                }
-            }
-            detail.tracks = loadedSongs
+            let detail = try await model.api.playlist(
+                id: playlistID,
+                trackLimit: trackPageSize
+            )
+            try Task.checkCancellation()
             playlist = detail
-            songs = loadedSongs
+            songs = detail.tracks
+            loadedTrackOffset = min(
+                trackPageSize,
+                detail.trackIDs.count
+            )
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func loadMoreTracks() async {
+        guard let currentPlaylist = playlist,
+              !isLoadingMoreTracks,
+              loadedTrackOffset < currentPlaylist.trackIDs.count else {
+            return
+        }
+
+        let requestedOffset = loadedTrackOffset
+        let trackIDs = currentPlaylist.trackIDs.map(\.id)
+        isLoadingMoreTracks = true
+        loadMoreTracksError = nil
+        defer { isLoadingMoreTracks = false }
+
+        do {
+            let page = try await model.api.songDetailsPage(
+                ids: trackIDs,
+                offset: requestedOffset,
+                limit: trackPageSize
+            )
+            try Task.checkCancellation()
+            guard playlist?.id == currentPlaylist.id,
+                  loadedTrackOffset == requestedOffset else {
+                return
+            }
+
+            var loadedIDs = Set(songs.map(\.id))
+            songs.append(
+                contentsOf: page.songs.filter {
+                    loadedIDs.insert($0.id).inserted
+                }
+            )
+            loadedTrackOffset = page.nextOffset
+        } catch is CancellationError {
+            return
+        } catch {
+            loadMoreTracksError = error.localizedDescription
+        }
     }
 }

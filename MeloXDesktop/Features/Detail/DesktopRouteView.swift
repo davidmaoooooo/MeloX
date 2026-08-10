@@ -234,8 +234,15 @@ struct DesktopCollectionTrackList: View {
     var showsAlbumColumn = true
     var usesTrackNumbers = false
     var groupsByDisc = false
+    var loadMoreToken: Int?
+    var onLoadMore: (() async -> Void)?
 
     var body: some View {
+        let entries = makeEntries()
+        let discGroups = groupsByDisc
+            ? makeDiscGroups(from: entries)
+            : []
+
         LazyVStack(spacing: 1) {
             if groupsByDisc, discGroups.count > 1 {
                 ForEach(discGroups) { group in
@@ -251,19 +258,20 @@ struct DesktopCollectionTrackList: View {
                         .padding(.bottom, 5)
 
                     ForEach(group.entries) { entry in
-                        row(entry)
+                        row(entry, isLast: entry.id == entries.last?.id)
                     }
                 }
             } else {
                 ForEach(entries) { entry in
-                    row(entry)
+                    row(entry, isLast: entry.id == entries.last?.id)
                 }
             }
         }
     }
 
-    private func row(_ entry: TrackEntry) -> some View {
-        DesktopTrackRow(
+    @ViewBuilder
+    private func row(_ entry: TrackEntry, isLast: Bool) -> some View {
+        let row = DesktopTrackRow(
             song: entry.song,
             index: entry.index,
             songs: songs,
@@ -273,15 +281,25 @@ struct DesktopCollectionTrackList: View {
                 ? String(entry.song.trackNumber ?? entry.index + 1)
                 : nil
         )
+
+        if isLast, let loadMoreToken, let onLoadMore {
+            row.task(id: loadMoreToken) {
+                await onLoadMore()
+            }
+        } else {
+            row
+        }
     }
 
-    private var entries: [TrackEntry] {
+    private func makeEntries() -> [TrackEntry] {
         Array(songs.enumerated()).map {
             TrackEntry(index: $0.offset, song: $0.element)
         }
     }
 
-    private var discGroups: [DiscGroup] {
+    private func makeDiscGroups(
+        from entries: [TrackEntry]
+    ) -> [DiscGroup] {
         var order: [String] = []
         var values: [String: [TrackEntry]] = [:]
 
