@@ -16,6 +16,15 @@ struct PlaybackSettingsView: View {
                 }
 
                 Picker(
+                    "蜂窝数据网络音质",
+                    selection: $settings.cellularQuality
+                ) {
+                    ForEach(MusicQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
+                }
+
+                Picker(
                     "音量控制",
                     selection: $settings.playerVolumeControlMode
                 ) {
