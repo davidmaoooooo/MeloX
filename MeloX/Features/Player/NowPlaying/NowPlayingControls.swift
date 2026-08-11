@@ -123,6 +123,7 @@ private struct NowPlayingAutoMixStatus: View {
 private struct NowPlayingQualityMenu: View {
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
+    @Environment(NeteaseAPI.self) private var api
 
     var body: some View {
         Menu {
@@ -161,7 +162,11 @@ private struct NowPlayingQualityMenu: View {
 
     private var qualityBinding: Binding<MusicQuality> {
         Binding(
-            get: { settings.quality },
+            get: {
+                api.isCellularData
+                    ? settings.cellularQuality
+                    : settings.quality
+            },
             set: { player.selectPlaybackQuality($0) }
         )
     }
