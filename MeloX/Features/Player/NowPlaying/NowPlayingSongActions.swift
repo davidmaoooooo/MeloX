@@ -187,14 +187,17 @@ struct NowPlayingSongActions: View {
                     }
                 }
 
-                if let artist = song.artists.first {
-                    Button {
-                        openMusicRoute(.artist(artist.id))
+                if !song.artists.isEmpty {
+                    Menu {
+                        ForEach(song.artists) { artist in
+                            Button {
+                                openMusicRoute(.artist(artist.id))
+                            } label: {
+                                Text(artist.name)
+                            }
+                        }
                     } label: {
-                        Label(
-                            "前往艺人：\(song.artists.map(\.name).joined(separator: " & "))",
-                            systemImage: "music.microphone"
-                        )
+                        Label("前往艺人", systemImage: "music.microphone")
                     }
                 }
 
