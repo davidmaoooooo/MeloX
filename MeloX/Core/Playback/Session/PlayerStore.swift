@@ -548,13 +548,20 @@ final class PlayerStore {
     }
 
     func selectPlaybackQuality(_ quality: MusicQuality) {
-        guard settings.quality != quality else { return }
+        let currentQuality = api.isCellularData
+            ? settings.cellularQuality
+            : settings.quality
+        guard currentQuality != quality else { return }
         let shouldAutoplay = isPlaying
             || (isLoading && currentLoadShouldAutoplay)
         let resumePosition = engine.currentPlaybackTime
             ?? estimatedProgress()
         let songID = currentSong?.id
-        settings.quality = quality
+        if api.isCellularData {
+            settings.cellularQuality = quality
+        } else {
+            settings.quality = quality
+        }
         guard let songID else { return }
         seekRevision += 1
         let qualityChangeRevision = seekRevision

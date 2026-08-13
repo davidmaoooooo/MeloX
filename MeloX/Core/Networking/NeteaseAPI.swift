@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 enum SearchKind: Int, CaseIterable, Identifiable {
@@ -54,11 +55,31 @@ final class NeteaseAPI {
     private let settings: AppSettings
 
     @ObservationIgnored
+    private let pathMonitor = NWPathMonitor()
+
+    private(set) var isCellularData = false
+
+    @ObservationIgnored
     let client: NeteaseDirectClient
+
+    private var playbackQuality: MusicQuality {
+        isCellularData ? settings.cellularQuality : settings.quality
+    }
 
     init(settings: AppSettings, session: URLSession = .shared) {
         self.settings = settings
         client = NeteaseDirectClient(settings: settings, session: session)
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let isCellular = path.usesInterfaceType(.cellular)
+            Task { @MainActor [weak self] in
+                self?.isCellularData = isCellular
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "MeloX.NetworkMonitor"))
+    }
+
+    deinit {
+        pathMonitor.cancel()
     }
 
     func recommendedPlaylists(limit: Int = 10) async throws -> [Playlist] {
@@ -321,7 +342,7 @@ final class NeteaseAPI {
     func playbackSource(id: Int) async throws -> PlaybackSource {
         try await playbackSource(
             id: id,
-            quality: settings.quality,
+            quality: playbackQuality,
             availability: .unknown
         )
     }
@@ -329,7 +350,7 @@ final class NeteaseAPI {
     func playbackSource(for song: Song) async throws -> PlaybackSource {
         try await playbackSource(
             id: song.id,
-            quality: settings.quality,
+            quality: playbackQuality,
             availability: song.audioAvailability
         )
     }

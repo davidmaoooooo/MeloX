@@ -97,6 +97,7 @@ final class AppSettings {
         static let hasCompletedOnboarding = "melox.hasCompletedOnboarding"
         static let cookie = "musicCookie"
         static let quality = "musicQuality"
+        static let cellularQuality = "cellularMusicQuality"
         static let playerVolumeControlMode = "playerVolumeControlMode"
         static let systemNowPlayingLyricsEnabled =
             "systemNowPlayingLyricsEnabled"
@@ -253,6 +254,15 @@ final class AppSettings {
 
     var quality: MusicQuality {
         didSet { defaults.set(quality.rawValue, forKey: Key.quality) }
+    }
+
+    var cellularQuality: MusicQuality {
+        didSet {
+            defaults.set(
+                cellularQuality.rawValue,
+                forKey: Key.cellularQuality
+            )
+        }
     }
 
     var playerVolumeControlMode: PlayerVolumeControlMode {
@@ -1224,6 +1234,9 @@ final class AppSettings {
         )
         cookie = defaults.string(forKey: Key.cookie) ?? ""
         quality = MusicQuality(rawValue: defaults.string(forKey: Key.quality) ?? "") ?? .high
+        cellularQuality = MusicQuality(
+            rawValue: defaults.string(forKey: Key.cellularQuality) ?? ""
+        ) ?? .high
         playerVolumeControlMode = PlayerVolumeControlMode(
             rawValue: defaults.string(forKey: Key.playerVolumeControlMode) ?? ""
         ) ?? Self.defaultPlayerVolumeControlMode
@@ -1837,6 +1850,7 @@ final class AppSettings {
 
     func resetPlayerSettings() {
         quality = .high
+        cellularQuality = .high
         playerVolumeControlMode = Self.defaultPlayerVolumeControlMode
         systemNowPlayingLyricsEnabled =
             Self.defaultSystemNowPlayingLyricsEnabled

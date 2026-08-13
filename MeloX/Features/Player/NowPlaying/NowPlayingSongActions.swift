@@ -11,13 +11,11 @@ struct NowPlayingSongActions: View {
     var showsFavoriteButton = true
 
     @State private var presentedSheet: NowPlayingSongSheet?
-
     var body: some View {
         HStack(spacing: 10) {
             if showsFavoriteButton, !song.isPodcastProgram {
                 favoriteButton
             }
-
             songMenu
         }
         .sheet(item: $presentedSheet) { sheet in
@@ -45,7 +43,6 @@ struct NowPlayingSongActions: View {
             }
         }
     }
-
     private var favoriteButton: some View {
         Button {
             library.toggle(song: song)
@@ -65,7 +62,6 @@ struct NowPlayingSongActions: View {
             library.contains(song: song) ? "取消喜爱" : "喜爱"
         )
     }
-
     private var songMenu: some View {
         Menu {
             Button {
@@ -80,7 +76,6 @@ struct NowPlayingSongActions: View {
             }
 
             Divider()
-
             if let podcast = song.podcastMetadata {
                 Button {
                     player.addToPlaybackQueue(song)
@@ -90,7 +85,6 @@ struct NowPlayingSongActions: View {
                         systemImage: "text.badge.plus"
                     )
                 }
-
                 if settings.isContentFeatureEnabled(.podcasts) {
                     Button {
                         openMusicRoute(
@@ -113,7 +107,6 @@ struct NowPlayingSongActions: View {
                             systemImage: "plus.circle"
                         )
                     }
-
                     Button {
                         library.toggle(song: song)
                     } label: {
@@ -126,14 +119,12 @@ struct NowPlayingSongActions: View {
                                 : "star"
                         )
                     }
-
                     Menu {
                         NeteaseShareMenuContent(resource: .song(song))
                     } label: {
                         Label("分享", systemImage: "square.and.arrow.up")
                     }
                 }
-
                 Button {
                     presentedSheet = .comments(song)
                 } label: {
@@ -142,7 +133,6 @@ struct NowPlayingSongActions: View {
                         systemImage: "bubble.left.and.bubble.right"
                     )
                 }
-
                 Button {
                     presentedSheet = .songWiki(song)
                 } label: {
@@ -151,7 +141,6 @@ struct NowPlayingSongActions: View {
                         systemImage: "book.pages"
                     )
                 }
-
                 Button {
                     presentedSheet = .listenTogether
                 } label: {
@@ -164,7 +153,6 @@ struct NowPlayingSongActions: View {
                 }
 
                 Divider()
-
                 Button {
                     player.addToPlaybackQueue(song)
                 } label: {
@@ -175,7 +163,6 @@ struct NowPlayingSongActions: View {
                 }
 
                 Divider()
-
                 if let album = song.album {
                     Button {
                         openMusicRoute(.album(album))
@@ -186,21 +173,30 @@ struct NowPlayingSongActions: View {
                         )
                     }
                 }
-
-                if let artist = song.artists.first {
+                if let artist = song.artists.first, song.artists.count == 1 {
                     Button {
                         openMusicRoute(.artist(artist.id))
                     } label: {
                         Label(
-                            "前往艺人：\(song.artists.map(\.name).joined(separator: " & "))",
+                            "前往艺人：\(artist.name)",
                             systemImage: "music.microphone"
                         )
                     }
+                } else if !song.artists.isEmpty {
+                    Menu {
+                        ForEach(song.artists) { artist in
+                            Button {
+                                openMusicRoute(.artist(artist.id))
+                            } label: {
+                                Text(artist.name)
+                            }
+                        }
+                    } label: {
+                        Label("前往艺人", systemImage: "music.microphone")
+                    }
                 }
-
                 if settings.beatNetDebugEnabled {
                     Divider()
-
                     Button {
                         presentedSheet = .beatNetDebug
                     } label: {
@@ -224,7 +220,6 @@ struct NowPlayingSongActions: View {
         .accessibilityLabel("更多")
     }
 }
-
 private enum NowPlayingSongSheet: Identifiable {
     case addToPlaylist(Song)
     case comments(Song)
@@ -232,7 +227,6 @@ private enum NowPlayingSongSheet: Identifiable {
     case listenTogether
     case sleepTimer
     case beatNetDebug
-
     var id: String {
         switch self {
         case .addToPlaylist(let song):

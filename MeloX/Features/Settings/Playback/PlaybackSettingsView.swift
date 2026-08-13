@@ -9,7 +9,16 @@ struct PlaybackSettingsView: View {
 
         Form {
             Section {
-                Picker("播放音质", selection: qualityBinding) {
+                Picker("无线网络播放音质", selection: qualityBinding) {
+                    ForEach(MusicQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
+                }
+
+                Picker(
+                    "蜂窝网络播放音质",
+                    selection: $settings.cellularQuality
+                ) {
                     ForEach(MusicQuality.allCases) { quality in
                         Text(quality.title).tag(quality)
                     }
