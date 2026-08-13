@@ -30,10 +30,11 @@ enum LyricParser {
             to: translatedLines,
             kind: .romanization
         )
-        return attachRomanizationTimings(
+        let annotatedLines = attachRomanizationTimings(
             parseYRC(romanizedYRC),
             to: romanizedLines
         )
+        return LyricDuetParser.apply(lrc: lrc, to: annotatedLines)
     }
 
     static func parseLRC(_ source: String) -> [LyricLine] {

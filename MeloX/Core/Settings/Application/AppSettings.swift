@@ -170,6 +170,7 @@ final class AppSettings {
         static let lyricsLongPressToShare = "lyricsLongPressToShare"
         static let lyricsWordByWord = "lyricsWordByWord"
         static let lyricsPseudoWordByWord = "lyricsPseudoWordByWord"
+        static let lyricsDuetLayoutEnabled = "lyricsDuetLayoutEnabled"
         static let lyricsLiftMode = "lyricsLiftMode"
         static let lyricsHighlightGradientWidth =
             "lyricsHighlightGradientWidth"
@@ -816,6 +817,15 @@ final class AppSettings {
         didSet { defaults.set(lyricsPseudoWordByWord, forKey: Key.lyricsPseudoWordByWord) }
     }
 
+    var lyricsDuetLayoutEnabled: Bool {
+        didSet {
+            defaults.set(
+                lyricsDuetLayoutEnabled,
+                forKey: Key.lyricsDuetLayoutEnabled
+            )
+        }
+    }
+
     var lyricsLiftMode: LyricsLiftMode {
         didSet {
             defaults.set(
@@ -1445,6 +1455,9 @@ final class AppSettings {
         ) as? Bool ?? true
         lyricsWordByWord = defaults.object(forKey: Key.lyricsWordByWord) as? Bool ?? true
         lyricsPseudoWordByWord = defaults.object(forKey: Key.lyricsPseudoWordByWord) as? Bool ?? false
+        lyricsDuetLayoutEnabled = defaults.object(
+            forKey: Key.lyricsDuetLayoutEnabled
+        ) as? Bool ?? true
         lyricsLiftMode = LyricsLiftMode(
             rawValue: defaults.string(forKey: Key.lyricsLiftMode) ?? ""
         ) ?? Self.defaultLyricsLiftMode
@@ -1916,6 +1929,7 @@ final class AppSettings {
         lyricsLongPressToShare = true
         lyricsWordByWord = true
         lyricsPseudoWordByWord = false
+        lyricsDuetLayoutEnabled = true
         lyricsLiftMode = Self.defaultLyricsLiftMode
         lyricsHighlightGradientWidth =
             Self.defaultLyricsHighlightGradientWidth

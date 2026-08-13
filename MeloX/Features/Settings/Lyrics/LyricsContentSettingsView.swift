@@ -121,6 +121,17 @@ struct LyricsContentSettingsView: View {
 
             Section {
                 Toggle(
+                    "双人歌词分列显示",
+                    isOn: $settings.lyricsDuetLayoutEnabled
+                )
+            } header: {
+                Text("演唱者布局")
+            } footer: {
+                Text("根据歌词中的演唱者标记，将不同演唱者分别靠左、靠右显示；合唱保持靠左。")
+            }
+
+            Section {
+                Toggle(
                     "使用官方逐字歌词",
                     isOn: $settings.lyricsWordByWord
                 )

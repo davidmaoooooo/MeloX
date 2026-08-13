@@ -108,6 +108,15 @@ struct DesktopLyricsContentSettingsView: View {
                     }
                 }
 
+                Section("演唱者布局") {
+                    Toggle(
+                        "双人歌词分列显示",
+                        isOn: $settings.lyricsDuetLayoutEnabled
+                    )
+                    Text("根据歌词中的演唱者标记，将不同演唱者分别靠左、靠右显示；合唱保持靠左。")
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("逐字歌词") {
                     Toggle(
                         "使用官方逐字歌词",
