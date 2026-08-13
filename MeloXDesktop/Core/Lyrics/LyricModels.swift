@@ -1,6 +1,6 @@
 import Foundation
 
-struct LyricSyllable: Identifiable, Hashable {
+struct LyricSyllable: Identifiable, Hashable, Sendable {
     let text: String
     let startTime: TimeInterval
     let endTime: TimeInterval
@@ -47,7 +47,7 @@ enum LyricVocalistsType: Hashable, Sendable {
     }
 }
 
-struct LyricLine: Identifiable, Hashable {
+struct LyricLine: Identifiable, Hashable, Sendable {
     let time: TimeInterval
     let duration: TimeInterval?
     let text: String

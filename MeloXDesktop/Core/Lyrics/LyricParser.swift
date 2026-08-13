@@ -7,7 +7,8 @@ enum LyricParser {
         translatedYRC: String = "",
         translatedLRC: String = "",
         romanizedYRC: String = "",
-        romanizedLRC: String = ""
+        romanizedLRC: String = "",
+        duetLRC: String? = nil
     ) -> [LyricLine] {
         let synchronizedLines = parseYRC(yrc)
         let lineSynchronizedLines = parseLRC(lrc)
@@ -34,7 +35,10 @@ enum LyricParser {
             parseYRC(romanizedYRC),
             to: romanizedLines
         )
-        return LyricDuetParser.apply(lrc: lrc, to: annotatedLines)
+        return LyricDuetParser.apply(
+            lrc: duetLRC ?? lrc,
+            to: annotatedLines
+        )
     }
 
     static func parseLRC(_ source: String) -> [LyricLine] {
@@ -432,10 +436,10 @@ enum LyricParser {
         TimeInterval(milliseconds) / 1_000
     }
 
-    /// YRC stores each syllable as `(absoluteStartMilliseconds,durationMilliseconds,metadata)`.
-    /// The metadata field is intentionally ignored, matching Lyricify Lyrics Helper's parser.
+    /// YRC stores `(start,duration,metadata)` while QQ QRC stores
+    /// `(start,duration)`. Both timelines use absolute millisecond offsets.
     private static let syllableExpression = try! NSRegularExpression(
-        pattern: #"\((\d+),(\d+),[^)]*\)"#
+        pattern: #"\((\d+),(\d+)(?:,[^)]*)?\)"#
     )
 
     private static let lrcTimestampExpression = try! NSRegularExpression(

@@ -539,6 +539,18 @@ final class NeteaseAPI {
     }
 
     func lyrics(id: Int) async throws -> [LyricLine] {
+        let payload = try await neteaseLyrics(id: id)
+        return LyricParser.parse(
+            yrc: payload.yrc ?? "",
+            lrc: payload.lrc ?? "",
+            translatedYRC: payload.translatedYRC ?? "",
+            translatedLRC: payload.translatedLRC ?? "",
+            romanizedYRC: payload.romanizedYRC ?? "",
+            romanizedLRC: payload.romanizedLRC ?? ""
+        )
+    }
+
+    func neteaseLyrics(id: Int) async throws -> NeteaseLyricPayload {
         do {
             let response: LyricResponse = try await client.eapi(
                 "/api/song/lyric/v1",
@@ -554,13 +566,14 @@ final class NeteaseAPI {
                     "yrv": 0,
                 ]
             )
-            return LyricParser.parse(
-                yrc: response.yrc?.lyric ?? "",
-                lrc: response.lrc?.lyric ?? "",
-                translatedYRC: response.ytlrc?.lyric ?? "",
-                translatedLRC: response.tlyric?.lyric ?? "",
-                romanizedYRC: response.yromalrc?.lyric ?? "",
-                romanizedLRC: response.romalrc?.lyric ?? ""
+            return NeteaseLyricPayload(
+                yrc: response.yrc?.lyric,
+                lrc: response.lrc?.lyric,
+                translatedYRC: response.ytlrc?.lyric,
+                translatedLRC: response.tlyric?.lyric,
+                romanizedYRC: response.yromalrc?.lyric,
+                romanizedLRC: response.romalrc?.lyric,
+                isPureMusic: response.pureMusic == true
             )
         } catch is CancellationError {
             throw CancellationError()
@@ -571,11 +584,14 @@ final class NeteaseAPI {
                 "/api/song/lyric",
                 data: ["id": id, "tv": -1, "lv": -1, "rv": -1, "kv": -1, "_nmclfl": 1]
             )
-            return LyricParser.parse(
-                yrc: "",
-                lrc: response.lrc?.lyric ?? "",
-                translatedLRC: response.tlyric?.lyric ?? "",
-                romanizedLRC: response.romalrc?.lyric ?? ""
+            return NeteaseLyricPayload(
+                yrc: nil,
+                lrc: response.lrc?.lyric,
+                translatedYRC: nil,
+                translatedLRC: response.tlyric?.lyric,
+                romanizedYRC: nil,
+                romanizedLRC: response.romalrc?.lyric,
+                isPureMusic: response.pureMusic == true
             )
         }
     }
