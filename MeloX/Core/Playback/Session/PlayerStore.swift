@@ -969,6 +969,24 @@ final class PlayerStore {
         }
     }
 
+    func resetAutoMixPreference() {
+        if let saved = listenTogetherSavedPlaybackOptions {
+            listenTogetherSavedPlaybackOptions =
+                ListenTogetherSavedPlaybackOptions(
+                    repeatMode: saved.repeatMode,
+                    wasShuffled: saved.wasShuffled,
+                    autoplayEnabled: saved.autoplayEnabled,
+                    autoMixEnabled: false
+                )
+            isAutoMixEnabled = false
+            cancelAutoMixPreparation()
+            persistSnapshot()
+            return
+        }
+
+        setAutoMixEnabled(false)
+    }
+
     func applyAutoMixSettings() {
         cancelAutoMixPreparation()
         persistSnapshot()

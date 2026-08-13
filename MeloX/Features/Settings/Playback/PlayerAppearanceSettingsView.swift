@@ -80,7 +80,7 @@ struct PlayerAppearanceSettingsView: View {
                 Text("决定竖屏播放器何时阻止自动锁屏；横屏天际歌词使用独立设置。")
             }
         }
-        .navigationTitle("播放器外观")
+        .navigationTitle("播放器界面")
         .navigationBarTitleDisplayMode(.inline)
     }
 

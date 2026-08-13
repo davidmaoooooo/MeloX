@@ -32,7 +32,6 @@ final class AppSettings {
     static let defaultLyricsLiveActivityScrollPause = 1.0
     static let lyricsLiveActivityScrollPauseRange = 0.0...3.0
     static let automaticCachePlaybackThresholdOptions = [3, 5, 10, 20]
-    static let defaultLyricsInterludeCountdownEnabled = true
     static let defaultAppleMusicLyricsInterfaceAutoHideDelay = 5.0
     static let appleMusicLyricsInterfaceAutoHideDelayRange = 3.0...15.0
     static let defaultAppleMusicLyricsScrollHideThreshold = 200.0
@@ -148,8 +147,6 @@ final class AppSettings {
         static let playerBackgroundSaturation = "playerBackgroundSaturation"
         static let shrinksPausedArtwork = "shrinksPausedArtwork"
         static let lyricsStyle = "lyricsStyle"
-        static let lyricsInterludeCountdownEnabled =
-            "lyricsInterludeCountdownEnabled"
         static let appleMusicLyricsInterfaceAutoHideDelay =
             "appleMusicLyricsInterfaceAutoHideDelay"
         static let appleMusicLyricsScrollHideThreshold =
@@ -701,15 +698,6 @@ final class AppSettings {
         didSet { defaults.set(lyricsStyle.rawValue, forKey: Key.lyricsStyle) }
     }
 
-    var lyricsInterludeCountdownEnabled: Bool {
-        didSet {
-            defaults.set(
-                lyricsInterludeCountdownEnabled,
-                forKey: Key.lyricsInterludeCountdownEnabled
-            )
-        }
-    }
-
     var appleMusicLyricsInterfaceAutoHideDelay: Double {
         didSet {
             defaults.set(
@@ -1094,7 +1082,10 @@ final class AppSettings {
     func effectiveLyricsAdvanceTime(
         hasSyllableSyncedLyrics: Bool
     ) -> TimeInterval {
-        hasSyllableSyncedLyrics
+        let usesWordByWordPresentation = hasSyllableSyncedLyrics
+            ? lyricsWordByWord
+            : lyricsPseudoWordByWord
+        return usesWordByWordPresentation
             ? wordByWordLyricsAdvanceTime
             : lyricsAdvanceTime
     }
@@ -1188,6 +1179,8 @@ final class AppSettings {
     }
 
     let skylineLyrics: SkylineLyricsPreferences
+    let appleMusicLyrics: AppleMusicLyricsPreferences
+    let lyricsInterlude: LyricsInterludePreferences
     let textPV: TextPVPreferences
     let equalizer: AudioEqualizerPreferences
     let autoMix: AutoMixPreferences
@@ -1202,6 +1195,8 @@ final class AppSettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         skylineLyrics = SkylineLyricsPreferences(defaults: defaults)
+        appleMusicLyrics = AppleMusicLyricsPreferences(defaults: defaults)
+        lyricsInterlude = LyricsInterludePreferences(defaults: defaults)
         textPV = TextPVPreferences(defaults: defaults)
         equalizer = AudioEqualizerPreferences(defaults: defaults)
         autoMix = AutoMixPreferences(defaults: defaults)
@@ -1347,9 +1342,6 @@ final class AppSettings {
         default:
             lyricsStyle = LyricsStyle(rawValue: storedLyricsStyle) ?? .appleMusic
         }
-        lyricsInterludeCountdownEnabled = defaults.object(
-            forKey: Key.lyricsInterludeCountdownEnabled
-        ) as? Bool ?? Self.defaultLyricsInterludeCountdownEnabled
         let storedAppleMusicInterfaceAutoHideDelay = defaults.object(
             forKey: Key.appleMusicLyricsInterfaceAutoHideDelay
         ) as? Double ?? Self.defaultAppleMusicLyricsInterfaceAutoHideDelay
@@ -1870,8 +1862,7 @@ final class AppSettings {
         playerBackgroundSaturation = 0.82
         shrinksPausedArtwork = true
         lyricsStyle = .appleMusic
-        lyricsInterludeCountdownEnabled =
-            Self.defaultLyricsInterludeCountdownEnabled
+        lyricsInterlude.reset()
         appleMusicLyricsInterfaceAutoHideDelay =
             Self.defaultAppleMusicLyricsInterfaceAutoHideDelay
         appleMusicLyricsScrollHideThreshold =
@@ -1949,6 +1940,7 @@ final class AppSettings {
         rememberedNowPlayingPage = "artwork"
         previousRestartsCurrentSong = true
         startsHeartModeOnLaunch = Self.defaultStartsHeartModeOnLaunch
+        appleMusicLyrics.reset()
         skylineLyrics.reset()
     }
 }
