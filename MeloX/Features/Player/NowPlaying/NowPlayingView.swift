@@ -47,7 +47,9 @@ struct NowPlayingView: View {
                                 .album?
                                 .artworkURL,
                         beatTimeline:
-                            player.currentBeatTimeline
+                            player.currentBeatTimeline,
+                        isBehindLyrics:
+                            page == .lyrics
                     )
                 }
 

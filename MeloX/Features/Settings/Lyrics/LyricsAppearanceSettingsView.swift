@@ -48,8 +48,8 @@ struct LyricsAppearanceSettingsView: View {
             Section {
                 if appleMusicLyrics.usesAppleMusic26Motion,
                    settings.lyricsStyle == .appleMusic {
-                    LabeledContent("正文样式", value: "大标题 · 粗体")
-                    LabeledContent("动态字号", value: "跟随系统")
+                    LabeledContent("正文字号", value: "36 磅")
+                    LabeledContent("字体粗细", value: "粗体")
                 } else {
                     valueSlider(
                         title: "字体大小",
@@ -229,7 +229,7 @@ struct LyricsAppearanceSettingsView: View {
     private var typographyDescription: String {
         if settings.lyricsStyle == .appleMusic,
            settings.appleMusicLyrics.usesAppleMusic26Motion {
-            return "Apple Music 26 方案使用系统大标题粗体并跟随动态字体；切换到自定义后可调整正文基准字号与粗细。"
+            return "当前呈现使用固定 36 磅粗体；切换到自定义后可调整正文基准字号与粗细。"
         }
         return "字号是歌词正文基准，翻译按比例缩放；EVA 会继承字号缩放，文字PV保留模板排版与字形风格。"
     }

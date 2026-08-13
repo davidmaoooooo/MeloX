@@ -9,6 +9,18 @@ extension AppSettings {
             : nil
     }
 
+    var appleMusicLyricsTypographyProfile:
+        AppleMusicLyricsTypographyProfile? {
+        appleMusicLyrics.usesAppleMusic26Motion
+            ? .iOS26_6
+            : nil
+    }
+
+    var effectiveAppleMusicLyricsPrimaryFontSize: Double {
+        appleMusicLyricsTypographyProfile?.primaryFontSize
+            ?? lyricsFontSize
+    }
+
     var effectiveAppleMusicLyricsLineSpacing: Double {
         appleMusicLyricsMotionProfile?.lineSpacing
             ?? lyricsLineSpacing

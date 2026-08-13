@@ -61,4 +61,8 @@ final class AudioPlaybackItemFactory {
             configuration: configuration
         )
     }
+
+    func spectrumSnapshot() -> PlaybackAudioSpectrumSnapshot {
+        equalizerProcessor.spectrumSnapshot()
+    }
 }

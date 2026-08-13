@@ -1358,16 +1358,11 @@ struct AppleMusicLyricsView: View {
     }
 
     private var resolvedLyricsFontSize: Double {
-        guard settings.appleMusicLyricsMotionProfile != nil else {
-            return settings.lyricsFontSize
-        }
-        return Double(
-            UIFont.preferredFont(forTextStyle: .largeTitle).pointSize
-        )
+        settings.effectiveAppleMusicLyricsPrimaryFontSize
     }
 
     private var resolvedLyricsFontWeight: LyricsFontWeight {
-        settings.appleMusicLyricsMotionProfile == nil
+        settings.appleMusicLyricsTypographyProfile == nil
             ? settings.lyricsFontWeight
             : .bold
     }

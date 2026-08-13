@@ -64,6 +64,10 @@ final class PlayerStore {
     private(set) var effectivePlaybackQuality: MusicQuality?
     private(set) var sleepTimer: PlaybackSleepTimer
 
+    var currentAudioSpectrum: PlaybackAudioSpectrumSnapshot {
+        engine.audioSpectrumSnapshot
+    }
+
     var availablePlaybackQualities: [MusicQuality] {
         guard currentSong != nil else { return [] }
         guard !isResolvingCurrentSongAudioAvailability else { return [] }

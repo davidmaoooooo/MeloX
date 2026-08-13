@@ -6,8 +6,10 @@ import Observation
 final class AppSettings {
     static let defaultPlayerVolumeControlMode: PlayerVolumeControlMode = .system
     static let defaultPlayerBackgroundStyle: PlayerBackgroundStyle =
-        .flowingLight
+        .appleMusicBackdrop
     static let defaultPlayerBackgroundMotionIntensity = 1.0
+    static let defaultPlayerBackgroundSaturation = 1.0
+    static let defaultPlayerBackgroundAudioResponseEnabled = true
     static let defaultPlayerBackgroundBeatEffectsEnabled = false
     static let defaultBeatNetDebugEnabled = false
     static let defaultStartsHeartModeOnLaunch = false
@@ -142,6 +144,8 @@ final class AppSettings {
             "playerBackgroundMotionIntensity"
         static let playerBackgroundBeatEffectsEnabled =
             "playerBackgroundBeatEffectsEnabled"
+        static let playerBackgroundAudioResponseEnabled =
+            "playerBackgroundAudioResponseEnabled"
         static let beatNetDebugEnabled = "beatNetDebugEnabled"
         static let playerBackgroundBlur = "playerBackgroundBlur"
         static let playerBackgroundSaturation = "playerBackgroundSaturation"
@@ -669,6 +673,15 @@ final class AppSettings {
             defaults.set(
                 playerBackgroundBeatEffectsEnabled,
                 forKey: Key.playerBackgroundBeatEffectsEnabled
+            )
+        }
+    }
+
+    var playerBackgroundAudioResponseEnabled: Bool {
+        didSet {
+            defaults.set(
+                playerBackgroundAudioResponseEnabled,
+                forKey: Key.playerBackgroundAudioResponseEnabled
             )
         }
     }
@@ -1329,11 +1342,16 @@ final class AppSettings {
         playerBackgroundBeatEffectsEnabled = defaults.object(
             forKey: Key.playerBackgroundBeatEffectsEnabled
         ) as? Bool ?? Self.defaultPlayerBackgroundBeatEffectsEnabled
+        playerBackgroundAudioResponseEnabled = defaults.object(
+            forKey: Key.playerBackgroundAudioResponseEnabled
+        ) as? Bool ?? Self.defaultPlayerBackgroundAudioResponseEnabled
         beatNetDebugEnabled = defaults.object(
             forKey: Key.beatNetDebugEnabled
         ) as? Bool ?? Self.defaultBeatNetDebugEnabled
         playerBackgroundBlur = defaults.object(forKey: Key.playerBackgroundBlur) as? Double ?? 90
-        playerBackgroundSaturation = defaults.object(forKey: Key.playerBackgroundSaturation) as? Double ?? 0.82
+        playerBackgroundSaturation = defaults.object(
+            forKey: Key.playerBackgroundSaturation
+        ) as? Double ?? Self.defaultPlayerBackgroundSaturation
         shrinksPausedArtwork = defaults.object(forKey: Key.shrinksPausedArtwork) as? Bool ?? true
         let storedLyricsStyle = defaults.string(forKey: Key.lyricsStyle) ?? ""
         switch storedLyricsStyle {
@@ -1856,10 +1874,13 @@ final class AppSettings {
             Self.defaultPlayerBackgroundMotionIntensity
         playerBackgroundBeatEffectsEnabled =
             Self.defaultPlayerBackgroundBeatEffectsEnabled
+        playerBackgroundAudioResponseEnabled =
+            Self.defaultPlayerBackgroundAudioResponseEnabled
         beatNetDebugEnabled =
             Self.defaultBeatNetDebugEnabled
         playerBackgroundBlur = 90
-        playerBackgroundSaturation = 0.82
+        playerBackgroundSaturation =
+            Self.defaultPlayerBackgroundSaturation
         shrinksPausedArtwork = true
         lyricsStyle = .appleMusic
         lyricsInterlude.reset()
