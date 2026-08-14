@@ -2418,9 +2418,9 @@ struct AppleMusicLyricsView: View {
         )
     }
 
-    /// Music gives the instrumental row its own end transition. Preserve a
-    /// fixed copy first, then move the resident stack with the line-change
-    /// spring so the dots can finish outside the scrolling content.
+    /// The time-driven handoff normally starts only after the dots are gone.
+    /// Preserve a fixed copy only for an interrupted/forced handoff that lands
+    /// inside the cue-out window, then move the resident stack underneath it.
     private func moveFocusFromInterlude(
         to id: LyricLine.ID,
         viewportWidth: CGFloat,
