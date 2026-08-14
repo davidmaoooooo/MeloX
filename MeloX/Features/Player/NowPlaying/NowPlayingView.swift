@@ -444,7 +444,7 @@ struct NowPlayingView: View {
 
         }
         .background {
-            if page != .artwork {
+            if keepsStableArtworkFrameMeasurement {
                 artworkFrameMeasurement(for: song)
             }
         }
@@ -500,7 +500,8 @@ struct NowPlayingView: View {
                 artworkNamespace: pageArtworkNamespace,
                 usesArtworkTransition: false,
                 showsArtwork: false,
-                onArtworkFrameChange: recordArtworkPageFrame
+                onArtworkFrameChange:
+                    recordPresentedArtworkPageFrame
             )
             .transition(
                 pageContentTransition(for: .artwork)
@@ -521,6 +522,20 @@ struct NowPlayingView: View {
         .hidden()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private var keepsStableArtworkFrameMeasurement: Bool {
+        page != .artwork || pageTransition.transition != nil
+    }
+
+    private func recordPresentedArtworkPageFrame(
+        _ frame: CGRect
+    ) {
+        // The artwork page enters from below. Its geometry includes that
+        // temporary transition offset, so keep using the resident
+        // measurement until the page transition has settled.
+        guard pageTransition.transition == nil else { return }
+        recordArtworkPageFrame(frame)
     }
 
     private func recordArtworkPageFrame(_ frame: CGRect) {
