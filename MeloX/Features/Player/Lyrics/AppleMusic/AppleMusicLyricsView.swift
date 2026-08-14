@@ -2196,6 +2196,10 @@ struct AppleMusicLyricsView: View {
         )
         let retainedLyrics =
             AppleMusicRetainedViewportPlanner.retainedLyrics(
+                isNonAdjacentTransition: isNonAdjacentFocusTransition(
+                    from: movementFocusLyricID,
+                    to: highlightedLyricID
+                ),
                 initialVisibleIDs: initialVisibleIDs,
                 framesByID: lyricGeometryCache.frames,
                 movementDistance: movementDistance,
@@ -2945,6 +2949,18 @@ struct AppleMusicLyricsView: View {
             return false
         }
         return abs(nextIndex - currentIndex) == 1
+    }
+
+    private func isNonAdjacentFocusTransition(
+        from currentID: LyricLine.ID?,
+        to nextID: LyricLine.ID
+    ) -> Bool {
+        guard let currentID,
+              let currentIndex = lyricIndexByID[currentID],
+              let nextIndex = lyricIndexByID[nextID] else {
+            return false
+        }
+        return abs(nextIndex - currentIndex) > 1
     }
 
     private func isReverseFocusTransition(
