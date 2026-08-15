@@ -587,16 +587,14 @@ struct SynchronizedLyricText: View {
         .system(size: fontSize, weight: fontWeight.swiftUIWeight)
     }
 
-    /// LyricsX keeps two translation sizes: the selected line uses
-    /// `translationLargeFont` (primary * 0.57), every other mounted line uses
-    /// `translationSmallFont` (primary * 0.46). Background-vocal translations
-    /// would use primary * 0.36.
+    /// Keep translations optically stable across focus changes. The row
+    /// reservation in `DesktopLyricLineView` already uses the large
+    /// coefficient for every mounted line, so rendering the same size avoids
+    /// focused/non-focused font jumps without changing row geometry.
     private var translationFontSize: CGFloat {
         if let motionProfile {
-            let coefficient = isPlaybackLine
-                ? motionProfile.translationLargeFontCoefficient
-                : motionProfile.translationSmallFontCoefficient
-            return fontSize * CGFloat(coefficient)
+            return fontSize
+                * CGFloat(motionProfile.translationLargeFontCoefficient)
         }
         return max(
             CGFloat(settings.lyricsFontSize * settings.lyricsTranslationFontScale) * fontScale,
