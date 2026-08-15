@@ -10,6 +10,7 @@ final class LyricsService {
 
     private struct CacheKey: Hashable {
         let song: LyricsSongMetadata
+        let preference: LyricSourcePreference
         let usesAMLL: Bool
         let usesQQMusic: Bool
     }
@@ -37,10 +38,18 @@ final class LyricsService {
         for song: LyricsSongMetadata,
         onUpdate: @MainActor (ResolvedLyrics) -> Void
     ) async throws -> ResolvedLyrics {
-        let usesAMLL = settings.lyricsAMLLSourceEnabled
-        let usesQQMusic = settings.lyricsQQMusicSourceEnabled
+        let preference = settings.lyricsSourcePreference
+        let usesAMLL = preference.usesSource(
+            .amll,
+            enabledInAuto: settings.lyricsAMLLSourceEnabled
+        )
+        let usesQQMusic = preference.usesSource(
+            .qqMusic,
+            enabledInAuto: settings.lyricsQQMusicSourceEnabled
+        )
         let cacheKey = CacheKey(
             song: song,
+            preference: preference,
             usesAMLL: usesAMLL,
             usesQQMusic: usesQQMusic
         )
@@ -82,6 +91,13 @@ final class LyricsService {
                 guard !Task.isCancelled, let event else { continue }
                 switch event {
                 case .amll(let ttml):
+                    // AMLL is keyed by the NetEase song ID, but a few files
+                    // in its database carry different metadata. Never let a
+                    // mismatched TTML win automatic priority.
+                    if let metadata = AMLLLyricMetadata(ttml: ttml),
+                       !metadata.matches(song: song) {
+                        continue
+                    }
                     sources.amllTTML = ttml
                 case .netease(let payload):
                     sources.netease = payload
@@ -89,7 +105,10 @@ final class LyricsService {
                     sources.qqMusic = payload
                 }
 
-                guard let resolved = LyricSourceMerger.resolve(sources),
+                guard let resolved = LyricSourceMerger.resolve(
+                    sources,
+                    preference: preference
+                ),
                       resolved != latest,
                       latest.map({ resolved.quality.rawValue >= $0.quality.rawValue }) ?? true else {
                     continue
@@ -111,6 +130,24 @@ final class LyricsService {
         cacheOrder.append(key)
         while cacheOrder.count > 48 {
             cache.removeValue(forKey: cacheOrder.removeFirst())
+        }
+    }
+}
+
+private extension LyricSourcePreference {
+    func usesSource(
+        _ source: LyricSource,
+        enabledInAuto: Bool
+    ) -> Bool {
+        switch self {
+        case .automatic:
+            enabledInAuto
+        case .amll:
+            source == .amll
+        case .netease:
+            source == .netease
+        case .qqMusic:
+            source == .qqMusic
         }
     }
 }

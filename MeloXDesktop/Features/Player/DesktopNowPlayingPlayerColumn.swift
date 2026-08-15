@@ -110,6 +110,19 @@ struct DesktopNowPlayingPlayerColumn: View {
     private func playerMenu(elementScale: CGFloat) -> some View {
         Menu {
             if let song = model.player.currentSong {
+                Picker(
+                    "歌词来源",
+                    selection: Binding(
+                        get: { model.settings.lyricsSourcePreference },
+                        set: { model.settings.lyricsSourcePreference = $0 }
+                    )
+                ) {
+                    ForEach(LyricSourcePreference.allCases) { preference in
+                        Text(preference.title).tag(preference)
+                    }
+                }
+
+                Divider()
                 if model.settings.isContentFeatureEnabled(.downloads) {
                     Button("下载", systemImage: "arrow.down.circle") {
                         model.downloads.start(

@@ -152,6 +152,19 @@ struct DesktopBottomMetadataSlot: View {
 
     private var playerMenu: some View {
         Menu {
+            Picker(
+                "歌词来源",
+                selection: Binding(
+                    get: { model.settings.lyricsSourcePreference },
+                    set: { model.settings.lyricsSourcePreference = $0 }
+                )
+            ) {
+                ForEach(LyricSourcePreference.allCases) { preference in
+                    Text(preference.title).tag(preference)
+                }
+            }
+
+            Divider()
             Button(
                 model.library.contains(song: song) ? "取消喜欢" : "喜欢",
                 systemImage: model.library.contains(song: song)
