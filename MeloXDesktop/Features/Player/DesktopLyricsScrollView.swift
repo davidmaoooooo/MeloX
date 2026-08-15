@@ -539,6 +539,7 @@ struct DesktopLyricsScrollView: View {
             )
             lyricMovementTransition = nil
             positionedLyricID = focusID
+            positionedInterludeID = nil
         }
         updateVisualColorFocus(to: focusID)
     }
@@ -564,11 +565,48 @@ struct DesktopLyricsScrollView: View {
         )
     }
 
+    private func isCurrentScrollRequestTarget(_ id: String) -> Bool {
+        if let requestedFocusID {
+            return id == requestedFocusID
+        }
+        if let highlightedID {
+            return id == highlightedID
+        }
+        return id == positionedLyricID
+            || id == positionedInterludeID
+            || id == visualCascadeFocusLyricID
+    }
+
+    private func performAnchoredScroll(
+        to id: String,
+        anchor: UnitPoint,
+        animationDuration: TimeInterval?,
+        with proxy: ScrollViewProxy,
+        viewportSize: CGSize
+    ) {
+        if let animationDuration {
+            withAnimation(.smooth(duration: animationDuration)) {
+                proxy.scrollTo(id, anchor: anchor)
+            }
+        } else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(id, anchor: anchor)
+            }
+        }
+    }
+
     private func performScroll(
         _ request: ScrollRequest,
         with proxy: ScrollViewProxy,
         viewportSize: CGSize
     ) {
+        // Focus tasks can overlap for one runloop turn while SwiftUI cancels
+        // the previous `.task(id:)`. Never let a superseded request scroll the
+        // view back to the old target.
+        guard isCurrentScrollRequestTarget(request.id) else { return }
+
         let lyricID = model.lyrics.lyrics.first {
             $0.id == request.id
         }?.id
@@ -613,64 +651,6 @@ struct DesktopLyricsScrollView: View {
     private func lyricsScrollView(viewportSize: CGSize) -> some View {
         surfacedScrollView(viewportSize: viewportSize)
             .opacity(isInitialFocusPrepared ? 1 : 0)
-            .task(id: focusRequestID) {
-                let preparesInitialFocus = !isInitialFocusPrepared
-                if let focusedInterlude {
-                    if preparesInitialFocus {
-                        prepareInitialFocus(at: focusedInterlude)
-                        await finishInitialFocusPreparation(
-                            at: focusedInterlude.id,
-                            waitsForLyricGeometry: false,
-                            viewportHeight: viewportSize.height
-                        )
-                        return
-                    }
-                    if await prepareFocusForPresentationIfNeeded() {
-                        return
-                    }
-                    await movePlaybackFocus(to: focusedInterlude)
-                    return
-                }
-                guard let highlightedID else {
-                    resetPlaybackFocus()
-                    if preparesInitialFocus {
-                        // Give the coordinator one layout turn to publish the
-                        // current playback line before falling back to row one.
-                        await Task.yield()
-                        do {
-                            try await Task.sleep(for: .milliseconds(16))
-                        } catch {
-                            return
-                        }
-                        guard !Task.isCancelled,
-                              self.highlightedID == nil else { return }
-                        await finishInitialFocusPreparation(
-                            at: model.lyrics.lyrics.first?.id,
-                            waitsForLyricGeometry: false,
-                            viewportHeight: viewportSize.height
-                        )
-                    }
-                    return
-                }
-                if preparesInitialFocus {
-                    prepareInitialFocus(at: highlightedID)
-                    await finishInitialFocusPreparation(
-                        at: highlightedID,
-                        waitsForLyricGeometry: true,
-                        viewportHeight: viewportSize.height
-                    )
-                    return
-                }
-                if await prepareFocusForPresentationIfNeeded() {
-                    return
-                }
-                guard !Task.isCancelled,
-                      self.highlightedID == highlightedID else { return }
-                await movePlaybackFocus(
-                    to: highlightedID,
-                    viewportHeight: viewportSize.height
-                )
-            }
             .task(id: lyricFocusColorTransition?.id) {
                 guard let lyricFocusColorTransition else { return }
                 await finishFocusColorTransition(
@@ -912,7 +892,9 @@ struct DesktopLyricsScrollView: View {
 
     private func movePlaybackFocus(
         to highlightedID: LyricLine.ID,
-        viewportHeight proposedViewportHeight: CGFloat
+        viewportHeight proposedViewportHeight: CGFloat,
+        scrollProxy: ScrollViewProxy? = nil,
+        viewportSize: CGSize? = nil
     ) async {
         let viewportHeight = currentViewportHeight(
             fallback: proposedViewportHeight
@@ -934,7 +916,9 @@ struct DesktopLyricsScrollView: View {
             }
             await moveFocusFromInterlude(
                 to: highlightedID,
-                viewportHeight: viewportHeight
+                viewportHeight: viewportHeight,
+                scrollProxy: scrollProxy,
+                viewportSize: viewportSize
             )
             return
         }
@@ -1361,11 +1345,9 @@ struct DesktopLyricsScrollView: View {
             return
         }
         guard destinationIsPrepared else {
-            completeCascadeMovement(to: highlightedID)
-            _ = await ensureFocusAlignment(
+            await moveFocusWithoutCascade(
                 to: highlightedID,
-                viewportHeight: viewportHeight,
-                animated: false
+                viewportHeight: viewportHeight
             )
             return
         }
@@ -1631,14 +1613,17 @@ struct DesktopLyricsScrollView: View {
         return handoffInterlude?.followingLyricID == highlightedID
     }
 
-    /// Music.app commits the new scroll bounds while dismissing the
-    /// instrumental row, then gives each mounted lyric an equal inverse
-    /// displacement. The row offsets settle with the recovered forward
-    /// stagger, which keeps the frame continuous while the next lyric reaches
-    /// the focus anchor.
+    /// Indicator-to-lyric handoff. The dots are already visually gone when
+    /// the timeline promotes the following lyric, so use the reliable
+    /// non-cascade path: clear the interlude presentation, scroll the next
+    /// lyric into the focus anchor, then run the normal color/offset
+    /// transition. This must never be skipped, or the empty indicator row
+    /// keeps focus until the next lyric forces a regular transition.
     private func moveFocusFromInterlude(
         to highlightedID: LyricLine.ID,
-        viewportHeight: CGFloat
+        viewportHeight: CGFloat,
+        scrollProxy: ScrollViewProxy? = nil,
+        viewportSize: CGSize? = nil
     ) async {
         let handoffInterludeID = positionedInterludeID
             ?? visibleInterludeID
@@ -1649,56 +1634,93 @@ struct DesktopLyricsScrollView: View {
               handoffInterlude.followingLyricID == highlightedID else {
             await moveFocusWithoutCascade(
                 to: highlightedID,
-                viewportHeight: viewportHeight
+                viewportHeight: viewportHeight,
+                scrollProxy: scrollProxy,
+                viewportSize: viewportSize
             )
             return
         }
 
-        guard isActive,
-              !isViewportChanging,
-              !reduceMotion,
-              let motionProfile =
-                resolvedAppleMusicLyricsMotionProfile else {
-            await moveFocusWithoutCascade(
-                to: highlightedID,
-                viewportHeight: viewportHeight
-            )
+        // Give the indicator's TimelineView one display frame to commit its
+        // hidden presentation before the resident row starts moving.
+        await Task.yield()
+        guard !Task.isCancelled,
+              self.highlightedID == highlightedID else {
             return
         }
 
-        guard await waitForLyricFrame(id: highlightedID),
-              !Task.isCancelled,
-              self.highlightedID == highlightedID,
-              let nextFocusFrame = geometryCache.frameByID[
-                  highlightedID
-              ] else {
-            return
-        }
+        // Drop the stale frame that may still describe the lyric's position
+        // from before the interlude took focus. Otherwise alignment checks
+        // can accept an old measurement and skip the handoff scroll entirely.
         let resolvedFocusPosition = focusPosition(
             for: viewportHeight,
             lyricID: highlightedID
         )
-        let focusAnchorY = viewportHeight * resolvedFocusPosition
-        let nextFocusAnchorY = nextFocusFrame.minY
-            + nextFocusFrame.height * resolvedFocusPosition
-        let movementDistance = nextFocusAnchorY - focusAnchorY
-        guard movementDistance.isFinite,
-              abs(movementDistance) > 0.5 else {
-            await moveFocusWithoutCascade(
-                to: highlightedID,
+        let nextLyricHeight = geometryCache.layoutHeightByID[
+            highlightedID
+        ] ?? geometryCache.frameByID[highlightedID]?.height
+            ?? lyricFontSize * 1.2
+        geometryCache.removeMeasurements(for: highlightedID)
+
+        // Start the color handoff before the scroll commits so the next lyric
+        // is already gaining focus while it travels into the anchor.
+        updateVisualColorFocus(to: highlightedID)
+
+        // Use the interlude row (which is definitely mounted) as the scroll
+        // target, but compensate the anchor so the *following lyric* lands on
+        // the focus position. This avoids trusting the interlude's own anchor
+        // and also works when the next lyric is not realized by LazyVStack.
+        if let scrollProxy, let viewportSize {
+            let interludeProfile =
+                resolvedAppleMusicLyricsMotionProfile?
+                    .instrumentalBreak ?? .macOS26_6
+            let interludeHeight = CGFloat(interludeProfile.viewHeight)
+                / max(visualScale, 1)
+            let lineSpacing = DesktopLyricsLayoutMetrics.lineSpacing(
+                setting:
+                    resolvedAppleMusicLyricsMotionProfile?.lineSpacing
+                        ?? model.settings.lyricsLineSpacing,
+                compact: compact,
+                usesAppleMusicMotion:
+                    resolvedAppleMusicLyricsMotionProfile != nil
+            )
+            let availableTravel = viewportHeight - interludeHeight
+            let interludeAnchorY: CGFloat = if availableTravel > 1 {
+                (
+                    resolvedFocusPosition * viewportHeight
+                        - interludeHeight
+                        - lineSpacing
+                        - resolvedFocusPosition * nextLyricHeight
+                ) / availableTravel
+            } else {
+                0
+            }
+            performAnchoredScroll(
+                to: handoffInterludeID,
+                anchor: UnitPoint(
+                    x: 0.5,
+                    y: min(max(interludeAnchorY, -2), 3)
+                ),
+                animationDuration: reduceMotion ? nil : 0.34,
+                with: scrollProxy,
+                viewportSize: viewportSize
+            )
+            _ = await waitForPreparedFocus(
+                id: highlightedID,
                 viewportHeight: viewportHeight
             )
-            return
+            guard !Task.isCancelled,
+                  self.highlightedID == highlightedID else {
+                return
+            }
         }
 
-        await animateAppleMusicCascade(
-            from: handoffInterlude.precedingLyricID,
+        await moveFocusWithoutCascade(
             to: highlightedID,
-            animationOriginID: .interlude(handoffInterludeID),
-            movementDistance: movementDistance,
             viewportHeight: viewportHeight,
-            profile: motionProfile,
-            usesTimedWordSourceSpring: false
+            scrollProxy: scrollProxy,
+            viewportSize: viewportSize,
+            forcesScrollTargetReapplication: false
         )
     }
 
@@ -1756,6 +1778,7 @@ struct DesktopLyricsScrollView: View {
             lyricMovementOffsetByID.removeAll()
             lyricMovementTransition = nil
             positionedLyricID = nil
+            positionedInterludeID = nil
         }
     }
 
@@ -1778,19 +1801,36 @@ struct DesktopLyricsScrollView: View {
 
     private func moveFocusWithoutCascade(
         to highlightedID: LyricLine.ID,
-        viewportHeight: CGFloat
+        viewportHeight: CGFloat,
+        scrollProxy: ScrollViewProxy? = nil,
+        viewportSize: CGSize? = nil,
+        forcesScrollTargetReapplication: Bool = false
     ) async {
         let duration = LyricPlaybackTimeline.focusAnimationDuration(
             for: highlightedID,
             in: model.lyrics.lyrics
         )
         resetMovementOffsets()
-        _ = await ensureFocusAlignment(
+        let isFocusPrepared = await ensureFocusAlignment(
             to: highlightedID,
             viewportHeight: viewportHeight,
             animated: true,
-            animationDuration: max(duration, 0.34)
+            animationDuration: max(duration, 0.34),
+            scrollProxy: scrollProxy,
+            viewportSize: viewportSize,
+            forcesScrollTargetReapplication:
+                forcesScrollTargetReapplication
         )
+        if !isFocusPrepared {
+            // Last-resort state-driven request. The direct proxy path above
+            // covers the handoff, but keeping the existing request path as a
+            // fallback guarantees the scroll target is still applied.
+            requestScroll(to: highlightedID)
+            _ = await waitForPreparedFocus(
+                id: highlightedID,
+                viewportHeight: viewportHeight
+            )
+        }
         await Task.yield()
         guard !Task.isCancelled else { return }
         let destinationOffsets = focusedLineFollowingOffsets(
@@ -1831,6 +1871,8 @@ struct DesktopLyricsScrollView: View {
         viewportHeight proposedViewportHeight: CGFloat,
         animated: Bool,
         animationDuration: TimeInterval? = nil,
+        scrollProxy: ScrollViewProxy? = nil,
+        viewportSize: CGSize? = nil,
         forcesScrollTargetReapplication: Bool = false
     ) async -> Bool {
         let viewportHeight = currentViewportHeight(
@@ -1865,10 +1907,28 @@ struct DesktopLyricsScrollView: View {
                     && !isViewportChanging
                 ? duration
                 : nil
-            requestScroll(
-                to: id,
-                animationDuration: requestAnimationDuration
-            )
+            if let scrollProxy, let viewportSize {
+                // The handoff runs inside the ScrollViewReader task, so drive
+                // the proxy directly instead of waiting for a `scrollRequest`
+                // state round-trip. This keeps the first post-indicator lyric
+                // moving even when the pending state update is coalesced away.
+                performScroll(
+                    ScrollRequest(
+                        id: id,
+                        generation: (scrollRequest?.generation ?? 0)
+                            &+ 1,
+                        animationDuration: requestAnimationDuration,
+                        usesLineChangeSpring: false
+                    ),
+                    with: scrollProxy,
+                    viewportSize: viewportSize
+                )
+            } else {
+                requestScroll(
+                    to: id,
+                    animationDuration: requestAnimationDuration
+                )
+            }
             await Task.yield()
             guard !Task.isCancelled else { return false }
             if await waitForPreparedFocus(
@@ -2212,6 +2272,66 @@ struct DesktopLyricsScrollView: View {
                     transaction.animation = nil
                     transaction.disablesAnimations = true
                 }
+            }
+            .task(id: focusRequestID) {
+                let preparesInitialFocus = !isInitialFocusPrepared
+                if let focusedInterlude {
+                    if preparesInitialFocus {
+                        prepareInitialFocus(at: focusedInterlude)
+                        await finishInitialFocusPreparation(
+                            at: focusedInterlude.id,
+                            waitsForLyricGeometry: false,
+                            viewportHeight: viewportSize.height
+                        )
+                        return
+                    }
+                    if await prepareFocusForPresentationIfNeeded() {
+                        return
+                    }
+                    await movePlaybackFocus(to: focusedInterlude)
+                    return
+                }
+                guard let highlightedID else {
+                    resetPlaybackFocus()
+                    if preparesInitialFocus {
+                        // Give the coordinator one layout turn to publish the
+                        // current playback line before falling back to row one.
+                        await Task.yield()
+                        do {
+                            try await Task.sleep(for: .milliseconds(16))
+                        } catch {
+                            return
+                        }
+                        guard !Task.isCancelled,
+                              self.highlightedID == nil else { return }
+                        await finishInitialFocusPreparation(
+                            at: model.lyrics.lyrics.first?.id,
+                            waitsForLyricGeometry: false,
+                            viewportHeight: viewportSize.height
+                        )
+                    }
+                    return
+                }
+                if preparesInitialFocus {
+                    prepareInitialFocus(at: highlightedID)
+                    await finishInitialFocusPreparation(
+                        at: highlightedID,
+                        waitsForLyricGeometry: true,
+                        viewportHeight: viewportSize.height
+                    )
+                    return
+                }
+                if await prepareFocusForPresentationIfNeeded() {
+                    return
+                }
+                guard !Task.isCancelled,
+                      self.highlightedID == highlightedID else { return }
+                await movePlaybackFocus(
+                    to: highlightedID,
+                    viewportHeight: viewportSize.height,
+                    scrollProxy: proxy,
+                    viewportSize: viewportSize
+                )
             }
         }
 
