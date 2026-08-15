@@ -81,6 +81,8 @@ struct DesktopNowPlayingBackdrop: View {
                 artworkURL: artworkURL,
                 motionIntensity:
                     settings.playerBackgroundMotionIntensity,
+                renderQuality:
+                    settings.playerBackgroundRenderQuality,
                 isActive: isActive,
                 isPlaying: player.isPlaying
             )

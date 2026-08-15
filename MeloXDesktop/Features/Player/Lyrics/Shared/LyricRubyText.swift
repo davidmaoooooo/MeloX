@@ -58,6 +58,12 @@ struct LyricRubyText: View {
                 )
             )
             .foregroundStyle(primaryColor)
+            // Ruby runs are positioned by explicit horizontal offsets, so
+            // they must always start at the row's leading edge. The inherited
+            // trailing alignment would otherwise shift the line to the right
+            // and let the offsets push the final character out of the lyric
+            // panel for right-aligned duet lines.
+            .multilineTextAlignment(.leading)
             .fixedSize()
             .textRenderer(
                 LyricGlowTextRenderer(
@@ -92,6 +98,10 @@ struct LyricRubyText: View {
             .foregroundStyle(
                 primaryColor.opacity(romanizationOpacity)
             )
+            // Same as the primary row: ruby placement owns its horizontal
+            // offsets, so keep line alignment leading to avoid pushing a
+            // trailing-aligned duet row past the panel's right edge.
+            .multilineTextAlignment(.leading)
             .fixedSize()
             .textRenderer(
                 LyricRomanizationTextRenderer(
