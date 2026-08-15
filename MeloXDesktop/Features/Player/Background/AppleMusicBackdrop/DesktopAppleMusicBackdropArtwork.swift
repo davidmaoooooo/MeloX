@@ -104,7 +104,10 @@ private final class DesktopAppleMusicBackdropArtworkCache {
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 20
-            request.cachePolicy = .reloadRevalidatingCacheData
+            // Artwork URLs are content-addressed per song/album, so normal
+            // HTTP cache handling avoids re-downloading the same 300pt JPEG
+            // on every backdrop remount.
+            request.cachePolicy = .useProtocolCachePolicy
             request.setValue("MeloX/1.0", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await URLSession.shared.data(

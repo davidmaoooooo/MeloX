@@ -1,7 +1,16 @@
+import Foundation
 import SwiftUI
 
 /// macOS Music 1.6.6's `TSLBackdropMetalView` presentation reconstructed from
 /// the app's model matrices, subdivided `CAMeshTransform` vertices, and AIR.
+///
+/// Performance notes:
+/// - The three rotating artwork layers, Gaussian blur, and pinch warp run in a
+///   downsampled render pass. The artwork source is only 300pt and the final
+///   backdrop is heavily blurred, so this keeps the visible result while
+///   reducing per-frame texture work by 2–16×.
+/// - The timeline pauses whenever the window is inactive, playback is paused,
+///   or Reduce Motion is enabled, and drops to 30Hz in Low Power Mode.
 struct DesktopAppleMusicBackdropView: View {
     @Environment(\.accessibilityReduceMotion)
     private var accessibilityReduceMotion
@@ -11,16 +20,22 @@ struct DesktopAppleMusicBackdropView: View {
     let artworkURL: URL?
     let motionIntensity: Double
     let isActive: Bool
+    let isPlaying: Bool
 
     @State private var clock = DesktopAppleMusicBackdropClock()
     @State private var pinchMesh =
         DesktopAppleMusicPinchMeshStore.randomMesh()
+    @State private var isLowPowerModeEnabled =
+        ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    private static let standardRenderDimension: CGFloat = 640
+    private static let lowPowerRenderDimension: CGFloat = 480
 
     var body: some View {
         GeometryReader { proxy in
             TimelineView(
                 .animation(
-                    minimumInterval: 1.0 / 60.0,
+                    minimumInterval: frameInterval,
                     paused: !isClockRunning
                 )
             ) { context in
@@ -30,37 +45,10 @@ struct DesktopAppleMusicBackdropView: View {
                 ZStack {
                     Color(white: 0.30)
 
-                    ZStack {
-                        Color(white: 0.30)
-
-                        transformedArtwork(
-                            in: size,
-                            time: time
-                        )
-                    }
-                        .saturation(1.3)
-                        .blur(
-                            radius: blurSigma(for: size),
-                            opaque: true
-                        )
-                        .layerEffect(
-                            DesktopAppleMusicBackdropShader.pinch(
-                                size: size,
-                                time: time,
-                                meshWarpTimeScale:
-                                    meshWarpTimeScale(for: size.width),
-                                blackScrimAlpha:
-                                    scrimAlpha(for: size.width),
-                                usesDarkAppearance:
-                                    colorScheme == .dark,
-                                averageLuminosity: 0.5,
-                                meshPositions: pinchMesh.positions,
-                                lookupOffsets: pinchMesh.lookupOffsets,
-                                lookupTriangles:
-                                    pinchMesh.lookupTriangles
-                            ),
-                            maxSampleOffset: size
-                        )
+                    renderedBackdrop(
+                        in: size,
+                        time: time
+                    )
                 }
                 .compositingGroup()
                 .frame(width: size.width, height: size.height)
@@ -70,6 +58,59 @@ struct DesktopAppleMusicBackdropView: View {
         .onChange(of: isClockRunning, initial: true) { _, isRunning in
             clock.setRunning(isRunning, at: Date())
         }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .NSProcessInfoPowerStateDidChange
+            )
+        ) { _ in
+            isLowPowerModeEnabled =
+                ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
+    }
+
+    /// Runs the heavy rotation/blur/pinch work in a proportionally smaller
+    /// coordinate space, then scales the result up to fill the window.
+    private func renderedBackdrop(
+        in size: CGSize,
+        time: TimeInterval
+    ) -> some View {
+        let renderSize = renderSize(for: size)
+        let scale = renderScale(from: size, to: renderSize)
+
+        return ZStack {
+            Color(white: 0.30)
+
+            transformedArtwork(
+                in: renderSize,
+                time: time
+            )
+        }
+        .frame(width: renderSize.width, height: renderSize.height)
+        .saturation(1.3)
+        .blur(
+            radius: blurSigma(for: renderSize),
+            opaque: true
+        )
+        .layerEffect(
+            DesktopAppleMusicBackdropShader.pinch(
+                size: renderSize,
+                time: time,
+                meshWarpTimeScale:
+                    meshWarpTimeScale(for: size.width),
+                blackScrimAlpha:
+                    scrimAlpha(for: size.width),
+                usesDarkAppearance:
+                    colorScheme == .dark,
+                averageLuminosity: 0.5,
+                meshPositions: pinchMesh.positions,
+                lookupOffsets: pinchMesh.lookupOffsets,
+                lookupTriangles:
+                    pinchMesh.lookupTriangles
+            ),
+            maxSampleOffset: renderSize
+        )
+        .scaleEffect(scale, anchor: .center)
+        .frame(width: size.width, height: size.height)
     }
 
     @ViewBuilder
@@ -143,6 +184,12 @@ struct DesktopAppleMusicBackdropView: View {
     private var isClockRunning: Bool {
         isActive
             && scenePhase == .active
+            && isPlaying
+            && !accessibilityReduceMotion
+    }
+
+    private var frameInterval: TimeInterval {
+        isLowPowerModeEnabled ? 1.0 / 30.0 : 1.0 / 60.0
     }
 
     private func animationTime(at date: Date) -> TimeInterval {
@@ -154,6 +201,30 @@ struct DesktopAppleMusicBackdropView: View {
             return 5
         }
         return 0.5 / max(motionIntensity, 0.1)
+    }
+
+    private func renderSize(for size: CGSize) -> CGSize {
+        let maximumDimension = max(size.width, size.height)
+        guard maximumDimension > 0 else { return size }
+        let renderDimension = isLowPowerModeEnabled
+            ? Self.lowPowerRenderDimension
+            : Self.standardRenderDimension
+        let downscale = min(
+            renderDimension / maximumDimension,
+            1
+        )
+        return CGSize(
+            width: size.width * downscale,
+            height: size.height * downscale
+        )
+    }
+
+    private func renderScale(
+        from size: CGSize,
+        to renderSize: CGSize
+    ) -> CGFloat {
+        guard renderSize.width > 0 else { return 1 }
+        return size.width / renderSize.width
     }
 
     private func scrimAlpha(for width: CGFloat) -> Double {

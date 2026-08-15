@@ -25,9 +25,13 @@ static float2 solveColumns(float2 xColumn, float2 yColumn, float2 value) {
 
 static float appleMusicMeshWeight(float time, float timeScale) {
     float safeTimeScale = max(timeScale, 0.1f);
-    float phase = acos(
-        sin(time * M_PI_F / safeTimeScale)
-    ) / M_PI_F;
+    // Mathematically identical to
+    // `acos(sin(time * π / timeScale)) / π`, but evaluated with fmod + abs
+    // instead of two transcendental instructions per pixel.
+    float cycle = fmod(time, 2.0f * safeTimeScale) / safeTimeScale;
+    float phase = (cycle < 1.0f)
+        ? abs(cycle - 0.5f)
+        : 1.0f - abs(cycle - 1.5f);
     return phase * phase * (3.0f - 2.0f * phase);
 }
 
@@ -137,7 +141,6 @@ static float2 appleMusicInverseMesh(
     uint firstCandidate = lookupOffsets[lookupIndex];
     uint candidateLimit = lookupOffsets[lookupIndex + 1u];
     float2 result = float2(destination.x, 1.0f - destination.y);
-    bool found = false;
 
     // Candidate IDs are stored in Music's original index-buffer order. Do
     // not return early: when the source mesh folds, the later primitive is
@@ -171,7 +174,6 @@ static float2 appleMusicInverseMesh(
                 0.0f,
                 1.0f
             );
-            found = true;
         }
     }
     return clamp(result, 0.0f, 1.0f);
