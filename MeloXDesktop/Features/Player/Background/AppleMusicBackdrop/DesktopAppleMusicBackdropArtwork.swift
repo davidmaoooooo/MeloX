@@ -197,7 +197,6 @@ struct DesktopAppleMusicBackdropArtwork<ArtworkContent: View>: View {
     ) {
         self.artworkURL = artworkURL
         self.artworkContent = artworkContent
-        _displayedURL = State(initialValue: artworkURL)
     }
 
     var body: some View {
@@ -222,11 +221,18 @@ struct DesktopAppleMusicBackdropArtwork<ArtworkContent: View>: View {
     @MainActor
     private func loadCurrentArtwork() async {
         let newURL = artworkURL
-        guard newURL != displayedURL else {
+        if newURL == displayedURL {
             if hasOutgoingSource, incomingOpacity < 1 {
                 startCrossfade(for: newURL)
             }
-            return
+            // `displayedURL` is no longer seeded from the initializer, so this
+            // only happens when an earlier attempt finished without an image.
+            // Retry the same URL instead of leaving the solid fallback stuck.
+            guard newURL != nil,
+                  displayedImage == nil,
+                  !hasOutgoingSource else {
+                return
+            }
         }
 
         transitionGeneration &+= 1

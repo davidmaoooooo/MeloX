@@ -7,7 +7,7 @@ final class AppSettings {
     static let defaultPlayerVolumeControlMode: PlayerVolumeControlMode = .system
     static let defaultSpatialAudioMode: SpatialAudioMode = .automatic
     static let defaultPlayerBackgroundStyle: PlayerBackgroundStyle =
-        .flowingLight
+        .appleMusicBackdrop
     static let defaultPlayerBackgroundMotionIntensity = 1.0
     static let playerBackgroundMotionIntensityRange = 0.4...1.4
     static let defaultPlayerBackgroundBeatEffectsEnabled = false
