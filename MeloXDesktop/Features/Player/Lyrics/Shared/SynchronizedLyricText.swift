@@ -416,12 +416,17 @@ struct SynchronizedLyricText: View {
                 + settings.wordByWordLyricsAdvanceTime
                 + (motionProfile?.animationHeadstart ?? 0)
 
+            // Keep timing effects tied to the focus transition. A finished
+            // line fades its played lift back to the baseline as it becomes
+            // the previous line; a hardcoded strength would make that lift
+            // disappear instantly and the lyric visibly jump downward.
             Group {
                 if usesRubyLayout {
                     rubyText(
                         at: playbackTime,
                         appliesTimingEffects: true,
-                        timingEffectsStrength: 1
+                        timingEffectsStrength:
+                            timedLyricPresentationProgress
                     )
                 } else {
                     activeSynchronizedText
@@ -436,7 +441,8 @@ struct SynchronizedLyricText: View {
                         .textRenderer(
                             lyricTextRenderer(
                                 at: playbackTime,
-                                timingEffectsStrength: 1
+                                timingEffectsStrength:
+                                    timedLyricPresentationProgress
                             )
                         )
                 }
