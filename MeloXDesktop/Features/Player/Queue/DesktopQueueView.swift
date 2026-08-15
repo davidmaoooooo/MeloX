@@ -44,11 +44,9 @@ struct DesktopQueueView: View {
     private var queueList: some View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
-                List {
-                    if !historyEntries.isEmpty {
-                        Section {
-                            queueRows(historyEntries)
-                        } header: {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if !historyEntries.isEmpty {
                             queueHeader(
                                 title: "历史记录",
                                 actionTitle: "清除",
@@ -57,13 +55,19 @@ struct DesktopQueueView: View {
                                     model.player.clearPlaybackHistory()
                                 }
                             )
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                            queueRows(historyEntries)
                         }
-                    }
 
-                    Section {
+                        queueHeader(
+                            title: "继续播放",
+                            actionTitle: "清除",
+                            isActionDisabled: upcomingEntries.isEmpty,
+                            action: {
+                                model.player.clearUpcomingQueue()
+                            }
+                        )
+                        .id(continueHeaderID)
+
                         if upcomingEntries.isEmpty {
                             Text("队列中无音乐。")
                                 .font(.system(size: 15, weight: .regular))
@@ -76,28 +80,11 @@ struct DesktopQueueView: View {
                                         55
                                     )
                                 )
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
                         } else {
                             queueRows(upcomingEntries)
                         }
-                    } header: {
-                        queueHeader(
-                            title: "继续播放",
-                            actionTitle: "清除",
-                            isActionDisabled: upcomingEntries.isEmpty,
-                            action: {
-                                model.player.clearUpcomingQueue()
-                            }
-                        )
-                        .id(continueHeaderID)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
                     }
                 }
-                .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .mask(alignment: .top) {
                     VStack(spacing: 0) {
@@ -132,7 +119,7 @@ struct DesktopQueueView: View {
                 presentation: presentation,
                 metrics: metrics
             )
-            .listRowInsets(
+            .padding(
                 EdgeInsets(
                     top: metrics.rowVerticalInset,
                     leading: metrics.rowLeadingInset,
@@ -140,8 +127,13 @@ struct DesktopQueueView: View {
                     trailing: metrics.rowTrailingInset
                 )
             )
-            .listRowBackground(Color.clear)
-            .listRowSeparatorTint(rowSeparatorColor)
+            .background(Color.clear)
+
+            if entry.id != entries.last?.id {
+                Divider()
+                    .overlay(rowSeparatorColor)
+                    .padding(.leading, metrics.rowLeadingInset)
+            }
         }
     }
 
