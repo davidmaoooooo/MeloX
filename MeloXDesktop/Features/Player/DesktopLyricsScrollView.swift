@@ -25,6 +25,8 @@ struct DesktopLyricsScrollView: View {
     private static let viewportAlignmentDelay: Duration = .milliseconds(120)
     private static let annotationSpacing =
         LyricAnnotationMetrics.verticalSpacing
+    private static let viewportMaskTopOpaqueFallbackPercent = 8.0
+    private static let viewportMaskTopContentClearance: CGFloat = 2
 
     @Environment(DesktopAppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -135,6 +137,20 @@ struct DesktopLyricsScrollView: View {
             glowOverflow,
             SynchronizedLyricText.interactionBackgroundVisualOverflow
         )
+    }
+
+    private func viewportMaskTopOpaqueY(
+        for viewportHeight: CGFloat
+    ) -> CGFloat {
+        guard viewportHeight.isFinite, viewportHeight > 0 else {
+            return 0
+        }
+        let percent = resolvedAppleMusicLyricsMotionProfile?
+            .viewportMaskTopOpaquePercent
+            ?? Self.viewportMaskTopOpaqueFallbackPercent
+        return viewportHeight
+            * CGFloat(min(max(percent, 0), 100))
+            / 100
     }
 
     private var effectiveLyricsAdvanceTime: TimeInterval {
@@ -257,16 +273,26 @@ struct DesktopLyricsScrollView: View {
         lyricID: LyricLine.ID? = nil,
         focusedHeightOverride: CGFloat? = nil
     ) -> CGFloat {
-        guard viewportHeight > 0,
-              let profile =
-                resolvedAppleMusicLyricsMotionProfile else {
+        guard viewportHeight > 0 else {
             return preferredFocusPosition
+        }
+
+        guard let profile = resolvedAppleMusicLyricsMotionProfile else {
+            return topMaskSafeFocusPosition(
+                preferredFocusPosition,
+                viewportHeight: viewportHeight,
+                focusedHeightOverride: focusedHeightOverride
+            )
         }
 
         guard case let .top(targetTop) = profile.selectedLinePosition else {
             let liftedCenter = 0.5
                 - Double(focusLift) / Double(viewportHeight)
-            return CGFloat(min(max(liftedCenter, 0), 1))
+            return topMaskSafeFocusPosition(
+                CGFloat(min(max(liftedCenter, 0), 1)),
+                viewportHeight: viewportHeight,
+                focusedHeightOverride: focusedHeightOverride
+            )
         }
 
         let focusedID = lyricID ?? requestedFocusLyricID
@@ -290,9 +316,39 @@ struct DesktopLyricsScrollView: View {
             viewportHeight - max(focusedHeight, 0),
             1
         )
-        return min(
-            max(CGFloat(targetTop) / availableAnchorTravel, 0),
-            1
+        return topMaskSafeFocusPosition(
+            min(
+                max(CGFloat(targetTop) / availableAnchorTravel, 0),
+                1
+            ),
+            viewportHeight: viewportHeight,
+            focusedHeightOverride: focusedHeightOverride
+        )
+    }
+
+    /// The resident interlude row is only 40 points tall. When a short
+    /// viewport (or a custom top-aligned focus) pushes its anchor close to
+    /// the top, lift it to the gradient mask's fully-opaque boundary so the
+    /// prelude dots never sit inside the fade.
+    private func topMaskSafeFocusPosition(
+        _ baseFocusPosition: CGFloat,
+        viewportHeight: CGFloat,
+        focusedHeightOverride: CGFloat?
+    ) -> CGFloat {
+        guard !compact,
+              let focusedHeight = focusedHeightOverride,
+              focusedHeight > 0,
+              viewportHeight > focusedHeight else {
+            return baseFocusPosition
+        }
+
+        let minimumPosition = (
+            viewportMaskTopOpaqueY(for: viewportHeight)
+                + Self.viewportMaskTopContentClearance
+        ) / (viewportHeight - focusedHeight)
+        return max(
+            baseFocusPosition,
+            min(max(minimumPosition, 0), 1)
         )
     }
 
@@ -1997,13 +2053,31 @@ struct DesktopLyricsScrollView: View {
             .quantizedVisualFocusAnchorY(
                 viewportHeight * resolvedFocusPosition
         )
+        // Music's recovered first-row offset is smaller than the viewport
+        // mask's fade. When a prelude opens the song, start it at the mask's
+        // fully-opaque boundary so scrolling to the top does not fade it.
+        let hasLeadingPrelude = interludes.first?.isPrelude == true
+        let leadingPreludeMaskPadding: CGFloat = if compact
+            || !hasLeadingPrelude {
+            0
+        } else {
+            viewportMaskTopOpaqueY(for: viewportHeight)
+                + Self.viewportMaskTopContentClearance
+        }
         let topPadding: CGFloat = if let profile =
             resolvedAppleMusicLyricsMotionProfile {
-            CGFloat(profile.firstLineStartOffset)
+            max(
+                CGFloat(profile.firstLineStartOffset),
+                leadingPreludeMaskPadding
+            )
         } else if compact {
             max(viewportHeight * resolvedFocusPosition, 44)
         } else {
-            max(viewportHeight * resolvedFocusPosition, 40)
+            max(
+                viewportHeight * resolvedFocusPosition,
+                40,
+                leadingPreludeMaskPadding
+            )
         }
         let bottomPadding: CGFloat = compact
             ? max(viewportHeight * (1 - resolvedFocusPosition), 96)
@@ -2145,14 +2219,12 @@ struct DesktopLyricsScrollView: View {
             scrollView
         } else {
             scrollView.mask {
+                let topOpaquePercent =
+                    resolvedAppleMusicLyricsMotionProfile?
+                        .viewportMaskTopOpaquePercent
+                        ?? Self.viewportMaskTopOpaqueFallbackPercent
                 let topOpaqueLocation = min(
-                    max(
-                        CGFloat(
-                            resolvedAppleMusicLyricsMotionProfile?
-                                .viewportMaskTopOpaquePercent ?? 8
-                        ) / 100,
-                        0
-                    ),
+                    max(CGFloat(topOpaquePercent) / 100, 0),
                     1
                 )
                 LinearGradient(
