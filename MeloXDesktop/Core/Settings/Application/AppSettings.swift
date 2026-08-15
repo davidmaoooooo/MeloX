@@ -8,6 +8,8 @@ final class AppSettings {
     static let defaultSpatialAudioMode: SpatialAudioMode = .automatic
     static let defaultPlayerBackgroundStyle: PlayerBackgroundStyle =
         .appleMusicBackdrop
+    static let defaultPlayerBackgroundRenderQuality:
+        PlayerBackgroundRenderQuality = .automatic
     static let defaultPlayerBackgroundMotionIntensity = 1.0
     static let playerBackgroundMotionIntensityRange = 0.4...1.4
     static let defaultPlayerBackgroundBeatEffectsEnabled = false
@@ -152,6 +154,8 @@ final class AppSettings {
         static let area = "musicArea"
         static let showPlayCount = "showPlayCount"
         static let playerBackgroundStyle = "playerBackgroundStyle"
+        static let playerBackgroundRenderQuality =
+            "playerBackgroundRenderQuality"
         static let playerBackgroundMotionIntensity =
             "playerBackgroundMotionIntensity"
         static let playerBackgroundBeatEffectsEnabled =
@@ -680,6 +684,16 @@ final class AppSettings {
             defaults.set(
                 playerBackgroundStyle.rawValue,
                 forKey: Key.playerBackgroundStyle
+            )
+        }
+    }
+
+    var playerBackgroundRenderQuality:
+        PlayerBackgroundRenderQuality {
+        didSet {
+            defaults.set(
+                playerBackgroundRenderQuality.rawValue,
+                forKey: Key.playerBackgroundRenderQuality
             )
         }
     }
@@ -1393,6 +1407,11 @@ final class AppSettings {
                 forKey: Key.playerBackgroundStyle
             ) ?? ""
         ) ?? Self.defaultPlayerBackgroundStyle
+        playerBackgroundRenderQuality = PlayerBackgroundRenderQuality(
+            rawValue: defaults.string(
+                forKey: Key.playerBackgroundRenderQuality
+            ) ?? ""
+        ) ?? Self.defaultPlayerBackgroundRenderQuality
         let storedPlayerBackgroundMotionIntensity = defaults.object(
             forKey: Key.playerBackgroundMotionIntensity
         ) as? Double ?? Self.defaultPlayerBackgroundMotionIntensity
@@ -2005,6 +2024,8 @@ final class AppSettings {
         autoMix.reset()
         playerBackgroundStyle =
             Self.defaultPlayerBackgroundStyle
+        playerBackgroundRenderQuality =
+            Self.defaultPlayerBackgroundRenderQuality
         playerBackgroundMotionIntensity =
             Self.defaultPlayerBackgroundMotionIntensity
         playerBackgroundBeatEffectsEnabled =

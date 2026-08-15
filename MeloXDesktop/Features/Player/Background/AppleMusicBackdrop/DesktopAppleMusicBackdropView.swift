@@ -6,8 +6,9 @@ import SwiftUI
 ///
 /// Performance notes:
 /// - The three rotating artwork layers, Gaussian blur, and pinch warp run in a
-///   downsampled render pass. The artwork source is only 300pt and the final
-///   backdrop is heavily blurred, so this keeps the visible result while
+///   downsampled render pass whose resolution is selected by the user in
+///   Settings. The artwork source is only 300pt and the final backdrop is
+///   heavily blurred, so the lower tiers keep the visible result while
 ///   reducing per-frame texture work by 2–16×.
 /// - The timeline pauses whenever the window is inactive, playback is paused,
 ///   or Reduce Motion is enabled, and drops to 30Hz in Low Power Mode.
@@ -19,6 +20,7 @@ struct DesktopAppleMusicBackdropView: View {
 
     let artworkURL: URL?
     let motionIntensity: Double
+    let renderQuality: PlayerBackgroundRenderQuality
     let isActive: Bool
     let isPlaying: Bool
 
@@ -205,10 +207,10 @@ struct DesktopAppleMusicBackdropView: View {
 
     private func renderSize(for size: CGSize) -> CGSize {
         let maximumDimension = max(size.width, size.height)
-        guard maximumDimension > 0 else { return size }
-        let renderDimension = isLowPowerModeEnabled
-            ? Self.lowPowerRenderDimension
-            : Self.standardRenderDimension
+        guard maximumDimension > 0,
+              let renderDimension = resolvedRenderDimension else {
+            return size
+        }
         let downscale = min(
             renderDimension / maximumDimension,
             1
@@ -217,6 +219,21 @@ struct DesktopAppleMusicBackdropView: View {
             width: size.width * downscale,
             height: size.height * downscale
         )
+    }
+
+    private var resolvedRenderDimension: CGFloat? {
+        switch renderQuality {
+        case .automatic:
+            return isLowPowerModeEnabled
+                ? Self.lowPowerRenderDimension
+                : Self.standardRenderDimension
+        case .high:
+            return nil
+        case .standard:
+            return Self.standardRenderDimension
+        case .low:
+            return Self.lowPowerRenderDimension
+        }
     }
 
     private func renderScale(

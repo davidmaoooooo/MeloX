@@ -281,6 +281,17 @@ private struct DesktopPlaybackSettingsView: View {
                     )
                 }
                 if settings.playerBackgroundStyle == .appleMusicBackdrop {
+                    Picker(
+                        "背景画质",
+                        selection: $settings.playerBackgroundRenderQuality
+                    ) {
+                        ForEach(PlayerBackgroundRenderQuality.allCases) { quality in
+                            Text(quality.title).tag(quality)
+                        }
+                    }
+                    Text(settings.playerBackgroundRenderQuality.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text(
                         "使用 Music 1.6.6 的三层旋转、响应式遮罩、1.3 倍饱和度与画面对角线模糊参数。"
                     )
