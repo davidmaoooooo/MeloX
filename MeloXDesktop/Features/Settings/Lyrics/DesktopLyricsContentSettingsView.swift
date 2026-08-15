@@ -125,7 +125,7 @@ struct DesktopLyricsContentSettingsView: View {
                         "QQ 音乐歌词补全",
                         isOn: $settings.lyricsQQMusicSourceEnabled
                     )
-                    Text("自动优选会按 AMLL TTML、网易云 YRC、QQ QRC、网易云 LRC、QQ LRC 的顺序选择。手动选择某个来源后，将仅使用该来源；也可以随时在播放器菜单中切换。")
+                    Text("自动优选会先加载并显示网易云歌词，等待 AMLL 与 QQ 音乐返回后再按 AMLL TTML、网易云 YRC、QQ QRC、网易云 LRC、QQ LRC 的顺序统一优选。手动选择某个来源后，将仅使用该来源；也可以随时在播放器菜单中切换。")
                         .foregroundStyle(.secondary)
                 }
 
