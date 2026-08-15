@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct DesktopLyricsScrollView: View {
@@ -8,10 +9,16 @@ struct DesktopLyricsScrollView: View {
         case active
     }
 
+    private enum PositionCascadeLineID: Hashable {
+        case lyric(LyricLine.ID)
+        case interlude(LyricInterlude.ID)
+    }
+
     private struct ScrollRequest: Equatable {
         let id: String
         let generation: UInt
         let animationDuration: TimeInterval?
+        let usesLineChangeSpring: Bool
     }
 
     private static let focusColorTransitionDuration: TimeInterval = 0.12
@@ -31,6 +38,7 @@ struct DesktopLyricsScrollView: View {
     @State private var positionedInterludeID: LyricInterlude.ID?
     @State private var playbackFocus: AppleMusicLyricsPlaybackFocus?
     @State private var timelineHighlightedLyricID: LyricLine.ID?
+    @State private var visibleInterludeID: LyricInterlude.ID?
     @State private var visualHighlightedLyricID: LyricLine.ID?
     @State private var lyricFocusColorTransition:
         LyricFocusColorTransition?
@@ -44,6 +52,8 @@ struct DesktopLyricsScrollView: View {
     var isActive = true
     var isPresented = true
     var keepsPlaybackFocusSynchronized = false
+    var visualScale: CGFloat = 1
+    var focusLift: CGFloat = 0
 
     init(
         compact: Bool = false,
@@ -52,7 +62,9 @@ struct DesktopLyricsScrollView: View {
         initialFocusID: LyricLine.ID? = nil,
         isActive: Bool = true,
         isPresented: Bool = true,
-        keepsPlaybackFocusSynchronized: Bool = false
+        keepsPlaybackFocusSynchronized: Bool = false,
+        visualScale: CGFloat = 1,
+        focusLift: CGFloat = 0
     ) {
         self.compact = compact
         self.allowsLyricBlur = allowsLyricBlur
@@ -61,13 +73,16 @@ struct DesktopLyricsScrollView: View {
         self.isPresented = isPresented
         self.keepsPlaybackFocusSynchronized =
             keepsPlaybackFocusSynchronized
+        self.visualScale = max(visualScale, 1)
+        self.focusLift = max(focusLift, 0)
 
         _scrollRequest = State(
             initialValue: initialFocusID.map {
                 ScrollRequest(
                     id: $0,
                     generation: 0,
-                    animationDuration: nil
+                    animationDuration: nil,
+                    usesLineChangeSpring: false
                 )
             }
         )
@@ -85,11 +100,24 @@ struct DesktopLyricsScrollView: View {
         _visualCascadeFocusLyricID = State(initialValue: initialFocusID)
     }
 
+    /// Music's wrapper creates the same LyricsSpecs through two distinct
+    /// boolean branches. Full Now Playing uses `prettyMode=true`; compact
+    /// inspectors and the MiniPlayer use the standard branch.
+    private var resolvedAppleMusicLyricsMotionProfile:
+        AppleMusicLyricsMotionProfile? {
+        guard model.settings.appleMusicLyricsMotionProfile != nil else {
+            return nil
+        }
+        return compact ? .macOS26_6Standard : .macOS26_6
+    }
+
     private var hasSyllableSyncedLyrics: Bool {
         model.lyrics.lyrics.contains(where: \.isSyllableSynced)
     }
 
-    private var horizontalVisualOverflow: CGFloat {
+    private func horizontalVisualOverflow(
+        viewportWidth: CGFloat
+    ) -> CGFloat {
         let usesTimedLyrics =
             (model.settings.lyricsWordByWord && hasSyllableSyncedLyrics)
             || (
@@ -98,7 +126,9 @@ struct DesktopLyricsScrollView: View {
             )
         let glowOverflow = Self.lyricGlowOverflow(
             isEnabled: model.settings.lyricsGlowEnabled && usesTimedLyrics,
-            fontSize: model.settings.lyricsFontSize,
+            fontSize: Double(
+                resolvedLyricFontSize(for: viewportWidth)
+            ),
             intensity: model.settings.lyricsGlowIntensity
         )
         return max(
@@ -114,20 +144,44 @@ struct DesktopLyricsScrollView: View {
     }
 
     private var interludes: [LyricInterlude] {
-        LyricInterludeTimeline.interludes(in: model.lyrics.lyrics)
+        guard model.settings.lyricsInterludeCountdownEnabled else {
+            return []
+        }
+        return LyricInterludeTimeline.interludes(in: model.lyrics.lyrics)
     }
 
-    private var activeInterlude: LyricInterlude? {
-        guard model.settings.lyricsInterludeCountdownEnabled,
-              let id = playbackFocus?.interludeID else { return nil }
-        return interludes.first { $0.id == id }
-    }
-
-    private var layoutInterlude: LyricInterlude? {
-        activeInterlude
-            ?? positionedInterludeID.flatMap { positionedID in
-                interludes.first { $0.id == positionedID }
+    private var interludeByID: [LyricInterlude.ID: LyricInterlude] {
+        Dictionary(
+            uniqueKeysWithValues: interludes.map { interlude in
+                (interlude.id, interlude)
             }
+        )
+    }
+
+    private var interludeByDisplayLyricID: [LyricLine.ID: LyricInterlude] {
+        Dictionary(
+            uniqueKeysWithValues: interludes.map { interlude in
+                (interlude.displayBeforeLyricID, interlude)
+            }
+        )
+    }
+
+    private var focusedInterlude: LyricInterlude? {
+        playbackFocus?.interludeID.flatMap { interludeByID[$0] }
+    }
+
+    /// Mirrors the mounted row order used by LyricsX's position animator. An
+    /// interlude consumes a stagger slot even though its fixed row itself does
+    /// not receive a lyric movement descriptor.
+    private var positionCascadeLineIDs: [PositionCascadeLineID] {
+        model.lyrics.lyrics.flatMap { line in
+            var ids: [PositionCascadeLineID] = []
+            if let interlude = interludeByDisplayLyricID[line.id] {
+                ids.append(.interlude(interlude.id))
+            }
+            ids.append(.lyric(line.id))
+            return ids
+        }
     }
 
     private var highlightedID: LyricLine.ID? {
@@ -155,21 +209,107 @@ struct DesktopLyricsScrollView: View {
             ?? timelineHighlightedLyricID
     }
 
-    private var focusAnchor: UnitPoint {
-        UnitPoint(x: 0.5, y: focusPosition)
-    }
-
     private var requestedScrollID: LyricLine.ID? {
         scrollRequest?.id
     }
 
-    private var focusPosition: CGFloat {
-        min(
+    private var requestedFocusLyricID: LyricLine.ID? {
+        playbackFocus?.lyricID
+            ?? visualCascadeFocusLyricID
+            ?? highlightedID
+    }
+
+    private var requestedFocusHeightOverride: CGFloat? {
+        guard playbackFocus?.interludeID != nil else { return nil }
+        let profile = resolvedAppleMusicLyricsMotionProfile?
+            .instrumentalBreak ?? .macOS26_6
+        return CGFloat(profile.viewHeight) / max(visualScale, 1)
+    }
+
+    private var preferredFocusPosition: CGFloat {
+        if let profile = resolvedAppleMusicLyricsMotionProfile {
+            switch profile.selectedLinePosition {
+            case .center:
+                return 0.5
+            case .top:
+                return 0
+            }
+        }
+        return min(
             max(
                 CGFloat(model.settings.lyricsFocusPosition),
                 CGFloat(AppSettings.lyricsFocusPositionRange.lowerBound)
             ),
             CGFloat(AppSettings.lyricsFocusPositionRange.upperBound)
+        )
+    }
+
+    /// Converts LyricsX's selected-line position into SwiftUI's shared source
+    /// and destination anchor. Pretty-mode `.center` is lifted into the upper
+    /// half by `focusLift`; the outer `.padding(.top:)` around the Now
+    /// Playing viewport must not drag the selected line below Music's stable
+    /// focus band. For `top(y)`, solve the shared fraction from the measured
+    /// row height so the row's top edge lands at the recovered absolute
+    /// viewport coordinate.
+    private func focusPosition(
+        for viewportHeight: CGFloat,
+        viewportWidth proposedViewportWidth: CGFloat? = nil,
+        lyricID: LyricLine.ID? = nil,
+        focusedHeightOverride: CGFloat? = nil
+    ) -> CGFloat {
+        guard viewportHeight > 0,
+              let profile =
+                resolvedAppleMusicLyricsMotionProfile else {
+            return preferredFocusPosition
+        }
+
+        guard case let .top(targetTop) = profile.selectedLinePosition else {
+            let liftedCenter = 0.5
+                - Double(focusLift) / Double(viewportHeight)
+            return CGFloat(min(max(liftedCenter, 0), 1))
+        }
+
+        let focusedID = lyricID ?? requestedFocusLyricID
+        let resolvedFontSize = resolvedLyricFontSize(
+            for: proposedViewportWidth
+                ?? geometryCache.viewportSize.width
+        )
+        let font = NSFont.systemFont(
+            ofSize: resolvedFontSize,
+            weight: model.settings.effectiveAppleMusicLyricsFontWeight
+                .appKitWeight
+        )
+        let fallbackLineHeight = ceil(
+            font.ascender - font.descender + font.leading
+        )
+        let focusedHeight = focusedHeightOverride ?? focusedID.flatMap {
+            geometryCache.layoutHeightByID[$0]
+                ?? geometryCache.frameByID[$0]?.height
+        } ?? fallbackLineHeight
+        let availableAnchorTravel = max(
+            viewportHeight - max(focusedHeight, 0),
+            1
+        )
+        return min(
+            max(CGFloat(targetTop) / availableAnchorTravel, 0),
+            1
+        )
+    }
+
+    private func focusAnchor(
+        for viewportHeight: CGFloat,
+        viewportWidth: CGFloat? = nil,
+        lyricID: LyricLine.ID? = nil,
+        focusedHeightOverride: CGFloat? = nil
+    ) -> UnitPoint {
+        UnitPoint(
+            x: 0.5,
+            y: focusPosition(
+                for: viewportHeight,
+                viewportWidth: viewportWidth,
+                lyricID: lyricID,
+                focusedHeightOverride: focusedHeightOverride
+            )
         )
     }
 
@@ -239,7 +379,7 @@ struct DesktopLyricsScrollView: View {
             geometryCache.cancelPendingViewportSettlement()
             endViewportChange()
         }
-        .onChange(of: focusPosition) { _, _ in
+        .onChange(of: preferredFocusPosition) { _, _ in
             guard acceptsGeometryUpdates,
                   model.settings.lyricsAutoFollow,
                   !isBrowsingLyrics,
@@ -260,7 +400,8 @@ struct DesktopLyricsScrollView: View {
                 interludes: interludes,
                 isActive: coordinatesPlaybackFocus,
                 playbackFocus: $playbackFocus,
-                timelineHighlightedLyricID: $timelineHighlightedLyricID
+                timelineHighlightedLyricID: $timelineHighlightedLyricID,
+                visibleInterludeID: $visibleInterludeID
             )
             .environment(model.player)
             .environment(model.settings)
@@ -289,6 +430,7 @@ struct DesktopLyricsScrollView: View {
             positionedInterludeID = nil
             playbackFocus = nil
             timelineHighlightedLyricID = nil
+            visibleInterludeID = nil
             visualHighlightedLyricID = nil
             lyricFocusColorTransition = nil
             visualCascadeFocusLyricID = nil
@@ -300,8 +442,11 @@ struct DesktopLyricsScrollView: View {
 
     private func scheduleViewportAlignment(for viewportHeight: CGFloat) {
         guard isInitialFocusPrepared else { return }
-        settleMovementForViewportChange()
         if !isViewportChanging {
+            // LyricsX treats a live viewport resize as a layout phase. Freeze
+            // any in-flight line motion once, then leave the scroll position
+            // alone until AppKit stops changing the viewport.
+            settleMovementForViewportChange()
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) {
@@ -352,22 +497,52 @@ struct DesktopLyricsScrollView: View {
 
     private func requestScroll(
         to id: String,
-        animationDuration: TimeInterval? = nil
+        animationDuration: TimeInterval? = nil,
+        usesLineChangeSpring: Bool = false
     ) {
         scrollRequest = ScrollRequest(
             id: id,
             generation: (scrollRequest?.generation ?? 0) &+ 1,
-            animationDuration: animationDuration
+            animationDuration: animationDuration,
+            usesLineChangeSpring: usesLineChangeSpring
         )
     }
 
     private func performScroll(
         _ request: ScrollRequest,
-        with proxy: ScrollViewProxy
+        with proxy: ScrollViewProxy,
+        viewportSize: CGSize
     ) {
+        let lyricID = model.lyrics.lyrics.first {
+            $0.id == request.id
+        }?.id
+        let focusedHeightOverride: CGFloat? = if interludes.contains(
+            where: { $0.id == request.id }
+        ) {
+            requestedFocusHeightOverride
+                ?? CGFloat(
+                    (
+                        resolvedAppleMusicLyricsMotionProfile?
+                            .instrumentalBreak ?? .macOS26_6
+                    ).viewHeight
+                ) / max(visualScale, 1)
+        } else {
+            nil
+        }
+        let anchor = focusAnchor(
+            for: viewportSize.height,
+            viewportWidth: viewportSize.width,
+            lyricID: lyricID,
+            focusedHeightOverride: focusedHeightOverride
+        )
         if let duration = request.animationDuration {
-            withAnimation(.smooth(duration: duration)) {
-                proxy.scrollTo(request.id, anchor: focusAnchor)
+            let animation = request.usesLineChangeSpring
+                ? lyricLineChangeAnimation(
+                    fallback: .smooth(duration: duration)
+                )
+                : .smooth(duration: duration)
+            withAnimation(animation) {
+                proxy.scrollTo(request.id, anchor: anchor)
             }
             return
         }
@@ -375,7 +550,7 @@ struct DesktopLyricsScrollView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            proxy.scrollTo(request.id, anchor: focusAnchor)
+            proxy.scrollTo(request.id, anchor: anchor)
         }
     }
 
@@ -384,11 +559,11 @@ struct DesktopLyricsScrollView: View {
             .opacity(isInitialFocusPrepared ? 1 : 0)
             .task(id: focusRequestID) {
                 let preparesInitialFocus = !isInitialFocusPrepared
-                if let activeInterlude {
+                if let focusedInterlude {
                     if preparesInitialFocus {
-                        prepareInitialFocus(at: activeInterlude)
+                        prepareInitialFocus(at: focusedInterlude)
                         await finishInitialFocusPreparation(
-                            at: activeInterlude.id,
+                            at: focusedInterlude.id,
                             waitsForLyricGeometry: false,
                             viewportHeight: viewportSize.height
                         )
@@ -397,7 +572,7 @@ struct DesktopLyricsScrollView: View {
                     if await prepareFocusForPresentationIfNeeded() {
                         return
                     }
-                    await movePlaybackFocus(to: activeInterlude)
+                    await movePlaybackFocus(to: focusedInterlude)
                     return
                 }
                 guard let highlightedID else {
@@ -421,9 +596,6 @@ struct DesktopLyricsScrollView: View {
                     }
                     return
                 }
-                let handsOffFromInterlude = isInterludeHandoff(
-                    to: highlightedID
-                )
                 if preparesInitialFocus {
                     prepareInitialFocus(at: highlightedID)
                     await finishInitialFocusPreparation(
@@ -435,11 +607,6 @@ struct DesktopLyricsScrollView: View {
                 }
                 if await prepareFocusForPresentationIfNeeded() {
                     return
-                }
-                if isActive,
-                   !handsOffFromInterlude {
-                    await Task.yield()
-                    try? await Task.sleep(for: .milliseconds(60))
                 }
                 guard !Task.isCancelled,
                       self.highlightedID == highlightedID else { return }
@@ -485,11 +652,17 @@ struct DesktopLyricsScrollView: View {
         let viewportHeight = currentViewportHeight(
             fallback: proposedViewportHeight
         )
-        let viewportAnchorY = viewportHeight * focusPosition
+        let resolvedFocusPosition = focusPosition(
+            for: viewportHeight,
+            lyricID: playbackFocus?.lyricID,
+            focusedHeightOverride: requestedFocusHeightOverride
+        )
+        let viewportAnchorY = viewportHeight * resolvedFocusPosition
         if isLyricFocus,
            isFocusAligned(
                id: focusID,
-               viewportAnchorY: viewportAnchorY
+               viewportAnchorY: viewportAnchorY,
+               focusPosition: resolvedFocusPosition
            ) {
             return
         }
@@ -695,12 +868,30 @@ struct DesktopLyricsScrollView: View {
             settlePlaybackFocusDuringBrowsing(at: highlightedID)
             return
         }
+        if handsOffFromInterlude {
+            guard model.settings.lyricsAutoFollow else {
+                updateVisualFocus(to: highlightedID)
+                synchronizeStationaryFollowingOffsets()
+                positionedLyricID = highlightedID
+                positionedInterludeID = nil
+                return
+            }
+            await moveFocusFromInterlude(
+                to: highlightedID,
+                viewportHeight: viewportHeight
+            )
+            return
+        }
+        let resolvedFocusPosition = focusPosition(
+            for: viewportHeight,
+            lyricID: highlightedID
+        )
         guard positionedLyricID != highlightedID else {
-            let viewportAnchorY = viewportHeight * focusPosition
-            guard handsOffFromInterlude
-                    || !isFocusAligned(
+            let viewportAnchorY = viewportHeight * resolvedFocusPosition
+            guard !isFocusAligned(
                         id: highlightedID,
-                        viewportAnchorY: viewportAnchorY
+                        viewportAnchorY: viewportAnchorY,
+                        focusPosition: resolvedFocusPosition
                     ) else {
                 return
             }
@@ -714,10 +905,6 @@ struct DesktopLyricsScrollView: View {
         let movementOriginLyricID: LyricLine.ID
         if let positionedLyricID {
             movementOriginLyricID = positionedLyricID
-        } else if handsOffFromInterlude {
-            // A prelude has no preceding lyric, but it is still an ordinary
-            // interlude-to-lyric promotion rather than initial preparation.
-            movementOriginLyricID = highlightedID
         } else {
             var transaction = Transaction()
             transaction.disablesAnimations = true
@@ -743,18 +930,18 @@ struct DesktopLyricsScrollView: View {
             return
         }
 
+        let motionProfile = resolvedAppleMusicLyricsMotionProfile
         guard isActive,
               !isViewportChanging,
               !reduceMotion,
-              handsOffFromInterlude
+              motionProfile != nil
                 || isForwardAdjacentTransition(
                     from: movementOriginLyricID,
                     to: highlightedID
                 ),
               let highlightedIndex = model.lyrics.lyrics.firstIndex(
                 where: { $0.id == highlightedID }
-              ),
-              let nextFocusFrame = geometryCache.frameByID[highlightedID] else {
+              ) else {
             await moveFocusWithoutCascade(
                 to: highlightedID,
                 viewportHeight: viewportHeight
@@ -762,15 +949,53 @@ struct DesktopLyricsScrollView: View {
             return
         }
 
-        let focusAnchorY = viewportHeight * focusPosition
+        // LyricsX does not estimate an off-screen target row.  It waits for
+        // its measured frame, then uses that frame for the one scroll
+        // compensation.  The desktop average-height fallback produced a
+        // second correction when real geometry arrived.
+        let nextFocusFrame: CGRect?
+        if motionProfile != nil {
+            guard await waitForLyricFrame(id: highlightedID),
+                  !Task.isCancelled,
+                  self.highlightedID == highlightedID else {
+                return
+            }
+            nextFocusFrame = geometryCache.frameByID[highlightedID]
+        } else {
+            nextFocusFrame = focusFrame(
+                for: highlightedID,
+                from: movementOriginLyricID
+            )
+        }
+        guard let nextFocusFrame else {
+            await moveFocusWithoutCascade(
+                to: highlightedID,
+                viewportHeight: viewportHeight
+            )
+            return
+        }
+
+        let focusAnchorY = viewportHeight * resolvedFocusPosition
         let nextFocusAnchorY = nextFocusFrame.minY
-            + nextFocusFrame.height * focusPosition
+            + nextFocusFrame.height * resolvedFocusPosition
         let movementDistance = nextFocusAnchorY - focusAnchorY
         guard movementDistance.isFinite,
               abs(movementDistance) > 0.5 else {
             await moveFocusWithoutCascade(
                 to: highlightedID,
                 viewportHeight: viewportHeight
+            )
+            return
+        }
+
+        if let motionProfile {
+            await animateAppleMusicCascade(
+                from: movementOriginLyricID,
+                to: highlightedID,
+                animationOriginID: .lyric(movementOriginLyricID),
+                movementDistance: movementDistance,
+                viewportHeight: viewportHeight,
+                profile: motionProfile
             )
             return
         }
@@ -990,8 +1215,12 @@ struct DesktopLyricsScrollView: View {
             startedTransition.completionDuration - elapsed,
             0
         )
+        // Extra grace lets the last TimelineView frame reach the exact
+        // destination before the movement phase switches back to stationary
+        // values, avoiding the one-frame downward snap reported at the end
+        // of a line-change cascade.
         try? await Task.sleep(
-            for: .seconds(completionDuration + 1.0 / 60.0)
+            for: .seconds(completionDuration + 0.05)
         )
         guard !Task.isCancelled,
               self.highlightedID == highlightedID,
@@ -999,6 +1228,293 @@ struct DesktopLyricsScrollView: View {
             return
         }
         completeCascadeMovement(to: highlightedID)
+    }
+
+    private func animateAppleMusicCascade(
+        from previousID: LyricLine.ID?,
+        to highlightedID: LyricLine.ID,
+        animationOriginID: PositionCascadeLineID,
+        movementDistance: CGFloat,
+        viewportHeight: CGFloat,
+        profile: AppleMusicLyricsMotionProfile,
+        usesTimedWordSourceSpring: Bool = true
+    ) async {
+        let transitionDate = Date.now
+        let carriedPresentations = lyricMovementTransition?
+            .presentationStates(at: transitionDate) ?? [:]
+        var carriedOffsets = lyricMovementOffsetByID
+        carriedOffsets.merge(
+            carriedPresentations.mapValues(\.offset),
+            uniquingKeysWith: { _, presentation in presentation }
+        )
+        let initialMountedIDs = Set(geometryCache.frameByID.keys)
+        let initialMountedInterludeIDs = Set(
+            geometryCache.interludeFrameByID.keys
+        )
+        let initialVisibleIDs = Set(
+            geometryCache.frameByID.compactMap { id, frame in
+                Self.isVisibleLyricFrame(
+                    frame,
+                    movementOffset: carriedOffsets[id, default: 0],
+                    viewportHeight: viewportHeight
+                ) ? id : nil
+            }
+        )
+        let initialVisibleInterludeIDs = Set(
+            geometryCache.interludeFrameByID.compactMap { id, frame in
+                Self.isVisibleLyricFrame(
+                    frame,
+                    viewportHeight: viewportHeight
+                ) ? id : nil
+            }
+        )
+        let destinationOffsets = focusedLineFollowingOffsets(
+            for: highlightedID
+        )
+        let preparedOffsets = Dictionary(
+            uniqueKeysWithValues: model.lyrics.lyrics.map { line in
+                (
+                    line.id,
+                    movementDistance
+                        + carriedOffsets[line.id, default: 0]
+                )
+            }
+        )
+        let preparedTransition = LyricMovementTransition(
+            focusID: highlightedID,
+            initialOffsetsByID: preparedOffsets,
+            destinationOffsetsByID: destinationOffsets
+        )
+
+        var preparation = Transaction(animation: nil)
+        preparation.disablesAnimations = true
+        withTransaction(preparation) {
+            lyricMovementOffsetByID = preparedOffsets
+            lyricMovementTransition = preparedTransition
+            requestScroll(to: highlightedID)
+        }
+        positionedLyricID = highlightedID
+        await Task.yield()
+
+        let destinationIsPrepared = await waitForPreparedFocus(
+            id: highlightedID,
+            viewportHeight: viewportHeight
+        )
+        guard !Task.isCancelled,
+              lyricMovementTransition?.id == preparedTransition.id else {
+            return
+        }
+        guard destinationIsPrepared else {
+            completeCascadeMovement(to: highlightedID)
+            _ = await ensureFocusAlignment(
+                to: highlightedID,
+                viewportHeight: viewportHeight,
+                animated: false
+            )
+            return
+        }
+
+        let targetMountedIDs = Set(geometryCache.frameByID.keys)
+        let targetMountedInterludeIDs = Set(
+            geometryCache.interludeFrameByID.keys
+        )
+        let targetVisibleIDs = Set(
+            geometryCache.frameByID.compactMap { id, frame in
+                Self.isVisibleLyricFrame(
+                    frame,
+                    viewportHeight: viewportHeight
+                ) ? id : nil
+            }
+        )
+        let targetVisibleInterludeIDs = Set(
+            geometryCache.interludeFrameByID.compactMap { id, frame in
+                Self.isVisibleLyricFrame(
+                    frame,
+                    viewportHeight: viewportHeight
+                ) ? id : nil
+            }
+        )
+        let mountedLyricIDs = initialMountedIDs.union(targetMountedIDs)
+        let mountedInterludeIDs = initialMountedInterludeIDs.union(
+            targetMountedInterludeIDs
+        )
+        let mountedIDsInLyricOrder = positionCascadeLineIDs.filter { id in
+            switch id {
+            case let .lyric(lyricID):
+                mountedLyricIDs.contains(lyricID)
+            case let .interlude(interludeID):
+                mountedInterludeIDs.contains(interludeID)
+            }
+        }
+        let plan = AppleMusicLyricsLinePositionPlanner.plan(
+            mountedIDsInLyricOrder: mountedIDsInLyricOrder,
+            currentViewportIDs: Set(
+                initialVisibleIDs.map(PositionCascadeLineID.lyric)
+                    + initialVisibleInterludeIDs.map(
+                        PositionCascadeLineID.interlude
+                    )
+            ),
+            targetViewportIDs: Set(
+                targetVisibleIDs.map(PositionCascadeLineID.lyric)
+                    + targetVisibleInterludeIDs.map(
+                        PositionCascadeLineID.interlude
+                    )
+            ),
+            animationOriginID: animationOriginID,
+            contentOffsetDelta: Double(movementDistance),
+            profile: profile
+        )
+        guard !plan.isEmpty else {
+            completeCascadeMovement(to: highlightedID)
+            return
+        }
+
+        let physicalSpring: LyricPhysicalSpringParameters
+        if usesTimedWordSourceSpring,
+           let previousID,
+           let sourceDuration = appleMusicTimedWordTransitionSourceDuration(
+               from: previousID,
+               to: highlightedID
+           ) {
+            physicalSpring = profile.dynamicSpring(
+                sourceDuration: sourceDuration
+            )
+        } else {
+            physicalSpring = profile.lineChangeSpring
+        }
+        let movementAnimations: [
+            LyricLine.ID: LyricMovementAnimationConfiguration
+        ] = Dictionary(
+            uniqueKeysWithValues: plan.compactMap { plannedLine -> (
+                LyricLine.ID,
+                LyricMovementAnimationConfiguration
+            )? in
+                guard case let .lyric(lyricID) = plannedLine.id else {
+                    return nil
+                }
+                let destination = destinationOffsets[
+                    lyricID,
+                    default: 0
+                ]
+                let initial = preparedOffsets[
+                    lyricID,
+                    default: destination
+                ]
+                guard destination != initial else { return nil }
+                return (
+                    lyricID,
+                    LyricMovementAnimationConfiguration(
+                        delay: plannedLine.delay,
+                        duration: 0,
+                        physicalSpring: physicalSpring,
+                        // The recovered LyricsX descriptor always starts
+                        // this line-position path at zero velocity. Carrying
+                        // the prior SwiftUI presentation velocity gives the
+                        // old focused row a second, unsupported movement.
+                        initialVelocity: 0
+                    )
+                )
+            }
+        )
+        guard !movementAnimations.isEmpty else {
+            completeCascadeMovement(to: highlightedID)
+            return
+        }
+
+        updateVisualColorFocus(to: highlightedID)
+        let startedTransition = preparedTransition.starting(
+            with: movementAnimations,
+            at: .now
+        )
+        var movementTransaction = Transaction(animation: nil)
+        movementTransaction.disablesAnimations = true
+        withTransaction(movementTransaction) {
+            lyricMovementTransition = startedTransition
+            lyricMovementOffsetByID = destinationOffsets
+        }
+        visualCascadeFocusLyricID = highlightedID
+
+        let elapsed = startedTransition.startedAt.map {
+            Date.now.timeIntervalSince($0)
+        } ?? 0
+        let remaining = max(
+            startedTransition.completionDuration - elapsed,
+            0
+        ) + 0.05
+        if remaining > 0 {
+            try? await Task.sleep(for: .seconds(remaining))
+        }
+        guard !Task.isCancelled,
+              self.highlightedID == highlightedID,
+              lyricMovementTransition?.id == startedTransition.id else {
+            return
+        }
+        completeCascadeMovement(to: highlightedID)
+    }
+
+    private func appleMusicTimedWordTransitionSourceDuration(
+        from previousID: LyricLine.ID,
+        to highlightedID: LyricLine.ID
+    ) -> TimeInterval? {
+        guard let previousLine = model.lyrics.lyrics.first(
+            where: { $0.id == previousID }
+        ), let highlightedLine = model.lyrics.lyrics.first(
+            where: { $0.id == highlightedID }
+        ), previousLine.isSyllableSynced,
+           highlightedLine.isSyllableSynced,
+           let previousDuration = previousLine.duration,
+           previousDuration.isFinite,
+           previousDuration >= 0 else { return nil }
+
+        let sourceDuration = highlightedLine.time
+            - (previousLine.time + previousDuration)
+        return sourceDuration.isFinite ? sourceDuration : nil
+    }
+
+    private func focusFrame(
+        for targetID: LyricLine.ID,
+        from originID: LyricLine.ID
+    ) -> CGRect? {
+        if let frame = geometryCache.frameByID[targetID] {
+            return frame
+        }
+        guard let originFrame = geometryCache.frameByID[originID],
+              let originIndex = model.lyrics.lyrics.firstIndex(
+                where: { $0.id == originID }
+              ),
+              let targetIndex = model.lyrics.lyrics.firstIndex(
+                where: { $0.id == targetID }
+              ) else { return nil }
+
+        let measuredHeights = geometryCache.layoutHeightByID.values
+        let averageHeight = measuredHeights.isEmpty
+            ? lyricFontSize * 1.2
+            : measuredHeights.reduce(0, +)
+                / CGFloat(measuredHeights.count)
+        let stride = averageHeight
+            + CGFloat(
+                resolvedAppleMusicLyricsMotionProfile?.lineSpacing
+                    ?? model.settings.lyricsLineSpacing
+            )
+        let indexDistance = CGFloat(targetIndex - originIndex)
+        return CGRect(
+            x: originFrame.minX,
+            y: originFrame.minY + stride * indexDistance,
+            width: originFrame.width,
+            height: averageHeight
+        )
+    }
+
+    nonisolated private static func isVisibleLyricFrame(
+        _ frame: CGRect,
+        movementOffset: CGFloat = 0,
+        viewportHeight: CGFloat
+    ) -> Bool {
+        !frame.isNull
+            && !frame.isInfinite
+            && !frame.isEmpty
+            && frame.maxY + movementOffset > 0
+            && frame.minY + movementOffset < viewportHeight
     }
 
     private func lyricFocusCascadeBounce(
@@ -1046,9 +1562,88 @@ struct DesktopLyricsScrollView: View {
     private func isInterludeHandoff(
         to highlightedID: LyricLine.ID
     ) -> Bool {
-        positionedInterludeID.flatMap { positionedID in
-            interludes.first { $0.id == positionedID }
-        }?.followingLyricID == highlightedID
+        // `visibleInterludeID` is a presentation detail: the indicator can
+        // become visually empty before (or in the same update as) the focus
+        // promotion. LyricsX retains the positioned instrumental view until
+        // its source-to-destination scroll transaction has been committed.
+        // Use that committed position first so the handoff cannot fall into
+        // the ordinary lyric-to-lyric path when the dots have just vanished.
+        let handoffInterludeID = positionedInterludeID ?? visibleInterludeID
+        let handoffInterlude = handoffInterludeID.flatMap {
+            interludeByID[$0]
+        }
+        return handoffInterlude?.followingLyricID == highlightedID
+    }
+
+    /// Music.app commits the new scroll bounds while dismissing the
+    /// instrumental row, then gives each mounted lyric an equal inverse
+    /// displacement. The row offsets settle with the recovered forward
+    /// stagger, which keeps the frame continuous while the next lyric reaches
+    /// the focus anchor.
+    private func moveFocusFromInterlude(
+        to highlightedID: LyricLine.ID,
+        viewportHeight: CGFloat
+    ) async {
+        let handoffInterludeID = positionedInterludeID
+            ?? visibleInterludeID
+        guard let handoffInterludeID,
+              let handoffInterlude = interludeByID[
+                  handoffInterludeID
+              ],
+              handoffInterlude.followingLyricID == highlightedID else {
+            await moveFocusWithoutCascade(
+                to: highlightedID,
+                viewportHeight: viewportHeight
+            )
+            return
+        }
+
+        guard isActive,
+              !isViewportChanging,
+              !reduceMotion,
+              let motionProfile =
+                resolvedAppleMusicLyricsMotionProfile else {
+            await moveFocusWithoutCascade(
+                to: highlightedID,
+                viewportHeight: viewportHeight
+            )
+            return
+        }
+
+        guard await waitForLyricFrame(id: highlightedID),
+              !Task.isCancelled,
+              self.highlightedID == highlightedID,
+              let nextFocusFrame = geometryCache.frameByID[
+                  highlightedID
+              ] else {
+            return
+        }
+        let resolvedFocusPosition = focusPosition(
+            for: viewportHeight,
+            lyricID: highlightedID
+        )
+        let focusAnchorY = viewportHeight * resolvedFocusPosition
+        let nextFocusAnchorY = nextFocusFrame.minY
+            + nextFocusFrame.height * resolvedFocusPosition
+        let movementDistance = nextFocusAnchorY - focusAnchorY
+        guard movementDistance.isFinite,
+              abs(movementDistance) > 0.5 else {
+            await moveFocusWithoutCascade(
+                to: highlightedID,
+                viewportHeight: viewportHeight
+            )
+            return
+        }
+
+        await animateAppleMusicCascade(
+            from: handoffInterlude.precedingLyricID,
+            to: highlightedID,
+            animationOriginID: .interlude(handoffInterludeID),
+            movementDistance: movementDistance,
+            viewportHeight: viewportHeight,
+            profile: motionProfile,
+            usesTimedWordSourceSpring: false
+        )
     }
 
     private func waitForPreparedFocus(
@@ -1056,12 +1651,17 @@ struct DesktopLyricsScrollView: View {
         viewportHeight proposedViewportHeight: CGFloat
     ) async -> Bool {
         for attempt in 0..<30 {
-            let viewportAnchorY = currentViewportHeight(
+            let viewportHeight = currentViewportHeight(
                 fallback: proposedViewportHeight
-            ) * focusPosition
+            )
+            let resolvedFocusPosition = focusPosition(
+                for: viewportHeight,
+                lyricID: id
+            )
+            let viewportAnchorY = viewportHeight * resolvedFocusPosition
             if let frame = geometryCache.frameByID[id] {
                 let preparedAnchorY = frame.minY
-                    + frame.height * focusPosition
+                    + frame.height * resolvedFocusPosition
                 if abs(preparedAnchorY - viewportAnchorY) <= 2 {
                     return true
                 }
@@ -1077,14 +1677,15 @@ struct DesktopLyricsScrollView: View {
     }
 
     private func completeCascadeMovement(to id: LyricLine.ID) {
+        let finalOffsets = focusedLineFollowingOffsets(for: id)
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            requestScroll(to: id)
             visualCascadeFocusLyricID = id
-            lyricMovementOffsetByID = focusedLineFollowingOffsets(for: id)
+            lyricMovementOffsetByID = finalOffsets
             lyricMovementTransition = nil
             positionedLyricID = id
+            positionedInterludeID = nil
         }
         updateVisualColorFocus(to: id)
     }
@@ -1102,6 +1703,23 @@ struct DesktopLyricsScrollView: View {
         }
     }
 
+    /// Mirrors LyricsX's non-cascade fallback: first freeze the completed
+    /// presentation at the current focus, then move the scroll container, and
+    /// finally commit one destination offset set with the line-change spring.
+    private func resetMovementOffsets() {
+        let focusID = visualCascadeFocusLyricID
+            ?? playbackFocus?.lyricID
+            ?? highlightedID
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            lyricMovementOffsetByID = focusedLineFollowingOffsets(
+                for: focusID
+            )
+            lyricMovementTransition = nil
+        }
+    }
+
     private func moveFocusWithoutCascade(
         to highlightedID: LyricLine.ID,
         viewportHeight: CGFloat
@@ -1110,19 +1728,46 @@ struct DesktopLyricsScrollView: View {
             for: highlightedID,
             in: model.lyrics.lyrics
         )
-        lyricMovementTransition = nil
+        resetMovementOffsets()
         _ = await ensureFocusAlignment(
             to: highlightedID,
             viewportHeight: viewportHeight,
             animated: true,
             animationDuration: max(duration, 0.34)
         )
+        await Task.yield()
         guard !Task.isCancelled else { return }
-        lyricMovementOffsetByID = focusedLineFollowingOffsets(
+        let destinationOffsets = focusedLineFollowingOffsets(
             for: highlightedID
         )
-        updateVisualFocus(to: highlightedID)
+        updateVisualColorFocus(to: highlightedID)
+        withAnimation(
+            reduceMotion
+                ? nil
+                : lyricLineChangeAnimation(
+                    fallback: .easeInOut(duration: duration)
+                )
+        ) {
+            visualCascadeFocusLyricID = highlightedID
+            lyricMovementOffsetByID = destinationOffsets
+        }
         positionedLyricID = highlightedID
+        positionedInterludeID = nil
+    }
+
+    private func lyricLineChangeAnimation(
+        fallback: Animation
+    ) -> Animation {
+        guard let spring = resolvedAppleMusicLyricsMotionProfile?
+            .lineChangeSpring else {
+            return fallback
+        }
+        return .interpolatingSpring(
+            mass: spring.mass,
+            stiffness: spring.stiffness,
+            damping: spring.damping,
+            initialVelocity: 0
+        )
     }
 
     private func ensureFocusAlignment(
@@ -1135,9 +1780,17 @@ struct DesktopLyricsScrollView: View {
         let viewportHeight = currentViewportHeight(
             fallback: proposedViewportHeight
         )
-        let viewportAnchorY = viewportHeight * focusPosition
+        let resolvedFocusPosition = focusPosition(
+            for: viewportHeight,
+            lyricID: id
+        )
+        let viewportAnchorY = viewportHeight * resolvedFocusPosition
         if !forcesScrollTargetReapplication,
-           isFocusAligned(id: id, viewportAnchorY: viewportAnchorY) {
+           isFocusAligned(
+               id: id,
+               viewportAnchorY: viewportAnchorY,
+               focusPosition: resolvedFocusPosition
+           ) {
             return true
         }
 
@@ -1169,12 +1822,17 @@ struct DesktopLyricsScrollView: View {
                 return true
             }
         }
-        return isFocusAligned(id: id, viewportAnchorY: viewportAnchorY)
+        return isFocusAligned(
+            id: id,
+            viewportAnchorY: viewportAnchorY,
+            focusPosition: resolvedFocusPosition
+        )
     }
 
     private func isFocusAligned(
         id: LyricLine.ID,
-        viewportAnchorY: CGFloat
+        viewportAnchorY: CGFloat,
+        focusPosition: CGFloat
     ) -> Bool {
         guard let frame = geometryCache.frameByID[id] else { return false }
         let currentAnchorY = frame.minY + frame.height * focusPosition
@@ -1218,20 +1876,59 @@ struct DesktopLyricsScrollView: View {
     ) {
         guard visualHighlightedLyricID != highlightedLyricID else { return }
         let now = Date.now
-        let initialProgressByID: [LyricLine.ID: CGFloat]
+        let initialColorProgressByID: [LyricLine.ID: CGFloat]
+        let initialBlurProgressByID: [LyricLine.ID: CGFloat]
         if let lyricFocusColorTransition {
-            initialProgressByID = lyricFocusColorTransition
-                .presentationProgressByID(at: now)
+            initialColorProgressByID = lyricFocusColorTransition
+                .presentationColorProgressByID(at: now)
+            initialBlurProgressByID = lyricFocusColorTransition
+                .presentationBlurProgressByID(at: now)
         } else if let visualHighlightedLyricID {
-            initialProgressByID = [visualHighlightedLyricID: 1]
+            initialColorProgressByID = [visualHighlightedLyricID: 1]
+            initialBlurProgressByID = [visualHighlightedLyricID: 1]
         } else {
-            initialProgressByID = [:]
+            initialColorProgressByID = [:]
+            initialBlurProgressByID = [:]
+        }
+        let motionProfile = resolvedAppleMusicLyricsMotionProfile
+        let colorTimingCurve: LyricFocusColorTransition.TimingCurve =
+            motionProfile.map {
+                .physicalSpring($0.lineChangeSpring)
+            } ?? .smoothStep
+        let blurTimingCurve: LyricFocusColorTransition.TimingCurve =
+            motionProfile.map {
+                .cubicBezier(
+                    CGFloat($0.focusBlurTransitionControlPoint1X),
+                    CGFloat($0.focusBlurTransitionControlPoint1Y),
+                    CGFloat($0.focusBlurTransitionControlPoint2X),
+                    CGFloat($0.focusBlurTransitionControlPoint2Y)
+                )
+            } ?? .smoothStep
+        let colorDuration: TimeInterval
+        if let spring = motionProfile?.lineChangeSpring {
+            colorDuration = Spring(
+                mass: spring.mass,
+                stiffness: spring.stiffness,
+                damping: spring.damping,
+                allowOverDamping: true
+            ).settlingDuration(
+                target: 1,
+                initialVelocity: 0,
+                epsilon: 0.001
+            )
+        } else {
+            colorDuration = Self.focusColorTransitionDuration
         }
         let transition = LyricFocusColorTransition(
-            initialProgressByID: initialProgressByID,
+            initialColorProgressByID: initialColorProgressByID,
+            initialBlurProgressByID: initialBlurProgressByID,
             destinationLyricID: highlightedLyricID,
             startedAt: now,
-            duration: Self.focusColorTransitionDuration
+            colorDuration: colorDuration,
+            blurDuration: motionProfile?.focusBlurTransitionDuration
+                ?? Self.focusColorTransitionDuration,
+            colorTimingCurve: colorTimingCurve,
+            blurTimingCurve: blurTimingCurve
         )
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -1284,20 +1981,40 @@ struct DesktopLyricsScrollView: View {
             viewportWidth: viewportSize.width,
             compact: compact
         )
-        let visualFocusAnchorY =
-            DesktopLyricsLayoutMetrics.visualFocusAnchorY(
-                viewportHeight: viewportHeight,
-                focusPosition: focusPosition
-            )
-        let topPadding: CGFloat = compact
-            ? max(viewportHeight * focusPosition, 44)
-            : max(viewportHeight * focusPosition, 40)
+        let resolvedFontSize = resolvedLyricFontSize(
+            for: viewportSize.width
+        )
+        let resolvedFocusPosition = focusPosition(
+            for: viewportHeight,
+            viewportWidth: viewportSize.width,
+            lyricID: requestedFocusLyricID,
+            focusedHeightOverride: requestedFocusHeightOverride
+        )
+        // LyricsX measures every row effect from the same selected-line
+        // position used by its scroll controller. Keeping one anchor avoids a
+        // second position update after the line-change spring settles.
+        let visualFocusAnchorY = DesktopLyricsLayoutMetrics
+            .quantizedVisualFocusAnchorY(
+                viewportHeight * resolvedFocusPosition
+        )
+        let topPadding: CGFloat = if let profile =
+            resolvedAppleMusicLyricsMotionProfile {
+            CGFloat(profile.firstLineStartOffset)
+        } else if compact {
+            max(viewportHeight * resolvedFocusPosition, 44)
+        } else {
+            max(viewportHeight * resolvedFocusPosition, 40)
+        }
         let bottomPadding: CGFloat = compact
-            ? max(viewportHeight * (1 - focusPosition), 96)
-            : max(viewportHeight * (1 - focusPosition), 80)
+            ? max(viewportHeight * (1 - resolvedFocusPosition), 96)
+            : max(viewportHeight * (1 - resolvedFocusPosition), 80)
         let lineSpacing = DesktopLyricsLayoutMetrics.lineSpacing(
-            setting: model.settings.lyricsLineSpacing,
-            compact: compact
+            setting:
+                resolvedAppleMusicLyricsMotionProfile?.lineSpacing
+                    ?? model.settings.lyricsLineSpacing,
+            compact: compact,
+            usesAppleMusicMotion:
+                resolvedAppleMusicLyricsMotionProfile != nil
         )
         let blurFocusIndex = lyrics.firstIndex {
             $0.id == blurFocusID
@@ -1313,8 +2030,6 @@ struct DesktopLyricsScrollView: View {
                 ? lyrics[followingIndex].id
                 : nil
         }
-        let hasTranslations = lyrics.contains(where: \.hasTranslation)
-        let hasRomanizations = lyrics.contains(where: \.hasRomanization)
         let containsSyllableSyncedLyrics = lyrics.contains(
             where: \.isSyllableSynced
         )
@@ -1326,44 +2041,74 @@ struct DesktopLyricsScrollView: View {
                     spacing: lineSpacing
                 ) {
                     ForEach(lyrics) { line in
-                        if let layoutInterlude,
-                           layoutInterlude.displayBeforeLyricID == line.id {
+                        if let interlude = interludeByDisplayLyricID[line.id] {
                             AppleMusicLyricInterludeView(
-                                interlude: layoutInterlude,
+                                interlude: interlude,
+                                isVisible:
+                                    visibleInterludeID == interlude.id,
                                 advanceTime: effectiveLyricsAdvanceTime,
-                                fontSize: lyricFontSize,
+                                motionProfile:
+                                    resolvedAppleMusicLyricsMotionProfile?
+                                        .instrumentalBreak
+                                        ?? .macOS26_6,
+                                visualScale: visualScale,
                                 onInterfaceInteraction: nil
                             )
                             .environment(model.player)
-                            .id(layoutInterlude.id)
+                            .onGeometryChange(for: CGRect.self) { geometry in
+                                Self.quantizedGeometryFrame(
+                                    geometry.frame(
+                                        in: .scrollView(axis: .vertical)
+                                    )
+                                )
+                            } action: { frame in
+                                guard acceptsGeometryUpdates else { return }
+                                recordInterludeGeometry(
+                                    frame,
+                                    for: interlude.id
+                                )
+                            }
+                            .onDisappear {
+                                geometryCache.removeInterludeMeasurements(
+                                    for: interlude.id
+                                )
+                            }
+                            .id(interlude.id)
                         }
 
                         lyricLine(
                             line,
+                            fontSize: resolvedFontSize,
                             layoutWidth: textLayoutWidth,
                             visualFocusAnchorY: visualFocusAnchorY,
+                            isBlurFocusLine: line.id == blurFocusID,
                             isPrecedingFocusLine: line.id == precedingFocusID,
                             isFollowingFocusLine: line.id == followingFocusID,
-                            hasTranslations: hasTranslations,
-                            hasRomanizations: hasRomanizations,
                             hasSyllableSyncedLyrics:
                                 containsSyllableSyncedLyrics
                         )
                             .id(line.id)
                     }
                 }
-                .animation(
-                    reduceMotion ? nil : .smooth(duration: 0.5),
-                    value: layoutInterlude?.id
-                )
                 .padding(.top, topPadding)
                 .padding(.bottom, bottomPadding)
-                .padding(.horizontal, compact ? 24 : 0)
+                .padding(.horizontal, 20)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .scrollTargetLayout()
             }
             .scrollClipDisabled(!compact)
-            .defaultScrollAnchor(focusAnchor, for: .sizeChanges)
+            .defaultScrollAnchor(
+                resolvedAppleMusicLyricsMotionProfile == nil
+                    ? focusAnchor(
+                        for: viewportHeight,
+                        viewportWidth: viewportSize.width,
+                        lyricID: requestedFocusLyricID,
+                        focusedHeightOverride:
+                            requestedFocusHeightOverride
+                    )
+                    : .top,
+                for: .sizeChanges
+            )
             .onScrollPhaseChange { _, newPhase in
                 switch newPhase {
                 case .tracking, .interacting:
@@ -1376,7 +2121,11 @@ struct DesktopLyricsScrollView: View {
             }
             .onChange(of: scrollRequest, initial: true) { _, request in
                 guard let request else { return }
-                performScroll(request, with: proxy)
+                performScroll(
+                    request,
+                    with: proxy,
+                    viewportSize: viewportSize
+                )
             }
             .transaction { transaction in
                 if !isInitialFocusPrepared
@@ -1396,10 +2145,23 @@ struct DesktopLyricsScrollView: View {
             scrollView
         } else {
             scrollView.mask {
+                let topOpaqueLocation = min(
+                    max(
+                        CGFloat(
+                            resolvedAppleMusicLyricsMotionProfile?
+                                .viewportMaskTopOpaquePercent ?? 8
+                        ) / 100,
+                        0
+                    ),
+                    1
+                )
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.08),
+                        .init(
+                            color: .black,
+                            location: topOpaqueLocation
+                        ),
                         .init(color: .black, location: 0.86),
                         .init(color: .clear, location: 1),
                     ],
@@ -1409,7 +2171,9 @@ struct DesktopLyricsScrollView: View {
                 .frame(
                     width:
                         viewportSize.width
-                        + horizontalVisualOverflow * 2
+                        + horizontalVisualOverflow(
+                            viewportWidth: viewportSize.width
+                        ) * 2
                 )
             }
         }
@@ -1443,12 +2207,12 @@ struct DesktopLyricsScrollView: View {
 
     private func lyricLine(
         _ line: LyricLine,
+        fontSize: CGFloat,
         layoutWidth: CGFloat,
         visualFocusAnchorY: CGFloat,
+        isBlurFocusLine: Bool,
         isPrecedingFocusLine: Bool,
         isFollowingFocusLine: Bool,
-        hasTranslations: Bool,
-        hasRomanizations: Bool,
         hasSyllableSyncedLyrics: Bool
     ) -> some View {
         return DesktopLyricLineView(
@@ -1456,19 +2220,21 @@ struct DesktopLyricsScrollView: View {
             isPlaybackLine: line.id == visualHighlightedLyricID,
             isActualPlaybackLine: line.id == highlightedID,
             isScaleFocused: line.id == visualFocusID,
+            isBlurFocusLine: isBlurFocusLine,
             isPrecedingFocusLine: isPrecedingFocusLine,
             isFollowingFocusLine: isFollowingFocusLine,
+            isBrowsingLyrics: isBrowsingLyrics,
             actualHighlightedLyricID: highlightedID,
             visualHighlightedLyricID: visualHighlightedLyricID,
             focusColorTransition: lyricFocusColorTransition,
             movementPhase: lyricMovementPhase(for: line.id),
+            fontSize: fontSize,
             layoutWidth: layoutWidth,
             visualFocusAnchorY: visualFocusAnchorY,
+            motionProfile: resolvedAppleMusicLyricsMotionProfile,
             compact: compact,
             allowsLyricBlur: allowsLyricBlur,
             foregroundColor: foregroundColor,
-            hasTranslations: hasTranslations,
-            hasRomanizations: hasRomanizations,
             hasSyllableSyncedLyrics: hasSyllableSyncedLyrics,
             onAnnotationHeightChange: { height in
                 guard acceptsGeometryUpdates else { return }
@@ -1478,6 +2244,7 @@ struct DesktopLyricsScrollView: View {
                 resumePlaybackFollowing()
             }
         )
+        .equatable()
         .onGeometryChange(for: CGRect.self) { geometry in
             Self.quantizedGeometryFrame(
                 geometry.frame(in: .scrollView(axis: .vertical))
@@ -1492,14 +2259,28 @@ struct DesktopLyricsScrollView: View {
     }
 
     private var lyricFontSize: CGFloat {
-        CGFloat(model.settings.lyricsFontSize)
+        resolvedLyricFontSize(for: geometryCache.viewportSize.width)
+    }
+
+    private func resolvedLyricFontSize(
+        for proposedViewportWidth: CGFloat
+    ) -> CGFloat {
+        guard resolvedAppleMusicLyricsMotionProfile != nil else {
+            return CGFloat(model.settings.lyricsFontSize)
+        }
+        let viewportWidth = proposedViewportWidth.isFinite
+                && proposedViewportWidth > 0
+            ? proposedViewportWidth
+            : 384
+        return AppleMusicLyricsTypographyProfile.macOS26_6
+            .primaryFontSize(for: viewportWidth)
     }
 
     private var lyricsCurrentLineScale: CGFloat {
         CGFloat(
             min(
                 max(
-                    model.settings.lyricsCurrentLineScale,
+                    model.settings.effectiveAppleMusicLyricsCurrentLineScale,
                     AppSettings.lyricsCurrentLineScaleRange.lowerBound
                 ),
                 AppSettings.lyricsCurrentLineScaleRange.upperBound
@@ -1520,11 +2301,19 @@ struct DesktopLyricsScrollView: View {
             return
         }
         if id == visualCascadeFocusLyricID,
-           !isViewportChanging,
            lyricMovementTransition == nil,
-           update.layoutHeightChanged {
-            scheduleStationaryFollowingOffsetsSynchronization()
+           update.layoutHeightChanged,
+           !isViewportChanging {
+            synchronizeStationaryFollowingOffsets()
         }
+    }
+
+    private func recordInterludeGeometry(
+        _ frame: CGRect,
+        for id: LyricInterlude.ID
+    ) {
+        guard acceptsGeometryUpdates else { return }
+        geometryCache.recordInterludeFrame(frame, for: id)
     }
 
     private func recordAnnotationHeight(
@@ -1537,22 +2326,17 @@ struct DesktopLyricsScrollView: View {
             return
         }
         if id == visualCascadeFocusLyricID,
-           !isViewportChanging,
-           lyricMovementTransition == nil {
-            scheduleStationaryFollowingOffsetsSynchronization()
-        }
-    }
-
-    private func scheduleStationaryFollowingOffsetsSynchronization() {
-        geometryCache.scheduleLayoutSynchronization {
-            guard lyricMovementTransition == nil else { return }
+           lyricMovementTransition == nil,
+           !isViewportChanging {
             synchronizeStationaryFollowingOffsets()
         }
     }
 
     private func synchronizeStationaryFollowingOffsets() {
         let offsets = focusedLineFollowingOffsets(
-            for: visualCascadeFocusLyricID ?? highlightedID
+            for: visualCascadeFocusLyricID
+                ?? playbackFocus?.lyricID
+                ?? highlightedID
         )
         guard !Self.offsetsAreApproximatelyEqual(
             lyricMovementOffsetByID,
@@ -1675,6 +2459,24 @@ struct DesktopLyricsScrollView: View {
                 && focusedLine.hasTranslation
                 && model.settings.lyricsTranslationDisplayMode
                     == .focusedLine
+        if resolvedAppleMusicLyricsMotionProfile != nil {
+            // LyricsX's primary/transliteration/translation layers share the
+            // line content geometry. `layoutHeightByID` already contains the
+            // reserved supplemental height, so use it directly and never add
+            // a second estimated annotation delta after the focus settles.
+            let followingOffset = max(
+                focusedLayoutHeight * (lyricsCurrentLineScale - 1),
+                0
+            )
+            guard followingOffset > 0.5 else { return [:] }
+            return Dictionary(
+                uniqueKeysWithValues:
+                    model.lyrics.lyrics[(focusedIndex + 1)...].map {
+                        ($0.id, followingOffset)
+                    }
+            )
+        }
+
         if (expandsRomanization || expandsTranslation),
            focusedLyricID != visualCascadeFocusLyricID {
             if expandsRomanization {

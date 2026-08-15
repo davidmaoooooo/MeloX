@@ -1176,7 +1176,7 @@ final class AppSettings {
         didSet {
             defaults.set(rememberNowPlayingPage, forKey: Key.rememberNowPlayingPage)
             if !rememberNowPlayingPage {
-                rememberedNowPlayingPage = "artwork"
+                rememberedNowPlayingPage = "lyrics"
             }
         }
     }
@@ -1240,6 +1240,7 @@ final class AppSettings {
 
     let skylineLyrics: SkylineLyricsPreferences
     let textPV: TextPVPreferences
+    let appleMusicLyrics: AppleMusicLyricsPreferences
     let equalizer: AudioEqualizerPreferences
     let autoMix: AutoMixPreferences
     let floatingLyrics: FloatingLyricsPreferences
@@ -1254,6 +1255,7 @@ final class AppSettings {
         self.defaults = defaults
         skylineLyrics = SkylineLyricsPreferences(defaults: defaults)
         textPV = TextPVPreferences(defaults: defaults)
+        appleMusicLyrics = AppleMusicLyricsPreferences(defaults: defaults)
         equalizer = AudioEqualizerPreferences(defaults: defaults)
         autoMix = AutoMixPreferences(defaults: defaults)
         floatingLyrics = FloatingLyricsPreferences(defaults: defaults)
@@ -1791,7 +1793,7 @@ final class AppSettings {
                 : .disabled
         }
         rememberNowPlayingPage = defaults.object(forKey: Key.rememberNowPlayingPage) as? Bool ?? false
-        rememberedNowPlayingPage = defaults.string(forKey: Key.rememberedNowPlayingPage) ?? "artwork"
+        rememberedNowPlayingPage = defaults.string(forKey: Key.rememberedNowPlayingPage) ?? "lyrics"
         previousRestartsCurrentSong = defaults.object(forKey: Key.previousRestartsCurrentSong) as? Bool ?? true
         startsHeartModeOnLaunch = defaults.object(
             forKey: Key.startsHeartModeOnLaunch
@@ -2072,11 +2074,12 @@ final class AppSettings {
         lyricsAdvanceTimeAppliesToWordByWord = false
         lyricsRefreshRate = .defaultValue
         textPV.reset()
+        appleMusicLyrics.reset()
         floatingLyrics.reset()
         lyricsNotifications.reset()
         playerScreenAwakeMode = .lyrics
         rememberNowPlayingPage = false
-        rememberedNowPlayingPage = "artwork"
+        rememberedNowPlayingPage = "lyrics"
         previousRestartsCurrentSong = true
         startsHeartModeOnLaunch = Self.defaultStartsHeartModeOnLaunch
         skylineLyrics.reset()

@@ -274,8 +274,28 @@ private struct DesktopPlaybackSettingsView: View {
                     minimumValueLabel: { Text("静止") },
                     maximumValueLabel: { Text("强") }
                 )
-                Toggle("背景响应节拍", isOn: $settings.playerBackgroundBeatEffectsEnabled)
+                if settings.playerBackgroundStyle == .flowingLight {
+                    Toggle(
+                        "背景响应节拍",
+                        isOn: $settings.playerBackgroundBeatEffectsEnabled
+                    )
+                }
+                if settings.playerBackgroundStyle == .appleMusicBackdrop {
+                    Text(
+                        "使用 Music 1.6.6 的三层旋转、响应式遮罩、1.3 倍饱和度与画面对角线模糊参数。"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
                 Toggle("暂停时缩小封面", isOn: $settings.shrinksPausedArtwork)
+                Toggle("记住播放器上次页面", isOn: $settings.rememberNowPlayingPage)
+                Text(
+                    settings.rememberNowPlayingPage
+                        ? "再次打开播放器时恢复封面、歌词或队列页面。"
+                        : "每次打开播放器时从歌词页面开始。"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 Picker("保持屏幕唤醒", selection: $settings.playerScreenAwakeMode) {
                     ForEach(
                         PlayerScreenAwakeMode.allCases.filter {
