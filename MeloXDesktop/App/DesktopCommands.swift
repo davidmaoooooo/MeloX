@@ -36,7 +36,9 @@ private struct DesktopPlaybackCommands: Commands {
             Button(model.player.isPlaying ? "暂停" : "播放") {
                 model.player.togglePlayback()
             }
-            .keyboardShortcut(.space, modifiers: [])
+            .keyboardShortcut(
+                DesktopPlaybackKeyboardShortcuts.togglePlayback
+            )
             .disabled(model.player.currentSong == nil)
 
             Button("上一首") {

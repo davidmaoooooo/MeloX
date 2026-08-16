@@ -110,8 +110,10 @@ struct DesktopPlaybackControls: View {
                     )
                 )
         }
-        .keyboardShortcut(.space, modifiers: [])
-        .help(model.player.isPlaying ? "暂停" : "播放")
+        .keyboardShortcut(
+            DesktopPlaybackKeyboardShortcuts.togglePlayback
+        )
+        .help(model.player.isPlaying ? "暂停（空格）" : "播放（空格）")
     }
 
     private var nextButton: some View {
