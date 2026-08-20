@@ -28,9 +28,9 @@ enum PlayerBackgroundRenderQuality: String, CaseIterable, Identifiable {
         case .high:
             "使用播放器窗口的原始分辨率，画质最佳，GPU 占用最高。"
         case .standard:
-            "渲染最长边限制为 640pt，画质与性能平衡。"
+            "渲染最长边限制为 960pt，画质与性能平衡。"
         case .low:
-            "渲染最长边限制为 480pt，更省电，画面略柔和。"
+            "渲染最长边限制为 720pt，更省电，画面略柔和。"
         }
     }
 }
