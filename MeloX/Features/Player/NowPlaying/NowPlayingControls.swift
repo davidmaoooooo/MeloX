@@ -17,8 +17,14 @@ struct NowPlayingProgressControl: View {
             )
             .sliderThumbVisibility(.hidden)
             .tint(.white)
-            .accessibilityLabel("播放进度")
-            .accessibilityValue("已播放 \(formatTime(player.progress))，总时长 \(formatTime(progressMaximum))")
+            .accessibilityLabel("ui.player.progress")
+            .accessibilityValue(
+                L10n.format(
+                    "ui.player.progress_accessibility",
+                    formatTime(player.progress),
+                    formatTime(progressMaximum)
+                )
+            )
 
             HStack {
                 Text(formatTime(player.progress))
@@ -74,7 +80,7 @@ private struct NowPlayingAutoMixStatus: View {
                             && player.isAutoMixTransitioning
                 )
 
-            Text("混音中")
+            Text("ui.player.mixing")
                 .fontWeight(.medium)
 
             ProgressView(
@@ -86,7 +92,7 @@ private struct NowPlayingAutoMixStatus: View {
             .tint(.white)
             .frame(width: 30)
 
-            Text("\(progressPercent)%")
+            Text(L10n.percentagePoints(Double(progressPercent)))
                 .monospacedDigit()
                 .frame(minWidth: 24, alignment: .trailing)
         }
@@ -98,16 +104,20 @@ private struct NowPlayingAutoMixStatus: View {
         )
         .foregroundStyle(.white.opacity(0.86))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("自动混音中")
+        .accessibilityLabel("ui.player.automix_active")
         .accessibilityValue(accessibilityValue)
     }
 
     private var accessibilityValue: String {
         if let songName =
             player.autoMixIncomingSongName {
-            return "正在过渡到\(songName)，\(progressPercent)%"
+            return L10n.format(
+                "ui.player.transitioning_to",
+                songName,
+                progressPercent
+            )
         }
-        return "\(progressPercent)%"
+        return L10n.percentagePoints(Double(progressPercent))
     }
 
     private var progressPercent: Int {
@@ -128,9 +138,9 @@ private struct NowPlayingQualityMenu: View {
     var body: some View {
         Menu {
             if player.availablePlaybackQualities.isEmpty {
-                Text("正在获取可用音质")
+                Text("ui.player.loading_quality")
             } else {
-                Picker("音质", selection: qualityBinding) {
+                Picker("ui.player.quality", selection: qualityBinding) {
                     ForEach(player.availablePlaybackQualities) { quality in
                         Text(quality.title).tag(quality)
                     }
@@ -151,13 +161,13 @@ private struct NowPlayingQualityMenu: View {
             .contentShape(.rect)
         }
         .tint(.white)
-        .accessibilityLabel("播放音质")
+        .accessibilityLabel("ui.player.playback_quality")
         .accessibilityValue(displayedQualityTitle)
-        .accessibilityHint("轻点调整当前歌曲音质")
+        .accessibilityHint("ui.player.quality_hint")
     }
 
     private var displayedQualityTitle: String {
-        player.effectivePlaybackQuality?.title ?? "音质"
+        player.effectivePlaybackQuality?.title ?? L10n.string("ui.player.quality")
     }
 
     private var qualityBinding: Binding<MusicQuality> {
@@ -193,7 +203,7 @@ struct NowPlayingTransportControls: View {
                     reducesMotion: accessibilityReduceMotion
                 )
             )
-            .accessibilityLabel("上一首")
+            .accessibilityLabel("ui.player.previous")
 
             Spacer()
 
@@ -232,7 +242,11 @@ struct NowPlayingTransportControls: View {
                     reducesMotion: accessibilityReduceMotion
                 )
             )
-            .accessibilityLabel(player.isPlaying ? "暂停" : "播放")
+            .accessibilityLabel(
+                player.isPlaying
+                    ? L10n.string("ui.player.pause")
+                    : L10n.string("ui.common.play")
+            )
 
             Spacer()
 
@@ -249,7 +263,7 @@ struct NowPlayingTransportControls: View {
                     reducesMotion: accessibilityReduceMotion
                 )
             )
-            .accessibilityLabel("下一首")
+            .accessibilityLabel("ui.player.next")
 
             Spacer()
         }
@@ -295,10 +309,10 @@ struct NowPlayingVolumeControl: View {
                 in: 0...1
             )
             .tint(.white)
-            .accessibilityLabel("播放器音量")
+            .accessibilityLabel("ui.player.volume")
         case .system:
             SystemVolumeSlider()
-                .accessibilityLabel("系统音量")
+                .accessibilityLabel("ui.player.system_volume")
         }
     }
 }
@@ -357,7 +371,7 @@ struct NowPlayingPageSelector: View {
                     pageButton(
                         page: .queue,
                         systemImage: "list.bullet",
-                        accessibilityLabel: "播放队列",
+                        accessibilityLabel: L10n.string("ui.player.queue"),
                         badgeSystemImage:
                             page == .queue
                                 ? nil
@@ -371,7 +385,7 @@ struct NowPlayingPageSelector: View {
                     pageButton(
                         page: .lyrics,
                         systemImage: "quote.bubble",
-                        accessibilityLabel: "歌词"
+                        accessibilityLabel: L10n.string("ui.settings.lyrics.title")
                     )
 
                     Spacer()
@@ -383,7 +397,7 @@ struct NowPlayingPageSelector: View {
                     pageButton(
                         page: .queue,
                         systemImage: "list.bullet",
-                        accessibilityLabel: "播放队列",
+                        accessibilityLabel: L10n.string("ui.player.queue"),
                         badgeSystemImage:
                             page == .queue
                                 ? nil
