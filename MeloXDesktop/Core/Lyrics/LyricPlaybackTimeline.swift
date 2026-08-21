@@ -2,6 +2,7 @@ import Foundation
 
 struct LyricPlaybackPosition: Equatable {
     let highlightedLyricID: LyricLine.ID?
+    let activeLyricIDs: Set<LyricLine.ID>
     let nextTransitionTime: TimeInterval?
 }
 
@@ -38,6 +39,7 @@ enum LyricPlaybackTimeline {
         guard !lyrics.isEmpty else {
             return LyricPlaybackPosition(
                 highlightedLyricID: nil,
+                activeLyricIDs: [],
                 nextTransitionTime: nil
             )
         }
@@ -53,16 +55,103 @@ enum LyricPlaybackTimeline {
             }
         }
 
-        let highlightedLyricID = lowerBound > lyrics.startIndex
+        let latestStartedLyricID = lowerBound > lyrics.startIndex
             ? lyrics[lyrics.index(before: lowerBound)].id
             : nil
-        let nextTransitionTime = lowerBound < lyrics.endIndex
+        var activeLyrics = lyrics[..<lowerBound].filter { line in
+            guard line.time <= playbackTime else { return false }
+            guard let duration = line.duration,
+                  duration > 0 else {
+                return line.id == latestStartedLyricID
+            }
+            return playbackTime < line.time + duration
+        }
+        if activeLyrics.isEmpty,
+           let latestStartedLyricID,
+           let highlightedLine = lyrics[..<lowerBound].last(where: {
+               $0.id == latestStartedLyricID
+           }) {
+            activeLyrics = [highlightedLine]
+        }
+        let highlightedLyricID = activeLyrics.last(where: {
+            $0.agent?.alignment != .flipped
+        })?.id ?? activeLyrics.last.map {
+            inheritedFocusLyricID(
+                for: $0,
+                in: lyrics[..<lowerBound]
+            )
+        } ?? latestStartedLyricID
+        let activeLyricIDs = Set(activeLyrics.map(\.id))
+        let nextStartTime = lowerBound < lyrics.endIndex
             ? lyrics[lowerBound].time
             : nil
+        let nextEndTime = activeLyrics.compactMap { line -> TimeInterval? in
+            guard let duration = line.duration,
+                  duration > 0 else {
+                return nil
+            }
+            let end = line.time + duration
+            return end > playbackTime ? end : nil
+        }.min()
+        let nextTransitionTime = [nextStartTime, nextEndTime]
+            .compactMap { $0 }
+            .min()
         return LyricPlaybackPosition(
             highlightedLyricID: highlightedLyricID,
+            activeLyricIDs: activeLyricIDs,
             nextTransitionTime: nextTransitionTime
         )
+    }
+
+    /// Overlapping independent agents join the current Apple Music focus
+    /// group. They inherit its scroll owner instead of being promoted when
+    /// the line that opened the group finishes.
+    private static func inheritedFocusLyricID(
+        for target: LyricLine,
+        in startedLyrics: ArraySlice<LyricLine>
+    ) -> LyricLine.ID {
+        typealias FocusEntry = (
+            endTime: TimeInterval,
+            ownerID: LyricLine.ID,
+            isPrimary: Bool
+        )
+        var overlappingEntries: [FocusEntry] = []
+
+        for line in startedLyrics {
+            overlappingEntries.removeAll {
+                $0.endTime <= line.time
+            }
+
+            let isPrimary = line.agent?.alignment != .flipped
+            let ownerID: LyricLine.ID
+            if isPrimary {
+                ownerID = line.id
+            } else if let primaryEntry = overlappingEntries.last(where: {
+                $0.isPrimary
+            }) {
+                ownerID = primaryEntry.ownerID
+            } else {
+                ownerID = overlappingEntries.last?.ownerID ?? line.id
+            }
+
+            if line.id == target.id {
+                return ownerID
+            }
+
+            guard let duration = line.duration,
+                  duration > 0 else {
+                continue
+            }
+            overlappingEntries.append(
+                (
+                    endTime: line.time + duration,
+                    ownerID: ownerID,
+                    isPrimary: isPrimary
+                )
+            )
+        }
+
+        return target.id
     }
 
     static func focusAnimationDuration(

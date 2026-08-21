@@ -159,6 +159,13 @@ struct DesktopLyricsScrollView: View {
         )
     }
 
+    private var activePlaybackLyricIDs: Set<LyricLine.ID> {
+        LyricPlaybackTimeline.position(
+            at: model.player.progress + effectiveLyricsAdvanceTime,
+            in: model.lyrics.lyrics
+        ).activeLyricIDs
+    }
+
     private var interludes: [LyricInterlude] {
         guard model.settings.lyricsInterludeCountdownEnabled else {
             return []
@@ -2092,6 +2099,7 @@ struct DesktopLyricsScrollView: View {
     @ViewBuilder
     private func surfacedScrollView(viewportSize: CGSize) -> some View {
         let lyrics = model.lyrics.lyrics
+        let activePlaybackLyricIDs = activePlaybackLyricIDs
         let viewportHeight = viewportSize.height
         let textLayoutWidth = DesktopLyricsLayoutMetrics.textLayoutWidth(
             viewportWidth: viewportSize.width,
@@ -2219,7 +2227,9 @@ struct DesktopLyricsScrollView: View {
                             isPrecedingFocusLine: line.id == precedingFocusID,
                             isFollowingFocusLine: line.id == followingFocusID,
                             hasSyllableSyncedLyrics:
-                                containsSyllableSyncedLyrics
+                                containsSyllableSyncedLyrics,
+                            activePlaybackLyricIDs:
+                                activePlaybackLyricIDs
                         )
                             .id(line.id)
                     }
@@ -2405,12 +2415,14 @@ struct DesktopLyricsScrollView: View {
         isBlurFocusLine: Bool,
         isPrecedingFocusLine: Bool,
         isFollowingFocusLine: Bool,
-        hasSyllableSyncedLyrics: Bool
+        hasSyllableSyncedLyrics: Bool,
+        activePlaybackLyricIDs: Set<LyricLine.ID>
     ) -> some View {
         return DesktopLyricLineView(
             line: line,
             isPlaybackLine: line.id == visualHighlightedLyricID,
-            isActualPlaybackLine: line.id == highlightedID,
+            isActualPlaybackLine:
+                activePlaybackLyricIDs.contains(line.id),
             isScaleFocused: line.id == visualFocusID,
             isBlurFocusLine: isBlurFocusLine,
             isPrecedingFocusLine: isPrecedingFocusLine,

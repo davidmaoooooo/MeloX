@@ -19,6 +19,7 @@ struct AppleMusicLyricsView: View {
     }
 
     private struct LyricRowVisualContext {
+        let activePlaybackLyricIDs: Set<LyricLine.ID>
         let visualScaleFocusLyricID: LyricLine.ID?
         let precedingFocusLyricID: LyricLine.ID?
         let followingFocusLyricID: LyricLine.ID?
@@ -85,6 +86,14 @@ struct AppleMusicLyricsView: View {
     private let hasTranslations: Bool
     private let hasRomanizations: Bool
     private let interludeCandidates: [LyricInterlude]
+
+    private var activePlaybackLyricIDs: Set<LyricLine.ID> {
+        let advanceTime = settings.effectiveLyricsAdvanceTime(for: lyrics)
+        return LyricPlaybackTimeline.position(
+            at: player.progress + advanceTime,
+            in: lyrics
+        ).activeLyricIDs
+    }
 
     @State private var scrollPositionID: LyricLine.ID?
     @State private var isBrowsingLyrics = false
@@ -403,6 +412,7 @@ struct AppleMusicLyricsView: View {
                     CGFloat($0.firstLineStartOffset)
                 } ?? max(proxy.size.height * focusPosition, 40)
                 let lyricRowContext = LyricRowVisualContext(
+                    activePlaybackLyricIDs: activePlaybackLyricIDs,
                     visualScaleFocusLyricID: visualScaleFocusLyricID,
                     precedingFocusLyricID: focusNeighborIDs.preceding,
                     followingFocusLyricID: focusNeighborIDs.following,
@@ -526,7 +536,14 @@ struct AppleMusicLyricsView: View {
         let isCascadeFocusLine = line.id == visualCascadeFocusLyricID
         let isVisualScaleFocusLine =
             line.id == context.visualScaleFocusLyricID
-        let isActualPlaybackLine = line.id == highlightedLyricID
+        let isActualPlaybackLine =
+            context.activePlaybackLyricIDs.contains(line.id)
+        let isActiveIndependentVocalLine =
+            isActualPlaybackLine
+            && !isPlaybackLine
+            && line.agent?.alignment == .flipped
+        let isInactiveFocusOwner =
+            isPlaybackLine && !isActualPlaybackLine
         let isRetainedCascadeLine =
             context.retainedCascadeLyricIDs.contains(line.id)
         let showsTranslation = showsLyricTranslation(
@@ -582,6 +599,7 @@ struct AppleMusicLyricsView: View {
                     SynchronizedLyricText(
                         line: line,
                         isPlaybackLine: isPlaybackLine,
+                        isVocalActive: isActualPlaybackLine,
                         isAnimationActive: isActive,
                         playbackFocusProgress: focusProgress.color,
                         usesPseudoTiming: context.usesPseudoTiming,
@@ -594,6 +612,7 @@ struct AppleMusicLyricsView: View {
                             duetLayoutEnabled:
                                 settings.lyricsDuetLayoutEnabled
                         ),
+                        primaryColor: .white,
                         showsTranslation: showsTranslation,
                         showsRomanization:
                             settings.lyricsRomanizationEnabled
@@ -632,6 +651,21 @@ struct AppleMusicLyricsView: View {
                 .opacity(
                     isRetainedCascadeLine
                         ? 0
+                        : isActiveIndependentVocalLine
+                            ? 1
+                        : isInactiveFocusOwner
+                            ? context.motionProfile == nil
+                                ? Self.lyricEmphasis(
+                                    focusProgress: 0,
+                                    isBrowsingFocus: false,
+                                    dimAmount: context.dimAmount
+                                )
+                                : Self.appleMusicLyricFocusOpacity(
+                                    focusProgress: 0,
+                                    motionProfile: context.motionProfile,
+                                    usesIncreasedContrast:
+                                        colorSchemeContrast == .increased
+                                )
                         : context.motionProfile == nil
                             ? Self.lyricEmphasis(
                                 focusProgress: focusProgress.color,
@@ -669,35 +703,44 @@ struct AppleMusicLyricsView: View {
                             movementOffset: movementOffset,
                             viewportHeight: context.viewportHeight
                         )
-                    return content
-                        .blur(
-                            radius: Self.lyricDistanceBlurRadius(
+                    let distanceOpacity: CGFloat =
+                        if isActiveIndependentVocalLine {
+                            1
+                        } else if context.motionProfile == nil {
+                            Self.lyricOpacity(
                                 forPixelDistance: distance,
                                 lyricStride: context.lyricStride,
-                                intensity:
-                                    context.activeBlurIntensity
-                                    * activeDistanceBlurScale,
-                                focusProgress: focusProgress.blur,
-                                motionProfile: context.motionProfile
+                                dimAmount: context.distanceDimAmount,
+                                focusProgress: focusProgress.color
                             )
+                        } else {
+                            1
+                        }
+                    return content
+                        .blur(
+                            radius: isActiveIndependentVocalLine
+                                ? 0
+                                : Self.lyricDistanceBlurRadius(
+                                    forPixelDistance: distance,
+                                    lyricStride: context.lyricStride,
+                                    intensity:
+                                        context.activeBlurIntensity
+                                        * activeDistanceBlurScale,
+                                    focusProgress: focusProgress.blur,
+                                    motionProfile: context.motionProfile
+                                )
                         )
                         .opacity(
-                            (
-                                context.motionProfile == nil
-                                    ? Self.lyricOpacity(
-                                        forPixelDistance: distance,
-                                        lyricStride: context.lyricStride,
-                                        dimAmount:
-                                            context.distanceDimAmount,
-                                        focusProgress:
-                                            focusProgress.color
-                                    )
-                                    : 1
-                            ) * bottomRevealOpacity
+                            distanceOpacity * bottomRevealOpacity
                         )
                         .offset(y: movementOffset)
                 }
-                .blur(radius: focusBlurRadius)
+                .blur(
+                    radius:
+                        isActiveIndependentVocalLine
+                            ? 0
+                            : focusBlurRadius
+                )
                 .animation(
                     context.focusEffectAnimation,
                     value: focusBlurRadius

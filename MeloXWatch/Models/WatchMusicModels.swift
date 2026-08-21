@@ -175,6 +175,43 @@ nonisolated struct WatchLyricSyllable:
     }
 }
 
+nonisolated enum WatchBackgroundVocalsPosition:
+    String,
+    Codable,
+    Hashable,
+    Sendable
+{
+    case beforePrimary
+    case afterPrimary
+}
+
+nonisolated struct WatchBackgroundVocal:
+    Codable,
+    Hashable,
+    Sendable
+{
+    let time: TimeInterval
+    let duration: TimeInterval?
+    let text: String
+    let syllables: [WatchLyricSyllable]
+    let translation: String?
+    let position: WatchBackgroundVocalsPosition
+
+    func lyricLine() -> WatchLyricLine {
+        WatchLyricLine(
+            time: time,
+            duration: duration,
+            text: text,
+            syllables: syllables,
+            romanization: nil,
+            romanizationSyllables: [],
+            translation: translation,
+            backgroundVocal: nil,
+            isSecondaryVocal: true
+        )
+    }
+}
+
 nonisolated struct WatchLyricLine:
     Codable,
     Hashable,
@@ -188,6 +225,8 @@ nonisolated struct WatchLyricLine:
     var romanization: String?
     var romanizationSyllables: [WatchLyricSyllable]
     var translation: String?
+    var backgroundVocal: WatchBackgroundVocal? = nil
+    var isSecondaryVocal: Bool? = nil
 
     var id: String {
         "\(time)-\(text)"

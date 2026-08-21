@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class WatchNeteaseAPI {
     private let client: WatchNeteaseClient
+    private let amllLyricsClient = WatchAMLLLyricsClient()
 
     init(client: WatchNeteaseClient) {
         self.client = client
@@ -153,20 +154,42 @@ final class WatchNeteaseAPI {
     }
 
     func lyrics(id: Int) async throws -> [WatchLyricLine] {
-        let responseData = try await client.eapiData(
-            "/api/song/lyric/v1",
-            data: [
-                "id": id,
-                "cp": false,
-                "tv": 0,
-                "lv": 0,
-                "rv": 0,
-                "kv": 0,
-                "yv": 0,
-                "ytv": 0,
-                "yrv": 0
-            ]
-        )
+        let neteaseTask = Task {
+            try await client.eapiData(
+                "/api/song/lyric/v1",
+                data: [
+                    "id": id,
+                    "cp": false,
+                    "tv": 0,
+                    "lv": 0,
+                    "rv": 0,
+                    "kv": 0,
+                    "yv": 0,
+                    "ytv": 0,
+                    "yrv": 0
+                ]
+            )
+        }
+
+        do {
+            let source = try await amllLyricsClient.lyrics(songID: id)
+            let ttmlLyrics = await Task.detached(priority: .utility) {
+                WatchTTMLLyricParser.parse(source)
+            }.value
+            try Task.checkCancellation()
+            if !ttmlLyrics.isEmpty {
+                neteaseTask.cancel()
+                return ttmlLyrics
+            }
+        } catch is CancellationError {
+            neteaseTask.cancel()
+            throw CancellationError()
+        } catch {
+            // AMLL is an optional high-fidelity source. The direct NetEase
+            // lyric route below remains the offline/failure fallback.
+        }
+
+        let responseData = try await neteaseTask.value
 
         let processingTask = Task.detached(priority: .utility) {
             try Task.checkCancellation()

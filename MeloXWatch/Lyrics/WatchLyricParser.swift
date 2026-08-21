@@ -207,9 +207,93 @@ nonisolated enum WatchLyricParser {
                 upper = middle
             }
         }
-        return lower > lyrics.startIndex
-            ? lyrics.index(before: lower)
-            : nil
+        guard lower > lyrics.startIndex else { return nil }
+        let latestStartedIndex = lyrics.index(before: lower)
+        let activeIndices = lyrics[..<lower].indices.filter { index in
+            let line = lyrics[index]
+            guard let duration = line.duration,
+                  duration > 0 else {
+                return false
+            }
+            return time < line.time + duration
+        }
+        if let primaryIndex = activeIndices.last(where: {
+            lyrics[$0].isSecondaryVocal != true
+        }) {
+            return primaryIndex
+        }
+        return inheritedFocusIndex(
+            for: activeIndices.last ?? latestStartedIndex,
+            in: lyrics[..<lower]
+        )
+    }
+
+    static func activeIndices(
+        at time: TimeInterval,
+        in lyrics: [WatchLyricLine]
+    ) -> Set<Int> {
+        let active = Set(lyrics.indices.filter { index in
+            let line = lyrics[index]
+            guard line.time <= time,
+                  let duration = line.duration,
+                  duration > 0 else {
+                return false
+            }
+            return time < line.time + duration
+        })
+        if !active.isEmpty {
+            return active
+        }
+        return highlightedIndex(at: time, in: lyrics).map { [$0] } ?? []
+    }
+
+    private static func inheritedFocusIndex(
+        for targetIndex: Int,
+        in startedLyrics: ArraySlice<WatchLyricLine>
+    ) -> Int {
+        typealias FocusEntry = (
+            endTime: TimeInterval,
+            ownerIndex: Int,
+            isPrimary: Bool
+        )
+        var overlappingEntries: [FocusEntry] = []
+
+        for index in startedLyrics.indices {
+            let line = startedLyrics[index]
+            overlappingEntries.removeAll {
+                $0.endTime <= line.time
+            }
+
+            let isPrimary = line.isSecondaryVocal != true
+            let ownerIndex: Int
+            if isPrimary {
+                ownerIndex = index
+            } else if let primaryEntry = overlappingEntries.last(where: {
+                $0.isPrimary
+            }) {
+                ownerIndex = primaryEntry.ownerIndex
+            } else {
+                ownerIndex = overlappingEntries.last?.ownerIndex ?? index
+            }
+
+            if index == targetIndex {
+                return ownerIndex
+            }
+
+            guard let duration = line.duration,
+                  duration > 0 else {
+                continue
+            }
+            overlappingEntries.append(
+                (
+                    endTime: line.time + duration,
+                    ownerIndex: ownerIndex,
+                    isPrimary: isPrimary
+                )
+            )
+        }
+
+        return targetIndex
     }
 
     private static func attachSecondaryLyrics(

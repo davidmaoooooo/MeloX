@@ -32,6 +32,12 @@ struct DesktopLyricLineView: View, Equatable {
     let onSeek: () -> Void
 
     var body: some View {
+        let isActiveIndependentVocalLine =
+            isActualPlaybackLine
+            && !isPlaybackLine
+            && line.agent?.alignment == .flipped
+        let isInactiveFocusOwner =
+            isPlaybackLine && !isActualPlaybackLine
         let resolvedFontSize = compact
             && motionProfile == nil
             ? min(fontSize, 23)
@@ -99,6 +105,7 @@ struct DesktopLyricLineView: View, Equatable {
         let resolvedAllowsLyricBlur = allowsLyricBlur
             && (motionProfile?.allowsDistanceBlur ?? true)
         let focusBlurRadius = resolvedAllowsLyricBlur
+            && !isActiveIndependentVocalLine
             ? self.focusBlurRadius
             : 0
         let clearsBlurWhileBrowsing = motionProfile != nil
@@ -135,6 +142,7 @@ struct DesktopLyricLineView: View, Equatable {
                     SynchronizedLyricText(
                         line: line,
                         isPlaybackLine: isPlaybackLine,
+                        isVocalActive: isActualPlaybackLine,
                         playbackFocusProgress: focusProgress.color,
                         usesPseudoTiming:
                             model.settings.lyricsPseudoWordByWord
@@ -192,6 +200,18 @@ struct DesktopLyricLineView: View, Equatable {
                 .opacity(
                     isHovered
                         ? 1
+                        : isActiveIndependentVocalLine
+                            ? 1
+                        : isInactiveFocusOwner
+                            ? motionProfile == nil
+                                ? lyricEmphasis(
+                                    focusProgress: 0,
+                                    dimAmount: dimAmount
+                                )
+                                : Self.appleMusicLyricFocusOpacity(
+                                    focusProgress: 0,
+                                    motionProfile: motionProfile
+                                )
                         : motionProfile == nil
                             ? lyricEmphasis(
                                 focusProgress: focusProgress.color,
@@ -223,18 +243,24 @@ struct DesktopLyricLineView: View, Equatable {
                         motionProfile: motionProfile
                     )
                     let opacity =
-                        motionProfile == nil
-                        ? Self.lyricDistanceOpacity(
-                            forPixelDistance: distance,
-                            lyricStride: lyricStride,
-                            dimAmount: dimAmount,
-                            focusProgress: focusProgress.color
-                        )
-                        : 1
+                        isActiveIndependentVocalLine
+                            ? 1
+                            : motionProfile == nil
+                                ? Self.lyricDistanceOpacity(
+                                    forPixelDistance: distance,
+                                    lyricStride: lyricStride,
+                                    dimAmount: dimAmount,
+                                    focusProgress: focusProgress.color
+                                )
+                                : 1
                     return
                         content
                         .blur(
-                            radius: isLineHovered ? 0 : blurRadius
+                            radius:
+                                isLineHovered
+                                    || isActiveIndependentVocalLine
+                                    ? 0
+                                    : blurRadius
                         )
                         .opacity(isLineHovered ? 1 : opacity)
                     .offset(y: movementOffset)

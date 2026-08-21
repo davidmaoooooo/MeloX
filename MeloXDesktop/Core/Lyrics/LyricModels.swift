@@ -47,6 +47,31 @@ enum LyricVocalistsType: Hashable, Sendable {
     }
 }
 
+enum LyricBackgroundVocalsPosition: Hashable, Sendable {
+    case beforePrimary
+    case afterPrimary
+}
+
+struct LyricBackgroundVocal: Hashable, Sendable {
+    let time: TimeInterval
+    let duration: TimeInterval?
+    let text: String
+    let syllables: [LyricSyllable]
+    let translation: String?
+    let position: LyricBackgroundVocalsPosition
+
+    func lyricLine(agent: LyricAgent?) -> LyricLine {
+        LyricLine(
+            time: time,
+            duration: duration,
+            text: text,
+            syllables: syllables,
+            translation: translation,
+            agent: agent
+        )
+    }
+}
+
 struct LyricLine: Identifiable, Hashable, Sendable {
     let time: TimeInterval
     let duration: TimeInterval?
@@ -56,6 +81,7 @@ struct LyricLine: Identifiable, Hashable, Sendable {
     let romanizationSyllables: [LyricSyllable]
     let translation: String?
     let agent: LyricAgent?
+    let backgroundVocal: LyricBackgroundVocal?
 
     init(
         time: TimeInterval,
@@ -65,7 +91,8 @@ struct LyricLine: Identifiable, Hashable, Sendable {
         romanization: String? = nil,
         romanizationSyllables: [LyricSyllable] = [],
         translation: String? = nil,
-        agent: LyricAgent? = nil
+        agent: LyricAgent? = nil,
+        backgroundVocal: LyricBackgroundVocal? = nil
     ) {
         self.time = time
         self.duration = duration
@@ -75,6 +102,7 @@ struct LyricLine: Identifiable, Hashable, Sendable {
         self.romanizationSyllables = romanizationSyllables
         self.translation = translation
         self.agent = agent
+        self.backgroundVocal = backgroundVocal
     }
 
     var id: String {
@@ -127,7 +155,8 @@ struct LyricLine: Identifiable, Hashable, Sendable {
             romanization: romanization,
             romanizationSyllables: romanizationSyllables,
             translation: translation,
-            agent: agent
+            agent: agent,
+            backgroundVocal: backgroundVocal
         )
     }
 
@@ -143,7 +172,8 @@ struct LyricLine: Identifiable, Hashable, Sendable {
             romanization: romanization,
             romanizationSyllables: romanizationSyllables,
             translation: translation,
-            agent: agent
+            agent: agent,
+            backgroundVocal: backgroundVocal
         )
     }
 
@@ -160,7 +190,8 @@ struct LyricLine: Identifiable, Hashable, Sendable {
             romanization: romanization,
             romanizationSyllables: romanizationSyllables,
             translation: translation,
-            agent: agent
+            agent: agent,
+            backgroundVocal: backgroundVocal
         )
     }
 
@@ -176,6 +207,18 @@ struct LyricLine: Identifiable, Hashable, Sendable {
         if includingTranslation, hasTranslation,
            let translation {
             components.append(L10n.format("ui.lyrics.accessibility.translation", translation))
+        }
+        if let backgroundVocal {
+            components.append(backgroundVocal.text)
+            if includingTranslation,
+               let translation = backgroundVocal.translation {
+                components.append(
+                    L10n.format(
+                        "ui.lyrics.accessibility.translation",
+                        translation
+                    )
+                )
+            }
         }
         return components.joined(separator: L10n.string("ui.common.spoken_separator"))
     }

@@ -57,6 +57,10 @@ struct WatchLyricsView: View {
                 y: scrollFocusPosition
             )
             let highlightedIndex = self.highlightedIndex
+            let activeIndices = WatchLyricParser.activeIndices(
+                at: progress,
+                in: lyrics
+            )
 
             browsingAware(
                 ScrollView {
@@ -69,8 +73,16 @@ struct WatchLyricsView: View {
                             let relativeIndex = highlightedIndex.map {
                                 index - $0
                             } ?? 0
-                            let isHighlighted =
+                            let isPrimaryFocus =
                                 index == highlightedIndex
+                            let isVocalActive =
+                                activeIndices.contains(index)
+                            let isActiveIndependentVocalLine =
+                                isVocalActive
+                                && !isPrimaryFocus
+                                && line.isSecondaryVocal == true
+                            let isInactiveFocusOwner =
+                                isPrimaryFocus && !isVocalActive
                             let focusBlurRadius =
                                 WatchLyricsFocusEffects
                                     .focusBlurRadius(
@@ -91,8 +103,9 @@ struct WatchLyricsView: View {
                                 WatchLyricLineView(
                                     line: line,
                                     progress:
-                                        isHighlighted ? progress : 0,
-                                    isHighlighted: isHighlighted,
+                                        isVocalActive ? progress : 0,
+                                    isHighlighted: isPrimaryFocus,
+                                    isVocalActive: isVocalActive,
                                     fontSize: lyricFontSize,
                                     interactionBackgroundProgress:
                                         backgroundProgress,
@@ -101,13 +114,17 @@ struct WatchLyricsView: View {
                             }
                             .compositingGroup()
                             .opacity(
-                                WatchLyricsFocusEffects.emphasis(
-                                    isPlaybackLine: isHighlighted,
-                                    dimAmount: min(
-                                        max(preferences.dimAmount, 0),
-                                        1
+                                isActiveIndependentVocalLine
+                                    ? 1
+                                    : WatchLyricsFocusEffects.emphasis(
+                                        isPlaybackLine:
+                                            isPrimaryFocus
+                                            && !isInactiveFocusOwner,
+                                        dimAmount: min(
+                                            max(preferences.dimAmount, 0),
+                                            1
+                                        )
                                     )
-                                )
                             )
                             .visualEffect { content, proxy in
                                 let frame = proxy.frame(
@@ -119,7 +136,9 @@ struct WatchLyricsView: View {
                                 return content
                                     .blur(
                                         radius:
-                                            WatchLyricsFocusEffects
+                                            isActiveIndependentVocalLine
+                                            ? 0
+                                            : WatchLyricsFocusEffects
                                                 .distanceBlurRadius(
                                                     pixelDistance:
                                                         distance,
@@ -137,20 +156,29 @@ struct WatchLyricsView: View {
                                                 )
                                     )
                                     .opacity(
-                                        WatchLyricsFocusEffects
-                                            .opacity(
-                                                pixelDistance:
-                                                    distance,
-                                                lyricStride:
-                                                    lyricStride,
-                                                dimAmount:
-                                                    activeDistanceDimAmount
-                                            )
+                                        isActiveIndependentVocalLine
+                                            ? 1
+                                            : WatchLyricsFocusEffects
+                                                .opacity(
+                                                    pixelDistance:
+                                                        distance,
+                                                    lyricStride:
+                                                        lyricStride,
+                                                    dimAmount:
+                                                        activeDistanceDimAmount
+                                                )
                                     )
                             }
-                            .blur(radius: focusBlurRadius)
+                            .blur(
+                                radius:
+                                    isPrimaryFocus
+                                        && !isInactiveFocusOwner
+                                        || isActiveIndependentVocalLine
+                                        ? 0
+                                        : focusBlurRadius
+                            )
                             .scaleEffect(
-                                isHighlighted
+                                isPrimaryFocus && !isInactiveFocusOwner
                                     ? CGFloat(
                                         max(
                                             preferences
@@ -351,6 +379,10 @@ struct WatchLyricsView: View {
         if preferences.showsTranslation {
             height += 13
         }
+        if lyrics.contains(where: { $0.backgroundVocal != nil }) {
+            height += lyricFontSize * 0.63 * 1.2
+                + min(15, max(lyricFontSize * 0.45, 6))
+        }
         return max(height, 1)
     }
 
@@ -430,29 +462,23 @@ private struct WatchLyricLineView: View {
     let line: WatchLyricLine
     let progress: TimeInterval
     let isHighlighted: Bool
+    let isVocalActive: Bool
     let fontSize: CGFloat
     let interactionBackgroundProgress: Double
     let preferences: MeloXWatchLyricsPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            WatchSynchronizedLyricText(
-                line: line,
-                progress: progress,
-                isHighlighted: isHighlighted,
-                fontSize: fontSize,
-                preferences: preferences
-            )
+        VStack(alignment: .leading, spacing: 0) {
+            if line.backgroundVocal?.position == .beforePrimary {
+                backgroundVocalContent
+                    .padding(.bottom, backgroundVocalSpacing)
+            }
 
-            if preferences.showsTranslation,
-               let translation = line.translation,
-               !translation.isEmpty {
-                Text(verbatim: translation)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(
-                        .white.opacity(isHighlighted ? 0.85 : 0.7)
-                    )
+            primaryVocalContent
+
+            if line.backgroundVocal?.position == .afterPrimary {
+                backgroundVocalContent
+                    .padding(.top, backgroundVocalSpacing)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -484,8 +510,75 @@ private struct WatchLyricLineView: View {
         .accessibilityHint("ui.watch.lyrics.seek_hint")
     }
 
+    private var primaryVocalContent: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            WatchSynchronizedLyricText(
+                line: line,
+                progress: progress,
+                isHighlighted: isHighlighted,
+                isVocalActive: isVocalActive,
+                fontSize: fontSize,
+                preferences: preferences
+            )
+
+            if preferences.showsTranslation,
+               let translation = line.translation,
+               !translation.isEmpty {
+                Text(verbatim: translation)
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundStyle(
+                        .white.opacity(isVocalActive ? 0.85 : 0.7)
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var backgroundVocalContent: some View {
+        if let backgroundVocal = line.backgroundVocal {
+            let backgroundLine = backgroundVocal.lyricLine()
+            VStack(alignment: .leading, spacing: 2) {
+                WatchSynchronizedLyricText(
+                    line: backgroundLine,
+                    progress: progress,
+                    isHighlighted: false,
+                    isVocalActive: isVocalActive,
+                    fontSize: fontSize * 0.63,
+                    preferences: preferences
+                )
+
+                if preferences.showsTranslation,
+                   let translation = backgroundVocal.translation,
+                   !translation.isEmpty {
+                    Text(verbatim: translation)
+                        .font(.system(size: max(fontSize * 0.36, 8)))
+                        .fontWeight(.bold)
+                        .foregroundStyle(
+                            .white.opacity(isHighlighted ? 0.85 : 0.7)
+                        )
+                }
+            }
+            .scaleEffect(
+                isHighlighted ? 1 : 0.9,
+                anchor: .topLeading
+            )
+        }
+    }
+
+    private var backgroundVocalSpacing: CGFloat {
+        min(15, max(fontSize * 0.45, 6))
+    }
+
     private var accessibilityText: String {
-        [line.text, line.romanization, line.translation]
+        [
+            line.text,
+            line.romanization,
+            line.translation,
+            line.backgroundVocal?.text,
+            line.backgroundVocal?.translation,
+        ]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .localizedList

@@ -13,6 +13,10 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
     let paragraphSpacing: Double
     let lineSpacing: Double
     let backgroundVocalsTopSpacing: Double
+    let backgroundVocalsDeselectedScale: Double
+    let backgroundVocalsFontCoefficient: Double
+    let translationBackgroundVocalsFontCoefficient: Double
+    let transliterationBackgroundVocalsFontCoefficient: Double
     let cascadeDelay: TimeInterval
     let deselectedScale: Double
     let nonFocusedBlurRadius: Double
@@ -53,6 +57,10 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
         paragraphSpacing: 39,
         lineSpacing: 25,
         backgroundVocalsTopSpacing: 15,
+        backgroundVocalsDeselectedScale: 0.9,
+        backgroundVocalsFontCoefficient: 0.63,
+        translationBackgroundVocalsFontCoefficient: 0.36,
+        transliterationBackgroundVocalsFontCoefficient: 0.27,
         cascadeDelay: 0.05,
         deselectedScale: 0.98,
         nonFocusedBlurRadius: 3,

@@ -104,7 +104,9 @@ enum LyricParser {
                 syllables: line.syllables,
                 romanization: line.romanization,
                 romanizationSyllables: line.romanizationSyllables,
-                translation: line.translation
+                translation: line.translation,
+                agent: line.agent,
+                backgroundVocal: line.backgroundVocal
             )
         }
     }

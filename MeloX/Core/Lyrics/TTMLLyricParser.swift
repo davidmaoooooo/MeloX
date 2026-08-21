@@ -65,6 +65,11 @@ enum TTMLLyricParser {
         }
         let romanization = inlineRomanization ?? transliteration?.text
         let agent = node.attribute("agent").flatMap { agents[$0] }
+        let backgroundVocal = parseBackgroundVocal(
+            in: node,
+            parentStart: start,
+            parentEnd: end
+        )
 
         return LyricLine(
             time: start,
@@ -74,7 +79,78 @@ enum TTMLLyricParser {
             romanization: normalized(romanization),
             romanizationSyllables: transliteration?.syllables ?? [],
             translation: normalized(translation),
-            agent: agent
+            agent: agent,
+            backgroundVocal: backgroundVocal
+        )
+    }
+
+    private static func parseBackgroundVocal(
+        in node: TTMLNode,
+        parentStart: TimeInterval,
+        parentEnd: TimeInterval
+    ) -> LyricBackgroundVocal? {
+        let backgroundEntries = node.contents.enumerated().compactMap {
+            index,
+            content -> (index: Int, node: TTMLNode)? in
+            guard case .child(let child) = content,
+                  child.localName == "span",
+                  child.hasRole("x-bg") else {
+                return nil
+            }
+            return (index, child)
+        }
+        guard let firstEntry = backgroundEntries.first else { return nil }
+
+        let syllables = backgroundEntries.flatMap {
+            parseTimedSpans(in: $0.node)
+        }
+        let rawText = syllables.isEmpty
+            ? backgroundEntries.map {
+                $0.node.text(
+                    excludingRoles: ["x-translation", "x-roman"]
+                )
+            }.joined()
+            : syllables.map(\.text).joined()
+        guard let text = normalized(rawText) else { return nil }
+
+        let authoredStart = backgroundEntries.compactMap {
+            parseTime($0.node.attribute("begin"))
+        }.min()
+        let authoredEnd = backgroundEntries.compactMap {
+            parseTime($0.node.attribute("end"))
+        }.max()
+        let start = authoredStart
+            ?? syllables.first?.startTime
+            ?? parentStart
+        let end = authoredEnd
+            ?? syllables.last?.endTime
+            ?? parentEnd
+        let firstPrimaryIndex = node.contents.firstIndex { content in
+            guard case .child(let child) = content,
+                  child.localName == "span" else {
+                return false
+            }
+            return !child.hasRole("x-translation")
+                && !child.hasRole("x-roman")
+                && !child.hasRole("x-bg")
+        }
+        let position: LyricBackgroundVocalsPosition = if let firstPrimaryIndex,
+            firstEntry.index < firstPrimaryIndex {
+            .beforePrimary
+        } else {
+            .afterPrimary
+        }
+        let translation = backgroundEntries.compactMap {
+            preferredRoleText(role: "x-translation", in: $0.node)
+        }.first
+
+        return LyricBackgroundVocal(
+            time: start,
+            duration: max(end - start, 0),
+            text: text,
+            syllables: syllables,
+            translation: normalized(translation),
+            position: position
         )
     }
 

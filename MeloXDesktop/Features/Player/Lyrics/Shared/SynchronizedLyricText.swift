@@ -62,6 +62,7 @@ struct SynchronizedLyricText: View {
 
     let line: LyricLine
     let isPlaybackLine: Bool
+    let isVocalActive: Bool
     let playbackFocusProgress: CGFloat?
     let usesPseudoTiming: Bool
     let allowsUnplayedBlur: Bool
@@ -86,6 +87,7 @@ struct SynchronizedLyricText: View {
     let promotedLayoutScale: CGFloat
     let layoutWidth: CGFloat?
     let motionProfile: AppleMusicLyricsMotionProfile?
+    let isBackgroundVocalPresentation: Bool
     let playbackScaleRange: ClosedRange<CGFloat>?
     let playbackScaleStartDelay: TimeInterval
     private let synchronizedText: Text
@@ -98,6 +100,7 @@ struct SynchronizedLyricText: View {
     init(
         line: LyricLine,
         isPlaybackLine: Bool,
+        isVocalActive: Bool? = nil,
         playbackFocusProgress: CGFloat? = nil,
         usesPseudoTiming: Bool,
         allowsUnplayedBlur: Bool = true,
@@ -122,11 +125,13 @@ struct SynchronizedLyricText: View {
         promotedLayoutScale: CGFloat = 1,
         layoutWidth: CGFloat? = nil,
         motionProfile: AppleMusicLyricsMotionProfile? = nil,
+        isBackgroundVocalPresentation: Bool = false,
         playbackScaleRange: ClosedRange<CGFloat>? = nil,
         playbackScaleStartDelay: TimeInterval = 0
     ) {
         self.line = line
         self.isPlaybackLine = isPlaybackLine
+        self.isVocalActive = isVocalActive ?? isPlaybackLine
         self.playbackFocusProgress = playbackFocusProgress
         self.usesPseudoTiming = usesPseudoTiming
         self.allowsUnplayedBlur = allowsUnplayedBlur
@@ -153,6 +158,8 @@ struct SynchronizedLyricText: View {
         self.promotedLayoutScale = promotedLayoutScale
         self.layoutWidth = layoutWidth
         self.motionProfile = motionProfile
+        self.isBackgroundVocalPresentation =
+            isBackgroundVocalPresentation
         self.playbackScaleRange = playbackScaleRange
         self.playbackScaleStartDelay = playbackScaleStartDelay
 
@@ -215,6 +222,23 @@ struct SynchronizedLyricText: View {
     }
 
     var body: some View {
+        VStack(alignment: alignment.horizontalAlignment, spacing: 0) {
+            if line.backgroundVocal?.position == .beforePrimary {
+                backgroundVocalContent
+                    .padding(.bottom, backgroundVocalSpacing)
+            }
+
+            primaryContent
+
+            if line.backgroundVocal?.position == .afterPrimary {
+                backgroundVocalContent
+                    .padding(.top, backgroundVocalSpacing)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+    }
+
+    private var primaryContent: some View {
         LyricAnnotationLayout(
             expansion:
                 annotationAffectsLayout
@@ -289,6 +313,39 @@ struct SynchronizedLyricText: View {
             value: visualScale
         )
         .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+    }
+
+    @ViewBuilder
+    private var backgroundVocalContent: some View {
+        if let backgroundVocal = line.backgroundVocal {
+            SynchronizedLyricText(
+                line: backgroundVocal.lyricLine(agent: line.agent),
+                isPlaybackLine: false,
+                isVocalActive: isVocalActive,
+                playbackFocusProgress: nil,
+                usesPseudoTiming: false,
+                allowsUnplayedBlur: allowsUnplayedBlur,
+                fontSize: backgroundVocalFontSize,
+                romanizationFontSize:
+                    backgroundVocalRomanizationFontSize,
+                fontWeight: fontWeight,
+                alignment: alignment,
+                fontScale: fontScale,
+                primaryColor: primaryColor,
+                showsTranslation: showsTranslation,
+                showsRomanization: false,
+                includesTranslation: includesTranslation,
+                includesRomanization: false,
+                reservesAnnotationSpace: false,
+                annotationAffectsLayout: true,
+                visualScale: backgroundVocalScale,
+                visualScaleAnimation: visualScaleAnimation,
+                promotedLayoutScale: promotedLayoutScale,
+                layoutWidth: layoutWidth,
+                motionProfile: motionProfile,
+                isBackgroundVocalPresentation: true
+            )
+        }
     }
 
     private var annotationStack: some View {
@@ -563,11 +620,12 @@ struct SynchronizedLyricText: View {
     }
 
     private var usesTimedLyrics: Bool {
-        isPlaybackLine && supportsTimedLyrics
+        isVocalActive && supportsTimedLyrics
     }
 
     private var timedLyricPresentationProgress: Double {
         guard supportsTimedLyrics else { return 0 }
+        if isVocalActive { return 1 }
         guard let playbackFocusProgress else {
             return usesTimedLyrics ? 1 : 0
         }
@@ -576,7 +634,7 @@ struct SynchronizedLyricText: View {
 
     private var presentsTimedLyrics: Bool {
         supportsTimedLyrics
-            && (isPlaybackLine || timedLyricPresentationProgress > 0)
+            && (isVocalActive || timedLyricPresentationProgress > 0)
     }
 
     private var legacyTimedLyricAnimationValue: Bool {
@@ -599,6 +657,14 @@ struct SynchronizedLyricText: View {
     /// focused/non-focused font jumps without changing row geometry.
     private var translationFontSize: CGFloat {
         if let motionProfile {
+            if isBackgroundVocalPresentation {
+                return fontSize
+                    * CGFloat(
+                        motionProfile
+                            .translationBackgroundVocalsFontCoefficient
+                            / motionProfile.backgroundVocalsFontCoefficient
+                    )
+            }
             return fontSize
                 * CGFloat(motionProfile.translationLargeFontCoefficient)
         }
@@ -606,6 +672,33 @@ struct SynchronizedLyricText: View {
             CGFloat(settings.lyricsFontSize * settings.lyricsTranslationFontScale) * fontScale,
             13 * fontScale
         )
+    }
+
+    private var backgroundVocalSpacing: CGFloat {
+        CGFloat(motionProfile?.backgroundVocalsTopSpacing ?? 10)
+    }
+
+    private var backgroundVocalFontSize: CGFloat {
+        fontSize
+            * CGFloat(motionProfile?.backgroundVocalsFontCoefficient ?? 0.63)
+    }
+
+    private var backgroundVocalRomanizationFontSize: CGFloat {
+        fontSize
+            * CGFloat(
+                motionProfile?
+                    .transliterationBackgroundVocalsFontCoefficient
+                    ?? 0.27
+            )
+    }
+
+    private var backgroundVocalScale: CGFloat {
+        let relativeScale = isPlaybackLine
+            ? 1
+            : CGFloat(
+                motionProfile?.backgroundVocalsDeselectedScale ?? 0.9
+            )
+        return visualScale * relativeScale
     }
 
     /// Generic LyricsSpecs builder sets `translationSpacing = 7`; the legacy

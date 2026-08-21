@@ -63,6 +63,7 @@ struct SynchronizedLyricText: View {
 
     let line: LyricLine
     let isPlaybackLine: Bool
+    let isVocalActive: Bool
     let isAnimationActive: Bool
     let playbackFocusProgress: CGFloat?
     let usesPseudoTiming: Bool
@@ -87,6 +88,7 @@ struct SynchronizedLyricText: View {
     let layoutWidth: CGFloat?
     let motionProfile: AppleMusicLyricsMotionProfile?
     let suppressesTimedGlyphBlur: Bool
+    let isBackgroundVocalPresentation: Bool
     let playbackScaleRange: ClosedRange<CGFloat>?
     let playbackScaleStartDelay: TimeInterval
     private let supplementalTextProfile:
@@ -102,6 +104,7 @@ struct SynchronizedLyricText: View {
     init(
         line: LyricLine,
         isPlaybackLine: Bool,
+        isVocalActive: Bool? = nil,
         isAnimationActive: Bool = true,
         playbackFocusProgress: CGFloat? = nil,
         usesPseudoTiming: Bool,
@@ -126,11 +129,13 @@ struct SynchronizedLyricText: View {
         layoutWidth: CGFloat? = nil,
         motionProfile: AppleMusicLyricsMotionProfile? = nil,
         suppressesTimedGlyphBlur: Bool = false,
+        isBackgroundVocalPresentation: Bool = false,
         playbackScaleRange: ClosedRange<CGFloat>? = nil,
         playbackScaleStartDelay: TimeInterval = 0
     ) {
         self.line = line
         self.isPlaybackLine = isPlaybackLine
+        self.isVocalActive = isVocalActive ?? isPlaybackLine
         self.isAnimationActive = isAnimationActive
         self.playbackFocusProgress = playbackFocusProgress
         self.usesPseudoTiming = usesPseudoTiming
@@ -168,6 +173,8 @@ struct SynchronizedLyricText: View {
         self.layoutWidth = layoutWidth
         self.motionProfile = motionProfile
         self.suppressesTimedGlyphBlur = suppressesTimedGlyphBlur
+        self.isBackgroundVocalPresentation =
+            isBackgroundVocalPresentation
         // `LyricsSpecs.emphasizingScaleRange` belongs to the timed glyph
         // renderer. It must not become a scale on the complete lyric row.
         // Whole-line playback scaling remains an explicit opt-in used by
@@ -265,6 +272,23 @@ struct SynchronizedLyricText: View {
     }
 
     var body: some View {
+        VStack(alignment: alignment.horizontalAlignment, spacing: 0) {
+            if line.backgroundVocal?.position == .beforePrimary {
+                backgroundVocalContent
+                    .padding(.bottom, backgroundVocalSpacing)
+            }
+
+            primaryContent
+
+            if line.backgroundVocal?.position == .afterPrimary {
+                backgroundVocalContent
+                    .padding(.top, backgroundVocalSpacing)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+    }
+
+    private var primaryContent: some View {
         LyricSupplementalTextLayout(
             transliterationExpansion:
                 displaysRomanization ? 1 : 0,
@@ -371,6 +395,42 @@ struct SynchronizedLyricText: View {
             value: visualScale
         )
         .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+    }
+
+    @ViewBuilder
+    private var backgroundVocalContent: some View {
+        if let backgroundVocal = line.backgroundVocal {
+            SynchronizedLyricText(
+                line: backgroundVocal.lyricLine(
+                    parentID: line.id,
+                    agent: line.agent
+                ),
+                isPlaybackLine: false,
+                isVocalActive: isVocalActive,
+                isAnimationActive: isAnimationActive,
+                playbackFocusProgress: nil,
+                usesPseudoTiming: false,
+                fontSize: backgroundVocalFontSize,
+                romanizationFontSize:
+                    backgroundVocalRomanizationFontSize,
+                fontWeight: fontWeight,
+                alignment: alignment,
+                fontScale: fontScale,
+                primaryColor: primaryColor,
+                showsTranslation: showsTranslation,
+                showsRomanization: false,
+                includesTranslation: includesTranslation,
+                includesRomanization: false,
+                reservesAnnotationSpace: false,
+                visualScale: backgroundVocalScale,
+                visualScaleAnimation: visualScaleAnimation,
+                promotedLayoutScale: promotedLayoutScale,
+                layoutWidth: layoutWidth,
+                motionProfile: motionProfile,
+                suppressesTimedGlyphBlur: suppressesTimedGlyphBlur,
+                isBackgroundVocalPresentation: true
+            )
+        }
     }
 
     private var romanizationLyric: some View {
@@ -634,11 +694,12 @@ struct SynchronizedLyricText: View {
     }
 
     private var usesTimedLyrics: Bool {
-        isPlaybackLine && supportsTimedLyrics
+        isVocalActive && supportsTimedLyrics
     }
 
     private var timedLyricPresentationProgress: Double {
         guard supportsTimedLyrics else { return 0 }
+        if isVocalActive { return 1 }
         guard let playbackFocusProgress else {
             return usesTimedLyrics ? 1 : 0
         }
@@ -650,6 +711,7 @@ struct SynchronizedLyricText: View {
     /// Music, so tying its color to `supportsTimedLyrics` makes LRC lines use
     /// the selected-text color instead of the selected-upcoming color.
     private var supplementalFocusProgress: Double {
+        if isVocalActive { return 1 }
         if let playbackFocusProgress {
             return Double(min(max(playbackFocusProgress, 0), 1))
         }
@@ -658,7 +720,7 @@ struct SynchronizedLyricText: View {
 
     private var presentsTimedLyrics: Bool {
         supportsTimedLyrics
-            && (isPlaybackLine || timedLyricPresentationProgress > 0)
+            && (isVocalActive || timedLyricPresentationProgress > 0)
     }
 
     private var presentsTimedRomanization: Bool {
@@ -694,9 +756,50 @@ struct SynchronizedLyricText: View {
                 weight: fontWeight.swiftUIWeight
             )
         }
+        if isBackgroundVocalPresentation {
+            let coefficient = motionProfile?
+                .translationBackgroundVocalsFontCoefficient ?? 0.36
+            let backgroundCoefficient = motionProfile?
+                .backgroundVocalsFontCoefficient ?? 0.63
+            return .system(
+                size: max(
+                    fontSize
+                        * CGFloat(coefficient / backgroundCoefficient),
+                    11
+                ),
+                weight: .bold
+            )
+        }
         return displaysRomanization && !romanizationRows.isEmpty
             ? .callout.bold()
             : .title3.bold()
+    }
+
+    private var backgroundVocalSpacing: CGFloat {
+        CGFloat(motionProfile?.backgroundVocalsTopSpacing ?? 10)
+    }
+
+    private var backgroundVocalFontSize: CGFloat {
+        fontSize
+            * CGFloat(motionProfile?.backgroundVocalsFontCoefficient ?? 0.63)
+    }
+
+    private var backgroundVocalRomanizationFontSize: CGFloat {
+        fontSize
+            * CGFloat(
+                motionProfile?
+                    .transliterationBackgroundVocalsFontCoefficient
+                    ?? 0.27
+            )
+    }
+
+    private var backgroundVocalScale: CGFloat {
+        let relativeScale = isPlaybackLine
+            ? 1
+            : CGFloat(
+                motionProfile?.backgroundVocalsDeselectedScale ?? 0.9
+            )
+        return visualScale * relativeScale
     }
 
     private var normalizedTranslation: String? {

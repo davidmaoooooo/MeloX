@@ -6,6 +6,7 @@ struct WatchSynchronizedLyricText: View {
     let line: WatchLyricLine
     let progress: TimeInterval
     let isHighlighted: Bool
+    let isVocalActive: Bool
     let fontSize: CGFloat
     let preferences: MeloXWatchLyricsPreferences
 
@@ -16,20 +17,23 @@ struct WatchSynchronizedLyricText: View {
         line: WatchLyricLine,
         progress: TimeInterval,
         isHighlighted: Bool,
+        isVocalActive: Bool? = nil,
         fontSize: CGFloat,
         preferences: MeloXWatchLyricsPreferences
     ) {
         self.line = line
         self.progress = progress
         self.isHighlighted = isHighlighted
+        let resolvedIsVocalActive = isVocalActive ?? isHighlighted
+        self.isVocalActive = resolvedIsVocalActive
         self.fontSize = fontSize
         self.preferences = preferences
 
-        let activeSyllables = isHighlighted
+        let activeSyllables = resolvedIsVocalActive
             ? line.effectiveSyllables
             : line.syllables
         self.activeSyllables = activeSyllables
-        rubyUnits = isHighlighted
+        rubyUnits = resolvedIsVocalActive
             && preferences.showsRomanization
             ? WatchLyricRomanizationAligner.units(
                 for: line,
@@ -40,7 +44,7 @@ struct WatchSynchronizedLyricText: View {
 
     var body: some View {
         Group {
-            if !isHighlighted {
+            if !isVocalActive {
                 staticText
             } else if preferences.showsRomanization,
                       !rubyUnits.isEmpty {
@@ -131,7 +135,7 @@ struct WatchSynchronizedLyricText: View {
     }
 
     private var appliesTimingEffects: Bool {
-        isHighlighted && preferences.usesWordByWordHighlight
+        isVocalActive && preferences.usesWordByWordHighlight
     }
 
     private var romanizationFontSize: CGFloat {
