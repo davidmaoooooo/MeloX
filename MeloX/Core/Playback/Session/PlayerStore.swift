@@ -1193,9 +1193,11 @@ final class PlayerStore {
                 await self?.handleEngineFailure(error)
             }
         }
-        engine.onInterruptionBegan = { [weak self] in
+        engine.onInterruptionBegan = {
+            [weak self] routeDisconnected in
             guard let self else { return }
-            self.shouldResumeAfterInterruption = self.isPlaying
+            self.shouldResumeAfterInterruption =
+                !routeDisconnected && self.isPlaying
             self.engine.pause()
         }
         engine.onInterruptionEnded = { [weak self] shouldResume in

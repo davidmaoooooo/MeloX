@@ -39,7 +39,7 @@ final class AudioPlaybackEngine {
     var onAutoMixTransitionProgress: ((Double) -> Void)?
     var onAutoMixTransitionCompleted: ((Int) -> Void)?
     var onAutoMixPreparationFailed: ((Int, Error) -> Void)?
-    var onInterruptionBegan: (() -> Void)?
+    var onInterruptionBegan: ((_ routeDisconnected: Bool) -> Void)?
     var onInterruptionEnded: ((Bool) -> Void)?
     var onOutputDeviceDisconnected: (() -> Void)?
 
@@ -702,7 +702,13 @@ final class AudioPlaybackEngine {
         }
         switch type {
         case .began:
-            onInterruptionBegan?()
+            let rawReason = notification.userInfo?[
+                AVAudioSessionInterruptionReasonKey
+            ] as? UInt
+            let reason = rawReason.flatMap {
+                AVAudioSession.InterruptionReason(rawValue: $0)
+            }
+            onInterruptionBegan?(reason == .routeDisconnected)
         case .ended:
             let rawOptions = notification.userInfo?[
                 AVAudioSessionInterruptionOptionKey

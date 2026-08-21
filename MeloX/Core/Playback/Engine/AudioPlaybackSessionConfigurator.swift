@@ -11,6 +11,10 @@ enum AudioPlaybackSessionConfigurator {
             // Unsupported routes can still play a system-provided downmix.
             try? session.setSupportsMultichannelContent(true)
         }
+        // Prevent disconnected headphones from handing playback to speakers.
+        if !session.prefersInterruptionOnRouteDisconnect {
+            try session.setPrefersInterruptionOnRouteDisconnect(true)
+        }
         try session.setActive(true)
     }
 }
