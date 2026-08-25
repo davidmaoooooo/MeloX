@@ -415,7 +415,7 @@ final class NeteaseAPI {
         ) {
             return PlaybackSource(url: url, bitrate: nil, format: nil)
         }
-        try await playbackSource(
+        return try await playbackSource(
             id: id,
             quality: settings.quality,
             availability: .unknown
@@ -434,7 +434,7 @@ final class NeteaseAPI {
         ) {
             return PlaybackSource(url: url, bitrate: nil, format: nil)
         }
-        try await playbackSource(
+        return try await playbackSource(
             id: song.id,
             quality: settings.quality,
             availability: song.audioAvailability
