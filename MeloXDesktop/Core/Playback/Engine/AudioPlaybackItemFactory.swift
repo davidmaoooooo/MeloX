@@ -29,7 +29,7 @@ final class AudioPlaybackItemFactory {
         let asset = AVURLAsset(
             url: source.url,
             options: [
-                AVURLAssetHTTPHeaderFieldsKey: [
+                "AVURLAssetHTTPHeaderFieldsKey": [
                     "User-Agent": "MeloX-Desktop/1.0",
                     "Referer": "https://music.163.com/",
                     "Origin": "https://music.163.com",
