@@ -23,7 +23,20 @@ final class AudioPlaybackItemFactory {
         autoMixEqualizerState:
             SharedAutoMixEqualizerState
     ) async -> PreparedAudioPlaybackItem {
-        let asset = AVURLAsset(url: source.url)
+        // Third-party source CDNs commonly reject AVPlayer's default request
+        // headers. Match the headers used by the source implementation when
+        // opening the resolved URL while keeping the URL itself unchanged.
+        let asset = AVURLAsset(
+            url: source.url,
+            options: [
+                AVURLAssetHTTPHeaderFieldsKey: [
+                    "User-Agent": "MeloX-Desktop/1.0",
+                    "Referer": "https://music.163.com/",
+                    "Origin": "https://music.163.com",
+                    "Accept": "*/*"
+                ]
+            ]
+        )
         let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration =
             max(

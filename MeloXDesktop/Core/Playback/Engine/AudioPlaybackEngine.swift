@@ -648,6 +648,14 @@ final class AudioPlaybackEngine {
     private func fail(with error: Error?) {
         guard !didReportCurrentItemFailure else { return }
         didReportCurrentItemFailure = true
+        if let error {
+            NSLog("Audio playback item failed: %@", error.localizedDescription)
+            if let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error {
+                NSLog("Audio playback underlying error: %@", underlying.localizedDescription)
+            }
+        } else {
+            NSLog("Audio playback item failed without an error")
+        }
         wantsPlayback = false
         autoMixController.pauseAll()
         publishPlaybackClockSample(origin: .stateChanged)
