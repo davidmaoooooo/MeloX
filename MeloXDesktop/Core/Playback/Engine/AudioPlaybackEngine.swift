@@ -135,6 +135,7 @@ final class AudioPlaybackEngine {
         startAt: TimeInterval = 0,
         autoplay: Bool
     ) async {
+        NSLog("[MeloXPlayback] load start url=%@ start=%.3f autoplay=%@", source.url.absoluteString, startAt, autoplay ? "true" : "false")
         loadGeneration += 1
         let generation = loadGeneration
         cancelAutoMix()
@@ -163,6 +164,7 @@ final class AudioPlaybackEngine {
             with: playbackItem,
             identifier: nil
         )
+        NSLog("[MeloXPlayback] current item installed status=%@ duration=%@", statusName(activeDeck.player.currentItem?.status), activeDeck.player.currentItem.map { String(format: "%.3f", $0.duration.seconds) } ?? "nil")
         if autoplay {
             play()
         }
@@ -185,18 +187,22 @@ final class AudioPlaybackEngine {
     func play() {
         wantsPlayback = true
         guard let item = activeDeck.player.currentItem else {
+            NSLog("[MeloXPlayback] play ignored: no current item")
             return
         }
         guard item.status == .readyToPlay,
               !suppressesProgressUpdates else {
+            NSLog("[MeloXPlayback] play deferred status=%@ suppressesProgress=%@ timeControl=%@ reason=%@", statusName(item.status), suppressesProgressUpdates ? "true" : "false", timeControlName(activeDeck.player.timeControlStatus), activeDeck.player.reasonForWaitingToPlay?.rawValue ?? "nil")
             transition(to: .loading)
             return
         }
         do {
+            NSLog("[MeloXPlayback] play issuing AVPlayer.play status=%@ duration=%.3f", statusName(item.status), item.duration.seconds)
             try activateAudioSession()
             activeDeck.player.play()
             autoMixController.resumeIncomingIfNeeded()
             updateStateFromPlayer()
+            NSLog("[MeloXPlayback] play returned timeControl=%@ rate=%.3f reason=%@", timeControlName(activeDeck.player.timeControlStatus), activeDeck.player.rate, activeDeck.player.reasonForWaitingToPlay?.rawValue ?? "nil")
         } catch {
             wantsPlayback = false
             onFailure?(AudioPlaybackError.audioSession(error))
@@ -427,6 +433,7 @@ final class AudioPlaybackEngine {
         at deckIndex: Int
     ) {
         guard deck.player.currentItem === item else { return }
+        NSLog("[MeloXPlayback] item status changed status=%@ error=%@ duration=%@ loaded=%@ seekable=%@", statusName(item.status), item.error?.localizedDescription ?? "nil", String(format: "%.3f", item.duration.seconds), item.loadedTimeRanges.map { $0.description }.joined(separator: ","), item.seekableTimeRanges.map { $0.description }.joined(separator: ","))
         if deckIndex != activeDeckIndex {
             autoMixController.handleStandbyStatus(
                 item,
@@ -500,6 +507,7 @@ final class AudioPlaybackEngine {
             fail(with: item.error)
             return
         }
+        NSLog("[MeloXPlayback] state sample itemStatus=%@ timeControl=%@ rate=%.3f reason=%@ loaded=%@", statusName(item.status), timeControlName(activeDeck.player.timeControlStatus), activeDeck.player.rate, activeDeck.player.reasonForWaitingToPlay?.rawValue ?? "nil", item.loadedTimeRanges.map { $0.description }.joined(separator: ","))
         if suppressesProgressUpdates {
             transition(to: .loading)
             return
@@ -656,6 +664,10 @@ final class AudioPlaybackEngine {
         } else {
             NSLog("Audio playback item failed without an error")
         }
+        if let item = activeDeck.player.currentItem {
+            NSLog("[MeloXPlayback] accessLog=%@", item.accessLog()?.events.map { String(describing: $0) }.joined(separator: " | ") ?? "nil")
+            NSLog("[MeloXPlayback] errorLog=%@", item.errorLog()?.events.map { String(describing: $0) }.joined(separator: " | ") ?? "nil")
+        }
         wantsPlayback = false
         autoMixController.pauseAll()
         publishPlaybackClockSample(origin: .stateChanged)
@@ -673,6 +685,25 @@ final class AudioPlaybackEngine {
 
     private func activateAudioSession() throws {
         try AudioPlaybackSessionConfigurator.activate()
+    }
+
+    private func statusName(_ status: AVPlayerItem.Status?) -> String {
+        guard let status else { return "nil" }
+        switch status {
+        case .unknown: return "unknown"
+        case .readyToPlay: return "readyToPlay"
+        case .failed: return "failed"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func timeControlName(_ status: AVPlayer.TimeControlStatus) -> String {
+        switch status {
+        case .paused: return "paused"
+        case .waitingToPlayAtSpecifiedRate: return "waitingToPlayAtSpecifiedRate"
+        case .playing: return "playing"
+        @unknown default: return "unknown"
+        }
     }
 
 }

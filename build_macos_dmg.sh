@@ -6,6 +6,7 @@ BUILD="${BUILD_DIR:-$ROOT/build}"
 PROJECT="$ROOT/MeloX.xcodeproj"
 SCHEME="MeloX Desktop"
 APP_NAME="MeloX Desktop"
+CONFIGURATION="${MELOX_MAC_CONFIGURATION:-Release}"
 RELEASE_NOTES_PATH="$BUILD/ReleaseNotes.json"
 RELEASE_NOTES_MARKDOWN_PATH="$BUILD/ReleaseNotes.md"
 
@@ -48,12 +49,12 @@ for ARCHITECTURE in "${ARCHITECTURES[@]}"; do
   rm -rf -- "$DERIVED_DATA" "$STAGING"
   rm -f -- "$DMG_PATH"
 
-  echo "========== Build / 构建 macOS $VARIANT_NAME Release =========="
+  echo "========== Build / 构建 macOS $VARIANT_NAME $CONFIGURATION =========="
 
   xcodebuild clean build \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
-    -configuration Release \
+    -configuration "$CONFIGURATION" \
     -destination "generic/platform=macOS" \
     -derivedDataPath "$DERIVED_DATA" \
     ARCHS="$ARCHITECTURE" \
@@ -64,7 +65,7 @@ for ARCHITECTURE in "${ARCHITECTURES[@]}"; do
     CODE_SIGN_IDENTITY="" \
     DEVELOPMENT_TEAM=""
 
-  APP_PATH="$(find "$DERIVED_DATA/Build/Products/Release" -maxdepth 2 -name "$APP_NAME.app" -type d -print -quit)"
+  APP_PATH="$(find "$DERIVED_DATA/Build/Products/$CONFIGURATION" -maxdepth 2 -name "$APP_NAME.app" -type d -print -quit)"
   if [[ -z "$APP_PATH" ]]; then
     echo "macOS $VARIANT_NAME artifact not found / 找不到构建产物：$APP_NAME.app"
     exit 1

@@ -13,10 +13,12 @@ final class ThirdPartySourceRuntime {
     func fetchMusicURL(_ info: ThirdPartyMusicInfo) async throws -> URL {
         let store = ThirdPartySourceStore.shared
         guard store.isEnabled, let source = store.selected else { throw APIError.noPlayableSource }
+        NSLog("[MeloXSource] fetch start source=%@ id=%d name=%@", source.name, info.id, info.name)
         if engine?.source.id != source.id { engine = nil }
         if engine == nil { engine = try await ThirdPartySourceEngine(source: source) }
         guard let value = try await engine?.request(info), let url = URL(string: value),
               ["http", "https"].contains(url.scheme?.lowercased()) else { throw APIError.noPlayableSource }
+        NSLog("[MeloXSource] fetch success source=%@ url=%@", source.name, url.absoluteString)
         return url
     }
 }
@@ -165,6 +167,7 @@ private final class ThirdPartySourceEngine {
             continuation.resume(throwing: APIError.noPlayableSource)
             return
         }
+        NSLog("[MeloXSource] script response requestKey=%@ url=%@", requestKey, url)
         continuation.resume(returning: url)
     }
 

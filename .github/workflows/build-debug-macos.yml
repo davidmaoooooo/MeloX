@@ -1,0 +1,47 @@
+name: Build MeloX macOS Debug / 构建 MeloX macOS 调试版
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-macos:
+    name: Build macOS arm64 Debug artifact / 构建 macOS arm64 调试产物
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Select Xcode / 选择 Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in /Applications/Xcode_26.5.app /Applications/Xcode_26.5.0.app /Applications/Xcode.app; do
+            if [[ -d "${candidate}" ]]; then
+              sudo xcode-select -s "${candidate}/Contents/Developer"
+              xcodebuild -version
+              exit 0
+            fi
+          done
+          echo "No supported Xcode installation found"
+          exit 1
+
+      - name: Build unsigned Debug DMG / 构建未签名 Debug DMG
+        shell: bash
+        env:
+          MELOX_MAC_ARCHS: arm64
+          MELOX_MAC_CONFIGURATION: Debug
+        run: bash build_macos_dmg.sh
+
+      - name: Upload Debug artifact / 上传调试产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: MeloX-macOS-arm64-Debug-${{ github.run_number }}
+          path: |
+            build/MeloX-macOS-Apple-Silicon.dmg
+          if-no-files-found: error
+          retention-days: 14

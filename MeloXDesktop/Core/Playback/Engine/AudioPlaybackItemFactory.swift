@@ -23,6 +23,7 @@ final class AudioPlaybackItemFactory {
         autoMixEqualizerState:
             SharedAutoMixEqualizerState
     ) async -> PreparedAudioPlaybackItem {
+        NSLog("[MeloXPlayback] makeItem url=%@ format=%@ bitrate=%@", source.url.absoluteString, source.format ?? "nil", source.bitrate.map(String.init) ?? "nil")
         // Third-party source CDNs commonly reject AVPlayer's default request
         // headers. Match the headers used by the source implementation when
         // opening the resolved URL while keeping the URL itself unchanged.
@@ -63,7 +64,7 @@ final class AudioPlaybackItemFactory {
                     )
             }
         } catch {
-            // AVPlayerItem reports an actionable error if playback fails.
+            NSLog("[MeloXPlayback] asset track load failed url=%@ error=%@", source.url.absoluteString, error.localizedDescription)
         }
         return PreparedAudioPlaybackItem(
             item: item,
