@@ -50,9 +50,9 @@ final class AudioPlaybackItemFactory {
         )
         var audioTrackTimeRange: CMTimeRange?
         do {
-            if let audioTrack = try await asset.loadTracks(
-                withMediaType: .audio
-            ).first {
+            if let audioTrack = try await loadAudioTrack(
+                from: asset
+            ) {
                 audioTrackTimeRange = try? await audioTrack.load(
                     .timeRange
                 )
@@ -74,6 +74,29 @@ final class AudioPlaybackItemFactory {
         )
     }
 
+    private func loadAudioTrack(
+        from asset: AVURLAsset
+    ) async throws -> AVAssetTrack? {
+        try await withThrowingTaskGroup(
+            of: AVAssetTrack?.self
+        ) { group in
+            group.addTask {
+                try await asset.loadTracks(
+                    withMediaType: .audio
+                ).first
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(3))
+                throw AudioTrackLoadTimeoutError()
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else {
+                return nil
+            }
+            return result
+        }
+    }
+
     func updateEqualizer(
         _ configuration: AudioEqualizerConfiguration
     ) {
@@ -84,5 +107,11 @@ final class AudioPlaybackItemFactory {
 
     func updateSpatialAudioMode(_ mode: SpatialAudioMode) {
         spatialAudioMode = mode
+    }
+}
+
+private struct AudioTrackLoadTimeoutError: LocalizedError {
+    var errorDescription: String? {
+        "Timed out loading the audio track"
     }
 }
