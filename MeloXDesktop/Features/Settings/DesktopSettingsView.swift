@@ -25,6 +25,10 @@ struct DesktopSettingsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .tabItem { Label("ui.settings.playback.section.playback", systemImage: "play.circle") }
                     .tag(DesktopSettingsTab.playback)
+                DesktopThirdPartySourceSettingsView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .tabItem { Label("第三方音源", systemImage: "waveform.badge.plus") }
+                    .tag(DesktopSettingsTab.sources)
                 DesktopFileSettingsView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .tabItem { Label("ui.desktop.settings.tab.files", systemImage: "folder") }
@@ -102,6 +106,7 @@ private enum DesktopSettingsTab: Hashable {
     case general
     case features
     case playback
+    case sources
     case files
     case advanced
 
@@ -110,6 +115,7 @@ private enum DesktopSettingsTab: Hashable {
         case .general: 570
         case .features: 480
         case .playback: 620
+        case .sources: 620
         case .files: 620
         case .advanced: 600
         }
