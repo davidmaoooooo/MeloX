@@ -414,7 +414,12 @@ final class NeteaseAPI {
             let url = try await ThirdPartySourceRuntime.shared.fetchMusicURL(
                 ThirdPartyMusicInfo(id: id, name: "", singer: "", albumName: "", intervalMS: 0)
             )
-            return PlaybackSource(url: url, bitrate: nil, format: nil)
+            return PlaybackSource(
+                url: url,
+                bitrate: nil,
+                format: nil,
+                httpHeaders: thirdPartyPlaybackHeaders(for: url)
+            )
         }
         return try await playbackSource(
             id: id,
@@ -434,7 +439,12 @@ final class NeteaseAPI {
                     intervalMS: song.durationMS
                 )
             )
-            return PlaybackSource(url: url, bitrate: nil, format: nil)
+            return PlaybackSource(
+                url: url,
+                bitrate: nil,
+                format: nil,
+                httpHeaders: thirdPartyPlaybackHeaders(for: url)
+            )
         }
         return try await playbackSource(
             id: song.id,
@@ -480,6 +490,22 @@ final class NeteaseAPI {
                 quality: nil
             )
         }
+    }
+
+    private func thirdPartyPlaybackHeaders(
+        for url: URL
+    ) -> [String: String] {
+        var headers = [
+            "User-Agent":
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                + "AppleWebKit/605.1.15 (KHTML, like Gecko) MeloX/1.0",
+            "Accept": "*/*",
+        ]
+        if url.host?.lowercased().hasSuffix("music.126.net") == true {
+            headers["Referer"] = "https://music.163.com/"
+            headers["Origin"] = "https://music.163.com"
+        }
+        return headers
     }
 
     private func requestPlaybackSource(

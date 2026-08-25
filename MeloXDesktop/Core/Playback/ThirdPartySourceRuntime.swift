@@ -16,7 +16,13 @@ final class ThirdPartySourceRuntime {
         NSLog("[MeloXSource] fetch start source=%@ id=%d name=%@", source.name, info.id, info.name)
         if engine?.source.id != source.id { engine = nil }
         if engine == nil { engine = try await ThirdPartySourceEngine(source: source) }
-        guard let value = try await engine?.request(info), let url = URL(string: value),
+        guard let value = try await engine?.request(info) else {
+            throw APIError.noPlayableSource
+        }
+        let normalizedValue = value.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard let url = URL(string: normalizedValue),
               ["http", "https"].contains(url.scheme?.lowercased()) else { throw APIError.noPlayableSource }
         NSLog("[MeloXSource] fetch success source=%@ url=%@", source.name, url.absoluteString)
         return url

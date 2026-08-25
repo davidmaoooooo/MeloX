@@ -58,6 +58,7 @@ final class AudioPlaybackEngine {
     private var seekGeneration = 0
     private var seekRetryAttempt = 0
     private var pendingSeekRetryTask: Task<Void, Never>?
+    private var pendingSeekCompletionTask: Task<Void, Never>?
     private var suppressesProgressUpdates = false
     private var didReportCurrentItemFailure = false
     private var loadGeneration = 0
@@ -117,6 +118,7 @@ final class AudioPlaybackEngine {
 
     deinit {
         pendingSeekRetryTask?.cancel()
+        pendingSeekCompletionTask?.cancel()
         for (player, observer) in zip(
             observedPlayers,
             timeObservers
@@ -141,9 +143,15 @@ final class AudioPlaybackEngine {
         cancelAutoMix()
         pendingSeekRetryTask?.cancel()
         pendingSeekRetryTask = nil
+        pendingSeekCompletionTask?.cancel()
+        pendingSeekCompletionTask = nil
         seekRetryAttempt = 0
         wantsPlayback = autoplay
-        pendingSeekTime = pendingSeekTime ?? max(0, startAt)
+        let requestedStartPosition = max(0, startAt)
+        if pendingSeekTime == nil,
+           requestedStartPosition > Self.minimumUsefulSeekPosition {
+            pendingSeekTime = requestedStartPosition
+        }
         seekGeneration += 1
         suppressesProgressUpdates = true
         didReportCurrentItemFailure = false
@@ -174,6 +182,8 @@ final class AudioPlaybackEngine {
         loadGeneration += 1
         pendingSeekRetryTask?.cancel()
         pendingSeekRetryTask = nil
+        pendingSeekCompletionTask?.cancel()
+        pendingSeekCompletionTask = nil
         wantsPlayback = false
         pendingSeekTime = nil
         seekGeneration += 1
@@ -573,6 +583,8 @@ final class AudioPlaybackEngine {
     ) {
         pendingSeekRetryTask?.cancel()
         pendingSeekRetryTask = nil
+        pendingSeekCompletionTask?.cancel()
+        pendingSeekCompletionTask = nil
         pendingSeekTime = nil
         seekGeneration += 1
         let generation = seekGeneration
@@ -580,12 +592,15 @@ final class AudioPlaybackEngine {
         let seekingPlayer = activeDeck.player
         suppressesProgressUpdates = true
         item.cancelPendingSeeks()
+        let tolerance = sourceIsLocal(item)
+            ? CMTime.zero
+            : CMTime(seconds: 0.25, preferredTimescale: 600)
         seekingPlayer.seek(
             to: seekingDeck.mediaTime(
                 forPlaybackPosition: position
             ),
-            toleranceBefore: .zero,
-            toleranceAfter: .zero
+            toleranceBefore: tolerance,
+            toleranceAfter: tolerance
         ) { [weak self] finished in
             guard let self else { return }
             Task { @MainActor [self] in
@@ -594,7 +609,17 @@ final class AudioPlaybackEngine {
                       seekingPlayer.currentItem === item else {
                     return
                 }
+                self.pendingSeekCompletionTask?.cancel()
+                self.pendingSeekCompletionTask = nil
                 guard finished else {
+                    if self.seekRetryAttempt >= 4 {
+                        self.finishSeekWithoutPositioning(
+                            generation: generation,
+                            player: seekingPlayer,
+                            item: item
+                        )
+                        return
+                    }
                     self.pendingSeekTime = position
                     self.seekRetryAttempt += 1
                     self.schedulePendingSeekRetry(for: item)
@@ -608,6 +633,20 @@ final class AudioPlaybackEngine {
                 self.resumePlaybackIfNeeded()
             }
         }
+        pendingSeekCompletionTask = Task {
+            @MainActor [weak self, weak item, weak seekingPlayer] in
+            do {
+                try await Task.sleep(for: .seconds(3))
+            } catch {
+                return
+            }
+            guard let self, let item, let seekingPlayer else { return }
+            self.finishSeekWithoutPositioning(
+                generation: generation,
+                player: seekingPlayer,
+                item: item
+            )
+        }
     }
 
     private func retryPendingSeek(
@@ -618,7 +657,40 @@ final class AudioPlaybackEngine {
               item.status == .readyToPlay else {
             return
         }
+        if position <= Self.minimumUsefulSeekPosition {
+            pendingSeekTime = nil
+            suppressesProgressUpdates = false
+            resumePlaybackIfNeeded()
+            return
+        }
         applySeek(to: position, for: item)
+    }
+
+    private func finishSeekWithoutPositioning(
+        generation: Int,
+        player: AVPlayer,
+        item: AVPlayerItem
+    ) {
+        guard generation == seekGeneration,
+              activeDeck.player === player,
+              player.currentItem === item,
+              suppressesProgressUpdates else { return }
+        NSLog(
+            "[MeloXPlayback] seek fallback: continuing playback without restored position"
+        )
+        seekGeneration += 1
+        pendingSeekTime = nil
+        pendingSeekRetryTask?.cancel()
+        pendingSeekRetryTask = nil
+        pendingSeekCompletionTask?.cancel()
+        pendingSeekCompletionTask = nil
+        seekRetryAttempt = 0
+        suppressesProgressUpdates = false
+        resumePlaybackIfNeeded()
+    }
+
+    private func sourceIsLocal(_ item: AVPlayerItem) -> Bool {
+        (item.asset as? AVURLAsset)?.url.isFileURL == true
     }
 
     private func schedulePendingSeekRetry(
@@ -705,5 +777,7 @@ final class AudioPlaybackEngine {
         @unknown default: return "unknown"
         }
     }
+
+    private static let minimumUsefulSeekPosition: TimeInterval = 0.05
 
 }

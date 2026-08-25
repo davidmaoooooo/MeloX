@@ -24,20 +24,10 @@ final class AudioPlaybackItemFactory {
             SharedAutoMixEqualizerState
     ) async -> PreparedAudioPlaybackItem {
         NSLog("[MeloXPlayback] makeItem url=%@ format=%@ bitrate=%@", source.url.absoluteString, source.format ?? "nil", source.bitrate.map(String.init) ?? "nil")
-        // Third-party source CDNs commonly reject AVPlayer's default request
-        // headers. Match the headers used by the source implementation when
-        // opening the resolved URL while keeping the URL itself unchanged.
-        let asset = AVURLAsset(
-            url: source.url,
-            options: [
-                "AVURLAssetHTTPHeaderFieldsKey": [
-                    "User-Agent": "MeloX-Desktop/1.0",
-                    "Referer": "https://music.163.com/",
-                    "Origin": "https://music.163.com",
-                    "Accept": "*/*"
-                ]
-            ]
-        )
+        let options: [String: Any]? = source.httpHeaders.isEmpty
+            ? nil
+            : ["AVURLAssetHTTPHeaderFieldsKey": source.httpHeaders]
+        let asset = AVURLAsset(url: source.url, options: options)
         let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration =
             max(
