@@ -162,7 +162,7 @@ private final class ThirdPartySourceEngine {
         let iv = Data(base64Encoded: ivBase64) ?? Data(); let options: CCOptions = mode == "AES" ? CCOptions(kCCOptionECBMode) : CCOptions(kCCOptionPKCS7Padding)
         var output = [UInt8](repeating: 0, count: input.count + kCCBlockSizeAES128); var length = 0
         let status = input.withUnsafeBytes { inputBytes in key.withUnsafeBytes { keyBytes in iv.withUnsafeBytes { ivBytes in
-            CCCrypt(kCCEncrypt, kCCAlgorithmAES, options, keyBytes.baseAddress, key.count, mode == "AES" ? nil : ivBytes.baseAddress, inputBytes.baseAddress, input.count, &output, output.count, &length)
+            CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), options, keyBytes.baseAddress, key.count, mode == "AES" ? nil : ivBytes.baseAddress, inputBytes.baseAddress, input.count, &output, output.count, &length)
         } } }
         return status == kCCSuccess ? Data(output.prefix(length)).base64EncodedString() : ""
     }

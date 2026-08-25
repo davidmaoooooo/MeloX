@@ -77,7 +77,7 @@ struct DesktopThirdPartySourceSettingsView: View {
         .padding()
         .fileImporter(
             isPresented: $showsImporter,
-            allowedContentTypes: [.javascript, .plainText, .data],
+            allowedContentTypes: [UTType(filenameExtension: "js") ?? .plainText, .plainText, .data],
             allowsMultipleSelection: false
         ) { result in
             importFile(result)
