@@ -410,9 +410,10 @@ final class NeteaseAPI {
     }
 
     func playbackSource(id: Int) async throws -> PlaybackSource {
-        if let url = try? await ThirdPartySourceRuntime.shared.fetchMusicURL(
-            ThirdPartyMusicInfo(id: id, name: "", singer: "", albumName: "", intervalMS: 0)
-        ) {
+        if ThirdPartySourceStore.shared.isEnabled {
+            let url = try await ThirdPartySourceRuntime.shared.fetchMusicURL(
+                ThirdPartyMusicInfo(id: id, name: "", singer: "", albumName: "", intervalMS: 0)
+            )
             return PlaybackSource(url: url, bitrate: nil, format: nil)
         }
         return try await playbackSource(
@@ -423,15 +424,16 @@ final class NeteaseAPI {
     }
 
     func playbackSource(for song: Song) async throws -> PlaybackSource {
-        if let url = try? await ThirdPartySourceRuntime.shared.fetchMusicURL(
-            ThirdPartyMusicInfo(
-                id: song.id,
-                name: song.name,
-                singer: song.artistText,
-                albumName: song.album?.name ?? "",
-                intervalMS: song.durationMS
+        if ThirdPartySourceStore.shared.isEnabled {
+            let url = try await ThirdPartySourceRuntime.shared.fetchMusicURL(
+                ThirdPartyMusicInfo(
+                    id: song.id,
+                    name: song.name,
+                    singer: song.artistText,
+                    albumName: song.album?.name ?? "",
+                    intervalMS: song.durationMS
+                )
             )
-        ) {
             return PlaybackSource(url: url, bitrate: nil, format: nil)
         }
         return try await playbackSource(
