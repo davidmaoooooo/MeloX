@@ -35,13 +35,30 @@ private final class ThirdPartySourceEngine {
             NSLog("Third-party source JavaScript error: %@", exception?.toString() ?? "unknown")
         }
         installNativeBridge()
-        guard let preloadURL = Bundle.main.url(forResource: "user-api-preload", withExtension: "js", subdirectory: "ThirdPartySource"),
-              let preload = try? String(contentsOf: preloadURL, encoding: .utf8) else { throw APIError.noPlayableSource }
+        // Depending on Xcode's resource synchronization, the folder may be
+        // preserved in the bundle or its files may be flattened at the root.
+        let preloadURL = Bundle.main.url(
+            forResource: "user-api-preload",
+            withExtension: "js",
+            subdirectory: "ThirdPartySource"
+        ) ?? Bundle.main.url(forResource: "user-api-preload", withExtension: "js")
+        guard let preloadURL, let preload = try? String(contentsOf: preloadURL, encoding: .utf8) else {
+            NSLog("Third-party source preload script is missing from the app bundle")
+            throw APIError.noPlayableSource
+        }
         let scriptData = try await ThirdPartySourceStore.shared.scriptData(for: source)
         guard let script = String(data: scriptData, encoding: .utf8) else { throw APIError.noPlayableSource }
         context.evaluateScript(preload)
         context.objectForKeyedSubscript("lx_setup")?.call(withArguments: [key, source.id.uuidString, source.name, "", "", "", "", script])
+        if let exception = context.exception {
+            NSLog("Third-party source preload failed: %@", exception.toString() ?? "unknown")
+            throw APIError.noPlayableSource
+        }
         context.evaluateScript(script)
+        if let exception = context.exception {
+            NSLog("Third-party source script failed: %@", exception.toString() ?? "unknown")
+            throw APIError.noPlayableSource
+        }
     }
 
     func request(_ info: ThirdPartyMusicInfo) async throws -> String {
@@ -140,7 +157,14 @@ private final class ThirdPartySourceEngine {
 
     private func handleResponse(_ data: String) {
         guard let object = jsonObject(data), let requestKey = object["requestKey"] as? String, let continuation = continuations.removeValue(forKey: requestKey) else { return }
-        guard object["status"] as? Bool == true, let result = object["result"] as? [String: Any], let value = result["data"] as? [String: Any], let url = value["url"] as? String else { continuation.resume(throwing: APIError.noPlayableSource); return }
+        guard object["status"] as? Bool == true,
+              let result = object["result"] as? [String: Any],
+              let value = result["data"] as? [String: Any],
+              let url = value["url"] as? String else {
+            NSLog("Third-party source returned no playable URL: %@", data)
+            continuation.resume(throwing: APIError.noPlayableSource)
+            return
+        }
         continuation.resume(returning: url)
     }
 
